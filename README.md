@@ -17,9 +17,11 @@ Even though this script makes only one request per second and uses good practice
 pip install -r requirements.txt
 ```
 
-3. Duplicate the `.env.example` file and name it `.env`. Add your bearer token from the app.
+3. Duplicate the `.env.example` file and name it `.env`. Add your bearer token from the app. (You can check it in your `network` tab while using the app in your browser)
+   <img width="2559" height="1270" alt="image" src="https://github.com/user-attachments/assets/57e352f0-7725-4333-bc7a-fc4482b9c954" />
 
-4. Run the script
+
+5. Run the script
 
 ```
 python3 bandai_history
@@ -36,3 +38,4 @@ Since this script saves every tournament as a json file under `events`, you can 
 - This script does not compute events with 0 rounds. This may cause a discrepancy in the total number of events and the sum of the results
 
 - This script does not consider each game on your app individually
+
