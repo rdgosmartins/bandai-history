@@ -1,6 +1,7 @@
 import argparse
 import os
 from api_requests import fetch_data
+from dotenv import load_dotenv
 from tournament_data import tabulate_results
 
 EVENTS_DIR_PATH="events"
@@ -21,6 +22,9 @@ if __name__ == "__main__":
     cli_arg_parser.add_argument("-s", "--skip-listing", action="store_true", help="skip request to list events, work with data already requested")
     
     args = cli_arg_parser.parse_args()
+
+    load_dotenv()
+    BEARER_TOKEN = os.getenv("BEARER_TOKEN")
 
     event_data = fetch_data(BEARER_TOKEN, EVENTS_DIR_PATH, args.skip_listing)
     print("==========")
