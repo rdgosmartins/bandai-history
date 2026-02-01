@@ -1,3 +1,4 @@
+import argparse
 import os
 from api_requests import fetch_data
 from tournament_data import tabulate_results
@@ -16,7 +17,12 @@ if __name__ == "__main__":
     if not os.path.isdir(EVENTS_DIR_PATH):
         os.mkdir("events")
 
-    event_data = fetch_data(BEARER_TOKEN, EVENTS_DIR_PATH, True)
+    cli_arg_parser = argparse.ArgumentParser(description="Simple script to compile your results from the bandai plus tcg app.")
+    cli_arg_parser.add_argument("-s", "--skip-listing", action="store_true", help="skip request to list events, work with data already requested")
+    
+    args = cli_arg_parser.parse_args()
+
+    event_data = fetch_data(BEARER_TOKEN, EVENTS_DIR_PATH, args.skip_listing)
     print("==========")
     tabulate_results(event_data)
 
