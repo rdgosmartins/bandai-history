@@ -4,7 +4,7 @@ from api_requests import fetch_data
 from dotenv import load_dotenv
 from tournament_data import tabulate_results, results_vs_player, tabulate_all_winrates, print_player_results
 
-EVENTS_DIR_PATH="events_vasco"
+EVENTS_DIR_PATH="events"
 
 """
 Bearer token to authenticate requests to the bandai-plus-tcg api.
