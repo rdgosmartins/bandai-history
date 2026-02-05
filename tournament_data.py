@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Dict, Tuple
 
 """
 Returns (wins, losses) for the tournament
@@ -20,7 +21,7 @@ def tabulate_single_event(event_data):
 """
 Count every possible result in the player's history (e.g: player had 3 3-1s, etc.)
 """
-def tabulate_results(events_data):
+def tabulate_results(events_data) -> None:
     player_results = defaultdict(int)
     player_results_by_losses = defaultdict(int)
 
@@ -64,7 +65,7 @@ def tabulate_all_winrates(events_data):
     return players_results
 
 
-def load_bandai_username_id():
+def load_bandai_username_id() -> Dict[str,str]:
     username_map = dict()
 
     with open("bandai_username_map.txt") as f:
@@ -77,7 +78,7 @@ def load_bandai_username_id():
 """
 To be used with the result of `tabulate_all_winrates`
 """
-def print_player_results(player_results):
+def print_player_results(player_results) -> None:
     username_map = load_bandai_username_id()
     
     sorted_results = dict(sorted(player_results.items(), key=lambda x: x[1][0], reverse=True))
@@ -90,7 +91,7 @@ def print_player_results(player_results):
 """
 Count results against single player
 """
-def results_vs_player(player_bandai_id, events_data):
+def results_vs_player(player_bandai_id: str, events_data) -> Tuple[int, int]:
     wins, losses = (0, 0)
 
     for event in events_data:

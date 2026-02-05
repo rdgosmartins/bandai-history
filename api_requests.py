@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import List
 import json
 import logging
 import os
@@ -8,7 +9,7 @@ import time
 """
 Check the events folder for event ids
 """
-def get_event_ids_local(events_path):
+def get_event_ids_local(events_path: str) -> List[str]:
     if not os.path.isdir(events_path):
         raise FileNotFoundError("Events directory does not exist.")
     
@@ -22,7 +23,7 @@ def get_event_ids_local(events_path):
 Fetch all events in the player's history.
 TODO: add logic to make paginated requests. For now, 1_000 events should be more than enough.
 """
-def fetch_event_ids(bearer_token):
+def fetch_event_ids(bearer_token: str) -> List[str]:
     url = 'https://api.bandai-tcg-plus.com/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0&past_event_display_flg=1&selected_tab=3'
     req_headers = {
         'X-Authentication': bearer_token
@@ -42,11 +43,12 @@ def fetch_event_ids(bearer_token):
         return event_ids
     else:
         logging.critical("Something went wrong when fetching your event history")
+        raise requests.exceptions.RequestException
 
 """
 Fetch data from a single event
 """
-def fetch_single_event_data(bearer_token, events_path, event_id):
+def fetch_single_event_data(bearer_token: str, events_path: str, event_id: str):
     req_headers = {
         'X-Authentication': bearer_token
     }
@@ -74,8 +76,8 @@ def fetch_single_event_data(bearer_token, events_path, event_id):
 """
 Fetch each event from player's history and save them in json files
 """
-def fetch_data(bearer_token, events_path, skip_list=False):
-    event_ids = []
+def fetch_data(bearer_token: str, events_path: str, skip_list=False):
+    event_ids: List[str] = []
     if skip_list:
         event_ids = get_event_ids_local(events_path)
     else:
