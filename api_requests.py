@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import logging
 import os
 import requests
 import time
@@ -28,7 +29,7 @@ def fetch_event_ids(bearer_token):
     }
     
     response = requests.get(url, headers=req_headers)
-    print(f"Fetch event ids status Code: {response.status_code}")
+    logging.debug(f"Fetch event ids status Code: {response.status_code}")
 
     if response.status_code == 200:
         event_data = response.json()['success']['events']
@@ -40,7 +41,7 @@ def fetch_event_ids(bearer_token):
         # print(event_ids)
         return event_ids
     else:
-        print("Something went wrong when fetching your event history")
+        logging.critical("Something went wrong when fetching your event history")
 
 """
 Fetch data from a single event
@@ -52,7 +53,7 @@ def fetch_single_event_data(bearer_token, events_path, event_id):
 
     filename = os.path.join(events_path, str(event_id))
     if Path(filename).is_file():
-        print(f"Event with ID {event_id} data already exists locally")
+        logging.info(f"Event with ID {event_id} data already exists locally")
         with open(filename, "r") as json_file:
             return json.load(json_file)
 
@@ -68,7 +69,7 @@ def fetch_single_event_data(bearer_token, events_path, event_id):
             json.dump(response_data, json_file, indent=4)
         return response_data
     else:
-        print(f"Something went wrong while fetching data for {event_id}")
+        logging.critical(f"Something went wrong while fetching data for {event_id}")
 
 """
 Fetch each event from player's history and save them in json files
@@ -82,11 +83,11 @@ def fetch_data(bearer_token, events_path, skip_list=False):
 
     no_events = len(event_ids)
 
-    print(f"You have {no_events} in your history")
+    logging.info(f"You have {no_events} events in your history")
 
     event_data = []
     for idx, event_id in enumerate(event_ids):
-        print(f"Fetching event {idx + 1} of {no_events} (ID {event_id})")
+        logging.info(f"Fetching event {idx + 1} of {no_events} (ID {event_id})")
         # TODO: handle errors
         event_data.append(fetch_single_event_data(bearer_token, events_path, event_id))
 

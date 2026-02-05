@@ -1,5 +1,5 @@
-import sys
 import argparse
+import logging
 import os
 from api_requests import fetch_data
 from dotenv import load_dotenv
@@ -15,9 +15,20 @@ manually fill the token in this script.
 BEARER_TOKEN: str = ""
     
 if __name__ == "__main__":
+    cli_arg_parser = argparse.ArgumentParser(description="Simple script to compile your results from the bandai plus tcg app.")
+    cli_arg_parser.add_argument("-s", "--skip-listing", action="store_true", help="skip request to list events, work with data already requested")
+    cli_arg_parser.add_argument("-g", "--group-winrates", action="store_true", help="group your results by opponents bandai id")
+    cli_arg_parser.add_argument("-t", "--target", type=str, help="instead of listing results, calculate wins vs losses against a single bandai id")
+    cli_arg_parser.add_argument("-v", "--verbose", action="store_true", help="show verbose logging")
+
+    args = cli_arg_parser.parse_args()
+    
+    log_level = logging.INFO if args.verbose else logging.WARNING
+    logging.basicConfig(level=log_level)
+
     load_dotenv()
     if not os.getenv("BEARER_TOKEN"):
-        print('Bearer token not found', file=sys.stderr)
+        logging.critical('Bearer token not found')
         exit(1)
     BEARER_TOKEN = str(os.getenv("BEARER_TOKEN"))
 
@@ -29,18 +40,12 @@ if __name__ == "__main__":
         if not os.path.isdir(EVENTS_DIR_PATH):
             os.mkdir(EVENTS_DIR_PATH)
     except:
-        print('Could not create events directory', file=sys.stderr)
+        logging.critical('Could not create events directory')
         exit(1)
 
-    cli_arg_parser = argparse.ArgumentParser(description="Simple script to compile your results from the bandai plus tcg app.")
-    cli_arg_parser.add_argument("-s", "--skip-listing", action="store_true", help="skip request to list events, work with data already requested")
-    cli_arg_parser.add_argument("-g", "--group-winrates", action="store_true", help="group your results by opponents bandai id")
-    cli_arg_parser.add_argument("-t", "--target", type=str, help="instead of listing results, calculate wins vs losses against a single bandai id")
     
-    args = cli_arg_parser.parse_args()
-
     event_data = fetch_data(BEARER_TOKEN, EVENTS_DIR_PATH, args.skip_listing)
-    print("==========")
+    logging.info("==========")
 
     if args.group_winrates:
         print_player_results(tabulate_all_winrates(event_data))
