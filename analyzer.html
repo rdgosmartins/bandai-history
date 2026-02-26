@@ -173,6 +173,22 @@
         .modal-sub { font-size:0.82rem; color:var(--muted); margin-bottom:1.25rem; }
         .modal-section h3 { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin-bottom:0.6rem; margin-top:1.25rem; }
 
+        /* Bogeyman / Victim rivalry cards */
+        .rivalry-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
+        @media (max-width:560px) { .rivalry-grid { grid-template-columns:1fr; } }
+        .rivalry-card { border-radius:8px; border:1.5px solid var(--border); padding:1rem 1.25rem; cursor:pointer; transition:border-color 0.15s, box-shadow 0.15s; }
+        .rivalry-card:hover { border-color:var(--accent); box-shadow:0 2px 10px rgba(0,0,0,0.08); }
+        .rivalry-card.bogeyman { border-left:4px solid var(--loss); }
+        .rivalry-card.victim   { border-left:4px solid var(--win); }
+        .rivalry-label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem; }
+        .rivalry-card.bogeyman .rivalry-label { color:var(--loss); }
+        .rivalry-card.victim   .rivalry-label { color:var(--win); }
+        .rivalry-name  { font-size:1.05rem; font-weight:700; color:var(--primary); margin-bottom:0.3rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .rivalry-record{ font-size:0.88rem; color:var(--muted); }
+        .rivalry-record strong { font-size:1.35rem; font-weight:800; }
+        .rivalry-card.bogeyman .rivalry-record strong { color:var(--loss); }
+        .rivalry-card.victim   .rivalry-record strong { color:var(--win); }
+
         /* Multi-user comparison */
         .compare-cols { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
         @media (max-width:600px) { .compare-cols { grid-template-columns:1fr; } }
@@ -220,6 +236,8 @@
             /* Avoid breaking inside small cards; allow breaks between big ones */
             .card { break-inside: avoid; }
             #tourneyCard, #playerCard, #chartsCard { break-inside: auto; }
+            .rivalry-grid { grid-template-columns: 1fr 1fr; }
+            .rivalry-card { cursor: default; }
             thead { display: table-header-group; }
             tr { break-inside: avoid; }
 
@@ -379,6 +397,7 @@
             <div class="card-body" id="overall-body" style="max-height: 9999px;">
                 <div class="stat-grid" id="overallStats"></div>
                 <div id="streakStats"></div>
+                <div id="bogeymanStats"></div>
             </div>
         </div>
 
@@ -1435,6 +1454,9 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
     }
     _opponentMatchHistory = opponentHistory;
 
+    // ── Bogeyman / Victim ───────────────────────────────────────────────────
+    displayRivalry(playerMap);
+
     const playerBody = document.getElementById('playerBody');
     playerBody.innerHTML = '';
     const sorted = Object.entries(playerMap)
@@ -1857,6 +1879,50 @@ function displayStreaks(streaks) {
         <div class="stat-box"><div class="val" style="color:${color}">${streaks.current}${streaks.type}</div><div class="lbl">Current Streak</div></div>
         <div class="stat-box"><div class="val w-val">${streaks.bestWin}</div><div class="lbl">Best Win Streak</div></div>
         <div class="stat-box"><div class="val l-val">${streaks.worstLoss}</div><div class="lbl">Worst Loss Streak</div></div>
+    </div>`;
+}
+
+// ── Bogeyman / Victim ──────────────────────────────────────────────────────
+
+function displayRivalry(playerMap) {
+    const el = document.getElementById('bogeymanStats');
+    // Require at least 2 matches against an opponent to qualify
+    const MIN_MATCHES = 2;
+    let bogeyman = null, victim = null;
+    let bogeyPct = 101, victimPct = -1;
+
+    for (const [pid, [w, l]] of Object.entries(playerMap)) {
+        const t = w + l;
+        if (t < MIN_MATCHES) continue;
+        const winPct = w / t * 100;
+        // Bogeyman: opponent with lowest win % for us (= they beat us most)
+        if (winPct < bogeyPct) { bogeyPct = winPct; bogeyman = { pid, w, l, t, pct: winPct }; }
+        // Victim: opponent with highest win % for us
+        if (winPct > victimPct) { victimPct = winPct; victim = { pid, w, l, t, pct: winPct }; }
+    }
+
+    if (!bogeyman && !victim) { el.innerHTML = ''; return; }
+
+    function rivalryCard(type, data) {
+        if (!data) return '';
+        const name    = _usernameMap[data.pid] || data.pid;
+        const isBogeyman = type === 'bogeyman';
+        const emoji   = isBogeyman ? '&#128123;' : '&#128081;';
+        const label   = isBogeyman ? 'The Bogeyman' : 'Your Victim';
+        const bigNum  = isBogeyman ? `${data.l}L` : `${data.w}W`;
+        const record  = isBogeyman
+            ? `${data.w}W &ndash; <strong>${data.l}L</strong> &nbsp;(${data.pct.toFixed(1)}% win rate for you)`
+            : `<strong>${data.w}W</strong> &ndash; ${data.l}L &nbsp;(${data.pct.toFixed(1)}% win rate for you)`;
+        return `<div class="rivalry-card ${type}" onclick="openOpponentModal('${data.pid}')">
+            <div class="rivalry-label">${emoji} ${label}</div>
+            <div class="rivalry-name">${name}</div>
+            <div class="rivalry-record"><strong>${bigNum}</strong><br><span style="font-size:0.8rem;">${record}</span></div>
+        </div>`;
+    }
+
+    el.innerHTML = `<div class="rivalry-grid">
+        ${rivalryCard('bogeyman', bogeyman)}
+        ${rivalryCard('victim',   victim)}
     </div>`;
 }
 
