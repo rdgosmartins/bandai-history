@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bandai TCG History Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary: #2E4057;
+            --accent: #048A81;
+            --bg: #f5f7fa;
+            --card: #ffffff;
+            --text: #1a1a2e;
+            --muted: #6c757d;
+            --border: #dee2e6;
+            --win: #28a745;
+            --loss: #dc3545;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+
+        header { background: var(--primary); color: white; padding: 1.25rem 2rem; }
+        header h1 { font-size: 1.4rem; font-weight: 700; }
+        header p  { font-size: 0.82rem; opacity: 0.75; margin-top: 0.2rem; }
+
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+        .card { background: var(--card); border-radius: 10px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.07); margin-bottom: 1.5rem; }
+        .card h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 1.25rem; }
+
+        label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+        select {
+            width: 100%; padding: 0.65rem 0.9rem; border: 1px solid var(--border);
+            border-radius: 7px; font-size: 0.95rem; background: white; cursor: pointer;
+            color: var(--text); appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236c757d' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 0.9rem center;
+            transition: border-color 0.2s;
+        }
+        select:focus   { outline: none; border-color: var(--accent); }
+        select:disabled { background-color: #f5f5f5; cursor: not-allowed; color: var(--muted); }
+
+        textarea { width: 100%; padding: 0.65rem 0.9rem; border: 1px solid var(--border); border-radius: 7px; font-size: 0.85rem; font-family: monospace; resize: vertical; height: 130px; transition: border-color 0.2s; }
+        textarea:focus { outline: none; border-color: var(--accent); }
+
+        .btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.5rem; border: none; border-radius: 7px; cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: opacity 0.2s, transform 0.1s; }
+        .btn:hover   { opacity: 0.88; }
+        .btn:active  { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-outline { background: transparent; border: 1.5px solid var(--primary); color: var(--primary); }
+        .btn-file    { background: transparent; border: 1.5px solid var(--border); color: var(--text); padding: 0.5rem 1rem; font-size: 0.84rem; }
+        .btn-file:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-sm      { padding: 0.4rem 1rem; font-size: 0.8rem; }
+
+        .file-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+        .file-status { font-size: 0.82rem; color: var(--muted); }
+        .file-status.ok { color: var(--win); font-weight: 600; }
+        .file-status.warn { color: #e67e22; font-weight: 600; }
+
+        #progress { display: none; }
+        .progress-bar-wrap { background: var(--border); border-radius: 999px; height: 6px; margin-top: 0.75rem; overflow: hidden; }
+        .progress-bar { height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #2E9E8F); transition: width 0.4s ease; }
+        #progressText { font-size: 0.85rem; color: var(--muted); }
+
+        #results { display: none; }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        @media (max-width: 600px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+        .stat-box { text-align: center; padding: 1.25rem 1rem; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+        .stat-box .val { font-size: 2rem; font-weight: 800; line-height: 1; }
+        .stat-box .lbl { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .w-val   { color: var(--win); }
+        .l-val   { color: var(--loss); }
+        .pct-val { color: var(--accent); }
+        .t-val   { color: var(--primary); }
+
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+        thead th { background: var(--primary); color: white; padding: 0.65rem 0.9rem; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; }
+        thead th:hover { background: #3d5472; }
+        thead th.sorted-asc::after  { content: " ▲"; font-size: 0.7rem; }
+        thead th.sorted-desc::after { content: " ▼"; font-size: 0.7rem; }
+        tbody td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); }
+        tbody tr:nth-child(even) td { background: #EAF0FB; }
+        tbody tr:hover td { background: #d5e4f5; }
+        .td-num { text-align: center; }
+        .td-pct { text-align: center; font-weight: 600; }
+
+        .row-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+        .row-flex h2 { margin-bottom: 0; }
+
+        .error-box { background: #fff5f5; border: 1.5px solid #ffcccc; color: #c0392b; padding: 1.1rem 1.25rem; border-radius: 8px; font-size: 0.88rem; line-height: 1.6; margin-bottom: 1.5rem; }
+        .error-box code { background: #ffe8e8; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.82rem; }
+
+        details summary { cursor: pointer; font-size: 0.82rem; color: var(--accent); font-weight: 600; padding: 0.5rem 0; }
+        details summary:hover { text-decoration: underline; }
+        details > .details-body { margin-top: 0.5rem; }
+
+        .step { margin-bottom: 1.1rem; }
+        .step:last-child { margin-bottom: 0; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+
+        .hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.4rem; }
+        .hint code { background: #f0f0f0; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.78rem; }
+
+        .cache-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+            padding: 0.6rem 0.9rem; font-size: 0.82rem; color: var(--muted); }
+        .cache-bar strong { color: var(--text); }
+        .cache-bar.has-cache { border-color: var(--accent); background: #f0faf9; }
+        .cache-actions { display: flex; gap: 0.4rem; }
+        .btn-danger { background: transparent; border: 1.5px solid var(--loss); color: var(--loss); }
+        .btn-danger:hover { background: var(--loss); color: white; }
+
+        .chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+        .chip { display: inline-flex; align-items: center; padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: white; color: var(--muted); transition: all 0.15s; user-select: none; }
+        .chip:hover { border-color: var(--accent); color: var(--accent); }
+        .chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+        .chip.chip-all { border-color: var(--primary); color: var(--primary); }
+        .chip.chip-all.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+        .filter-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; }
+        .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+        .filter-group label { margin-bottom: 0; }
+        .filter-group input[type="date"] {
+            padding: 0.5rem 0.7rem; border: 1px solid var(--border); border-radius: 7px;
+            font-size: 0.88rem; color: var(--text); background: white; cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .filter-group input[type="date"]:focus { outline: none; border-color: var(--accent); }
+
+        .player-search-wrap { position: relative; }
+        .player-search-wrap input[type="text"] {
+            width: 100%; padding: 0.55rem 0.9rem; border: 1px solid var(--border); border-radius: 7px;
+            font-size: 0.88rem; color: var(--text); transition: border-color 0.2s;
+        }
+        .player-search-wrap input[type="text"]:focus { outline: none; border-color: var(--accent); }
+        .player-autocomplete { position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+            background: white; border: 1px solid var(--border); border-top: none;
+            border-radius: 0 0 7px 7px; max-height: 220px; overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
+        .player-autocomplete li { list-style: none; padding: 0.5rem 0.9rem; cursor: pointer; font-size: 0.88rem; }
+        .player-autocomplete li:hover, .player-autocomplete li.highlighted { background: #EAF0FB; }
+
+        .vs-banner { display: none; align-items: center; gap: 0.75rem; padding: 0.6rem 0.9rem;
+            background: #f0faf9; border: 1.5px solid var(--accent); border-radius: 7px; margin-bottom: 1rem; font-size: 0.88rem; }
+        .vs-banner strong { color: var(--accent); }
+        .vs-banner .btn-clear { margin-left: auto; }
+
+        tbody tr.row-highlight td { background: #fffbe6 !important; font-weight: 600; }
+
+        .card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+        .card-header h2 { margin-bottom: 0; }
+        .card-header .toggle-icon { font-size: 0.75rem; color: var(--muted); transition: transform 0.2s; }
+        .card-body { overflow: hidden; transition: max-height 0.3s ease, opacity 0.2s ease; }
+        .card-body.collapsed { max-height: 0 !important; opacity: 0; pointer-events: none; }
+
+        /* Streak stats */
+        .streak-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1rem; }
+        @media (max-width:500px) { .streak-grid { grid-template-columns:1fr 1fr; } }
+
+        /* Opponent modal */
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center; padding:1rem; }
+        .modal-overlay.open { display:flex; }
+        .modal-box { background:var(--card); border-radius:12px; padding:1.75rem; max-width:640px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:0 8px 40px rgba(0,0,0,0.25); position:relative; }
+        .modal-close { position:absolute; top:0.85rem; right:1rem; background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--muted); padding:0.2rem; line-height:1; }
+        .modal-close:hover { color:var(--text); }
+        .modal-title { font-size:1.05rem; font-weight:700; color:var(--primary); margin-bottom:0.2rem; }
+        .modal-sub { font-size:0.82rem; color:var(--muted); margin-bottom:1.25rem; }
+        .modal-section h3 { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin-bottom:0.6rem; margin-top:1.25rem; }
+
+        /* Multi-user comparison */
+        .compare-cols { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+        @media (max-width:600px) { .compare-cols { grid-template-columns:1fr; } }
+        .compare-user-box { background:var(--bg); border:1.5px solid var(--border); border-radius:8px; padding:1.1rem; }
+        .compare-user-box.compare-active { border-color:var(--accent); }
+        .compare-user-box h3 { font-size:0.8rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:0.75rem; font-weight:700; }
+        .compare-bar-wrap { margin-top:0.75rem; }
+        .compare-bar-label { display:flex; justify-content:space-between; font-size:0.78rem; color:var(--muted); margin-bottom:0.25rem; }
+        .compare-bar { height:6px; border-radius:999px; background:var(--border); overflow:hidden; }
+        .compare-bar-fill { height:100%; border-radius:999px; background:var(--accent); }
+        .compare-winner { color:var(--win) !important; font-weight:700; }
+
+        .charts-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start; }
+        @media (max-width: 720px) { .charts-grid { grid-template-columns: 1fr; } }
+        .chart-panel { display: flex; flex-direction: column; gap: 0.5rem; }
+        .chart-panel h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+        .chart-canvas-wrap { position: relative; }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Bandai TCG History Analyzer</h1>
+    <p>Analyze your tournament results from the Bandai TCG+ app</p>
+</header>
+
+<div class="container">
+
+    <!-- Config card -->
+    <div class="card">
+        <h2>Configuration</h2>
+
+        <!-- Step 1: load file -->
+        <div class="step">
+            <label>1 · Username Map File</label>
+            <div class="file-row">
+                <input type="file" id="mapFile" accept=".txt" style="display:none" onchange="loadMapFile(event)">
+                <button class="btn btn-file" onclick="document.getElementById('mapFile').click()">
+                    &#128194; Load bandai_username_map.txt
+                </button>
+                <span class="file-status" id="fileStatus">No file loaded</span>
+            </div>
+            <p class="hint">
+                Add a bearer token as a third field for any user who needs to fetch data:
+                <code>Name:BandaiID:eyJ0eXAiOi...</code>
+            </p>
+        </div>
+
+        <!-- Step 2: pick user -->
+        <div class="step">
+            <label for="userSelect">2 · Select User</label>
+            <select id="userSelect" disabled onchange="onUserChange()">
+                <option value="">— load the username map first —</option>
+            </select>
+            <!-- Cache status, shown after user is selected -->
+            <div id="cacheBar" style="display:none; margin-top:0.6rem;">
+                <div class="cache-bar" id="cacheBarInner">
+                    <span id="cacheBarText"></span>
+                    <div class="cache-actions">
+                        <button class="btn btn-outline btn-sm" onclick="refreshCache()">&#8635; Sync new events only</button>
+                        <button class="btn btn-danger btn-sm" onclick="confirmClearCache()">&#128465; Clear cache</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fallback: paste manually -->
+        <details id="manualDetails">
+            <summary>Or paste the file contents manually</summary>
+            <div class="details-body">
+                <textarea id="usernameMap" placeholder="Name:BandaiID&#10;OtherName:BandaiID:eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."></textarea>
+                <button class="btn btn-outline btn-sm" style="margin-top:0.6rem" onclick="parsePasted()">Apply</button>
+            </div>
+        </details>
+
+        <hr>
+
+        <button class="btn btn-primary" id="fetchBtn" onclick="fetchAndAnalyze()" disabled>
+            &#9654; Fetch &amp; Analyze
+        </button>
+    </div>
+
+    <!-- Progress -->
+    <div id="progress" class="card">
+        <p id="progressText">Starting…</p>
+        <div class="progress-bar-wrap">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorBox" style="display:none;"></div>
+
+    <!-- Results -->
+    <div id="results">
+
+        <!-- Filters card -->
+        <div class="card" id="filterCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('filters')">
+                <h2>Filters</h2>
+                <span class="toggle-icon" id="filters-icon">▼</span>
+            </div>
+            <div class="card-body" id="filters-body" style="max-height: 9999px;">
+
+            <!-- Period chips -->
+            <div class="chip-row" id="periodChips"></div>
+
+            <!-- Year chips -->
+            <div class="filter-row" style="margin-top:1rem;">
+                <div class="chip-row" id="yearChips">
+                    <button class="chip" data-year="2024" onclick="onYearChip(this)">2024</button>
+                    <button class="chip" data-year="2025" onclick="onYearChip(this)">2025</button>
+                    <button class="chip" data-year="2026" onclick="onYearChip(this)">2026</button>
+                </div>
+            </div>
+
+            <!-- Date range -->
+            <div class="filter-row" style="margin-top:0.5rem;">
+                <div class="filter-group">
+                    <label for="dateFrom">From</label>
+                    <input type="date" id="dateFrom" onchange="onDateRangeChange()">
+                </div>
+                <div class="filter-group">
+                    <label for="dateTo">To</label>
+                    <input type="date" id="dateTo" onchange="onDateRangeChange()">
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="clearDateFilter()" style="align-self:flex-end">&#10005; Clear dates</button>
+            </div>
+
+            <!-- Store filter -->
+            <div class="filter-row" style="margin-top:0.75rem;">
+                <div class="filter-group" style="flex:1; min-width:200px;">
+                    <label for="storeSelect">Store</label>
+                    <select id="storeSelect" onchange="onStoreChange()">
+                        <option value="">— all stores —</option>
+                    </select>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="clearStoreFilter()" style="align-self:flex-end">&#10005; Clear store</button>
+            </div>
+
+            <!-- Regionals toggle -->
+            <div class="filter-row" style="margin-top:0.75rem;">
+                <button id="regionalsOnlyBtn" class="chip" onclick="toggleRegionalsOnly()" title="Show only events listed in the Regionals section">
+                    Regionals only
+                </button>
+            </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('overall')">
+                <h2>Overall Results</h2>
+                <span class="toggle-icon" id="overall-icon">▼</span>
+            </div>
+            <div class="card-body" id="overall-body" style="max-height: 9999px;">
+                <div class="stat-grid" id="overallStats"></div>
+                <div id="streakStats"></div>
+            </div>
+        </div>
+
+        <div class="card" id="chartsCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('charts')">
+                <h2>Charts</h2>
+                <span class="toggle-icon" id="charts-icon">▼</span>
+            </div>
+            <div class="card-body" id="charts-body" style="max-height: 9999px;">
+                <div class="charts-grid">
+                    <div class="chart-panel">
+                        <h3>Win / Loss</h3>
+                        <div class="chart-canvas-wrap" style="max-width:240px; margin:0 auto;">
+                            <canvas id="chartDonut"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <h3>Results by Set Period</h3>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartPeriodBar"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-panel" style="margin-top:1.5rem;">
+                    <h3>Win Rate Over Time (per tournament)</h3>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartTimeline"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="monthlyCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('monthly')">
+                <h2>Results by Month</h2>
+                <span class="toggle-icon" id="monthly-icon">▼</span>
+            </div>
+            <div class="card-body" id="monthly-body" style="max-height:9999px;">
+                <div class="chart-panel" style="margin-bottom:1.5rem;">
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartMonthly"></canvas>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="monthlyTable">
+                        <thead><tr>
+                            <th onclick="sortTable('monthlyTable',0)">Month</th>
+                            <th onclick="sortTable('monthlyTable',1)">W</th>
+                            <th onclick="sortTable('monthlyTable',2)">L</th>
+                            <th onclick="sortTable('monthlyTable',3)">Total</th>
+                            <th onclick="sortTable('monthlyTable',4)">Win%</th>
+                        </tr></thead>
+                        <tbody id="monthlyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('period')">
+                <h2>Results by Set Period</h2>
+                <span class="toggle-icon" id="period-icon">▼</span>
+            </div>
+            <div class="card-body" id="period-body" style="max-height: 9999px;">
+                <div class="table-wrap">
+                    <table id="periodTable">
+                        <thead><tr>
+                            <th onclick="sortTable('periodTable',0)">Set Period</th>
+                            <th onclick="sortTable('periodTable',1)">W</th>
+                            <th onclick="sortTable('periodTable',2)">L</th>
+                            <th onclick="sortTable('periodTable',3)">Total</th>
+                            <th onclick="sortTable('periodTable',4)">Win%</th>
+                        </tr></thead>
+                        <tbody id="periodBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('tourney')">
+                <h2>Tournament History</h2>
+                <span class="toggle-icon" id="tourney-icon">▼</span>
+            </div>
+            <div class="card-body" id="tourney-body" style="max-height: 9999px;">
+                <div class="table-wrap">
+                    <table id="tourneyTable">
+                        <thead><tr>
+                            <th onclick="sortTable('tourneyTable',0)">Date</th>
+                            <th onclick="sortTable('tourneyTable',1)">Store</th>
+                            <th onclick="sortTable('tourneyTable',2)">Event</th>
+                            <th onclick="sortTable('tourneyTable',3)">Result</th>
+                            <th onclick="sortTable('tourneyTable',4)">Applicants</th>
+                        </tr></thead>
+                        <tbody id="tourneyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="eventSizeCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('eventsize')">
+                <h2>Performance by Event Size</h2>
+                <span class="toggle-icon" id="eventsize-icon">▼</span>
+            </div>
+            <div class="card-body" id="eventsize-body" style="max-height:9999px;">
+                <div class="table-wrap">
+                    <table id="eventSizeTable">
+                        <thead><tr>
+                            <th onclick="sortTable('eventSizeTable',0)">Event Size</th>
+                            <th onclick="sortTable('eventSizeTable',1)">W</th>
+                            <th onclick="sortTable('eventSizeTable',2)">L</th>
+                            <th onclick="sortTable('eventSizeTable',3)">Total</th>
+                            <th onclick="sortTable('eventSizeTable',4)">Win%</th>
+                        </tr></thead>
+                        <tbody id="eventSizeBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="roundCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('rounds')">
+                <h2>Round by Round</h2>
+                <span class="toggle-icon" id="rounds-icon">▼</span>
+            </div>
+            <div class="card-body" id="rounds-body" style="max-height:9999px;">
+                <div class="table-wrap">
+                    <table id="roundTable">
+                        <thead><tr>
+                            <th onclick="sortTable('roundTable',0)">Round</th>
+                            <th onclick="sortTable('roundTable',1)">W</th>
+                            <th onclick="sortTable('roundTable',2)">L</th>
+                            <th onclick="sortTable('roundTable',3)">Total</th>
+                            <th onclick="sortTable('roundTable',4)">Win%</th>
+                        </tr></thead>
+                        <tbody id="roundBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="regionalsCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('regionals')">
+                <h2>Regionals</h2>
+                <span class="toggle-icon" id="regionals-icon">▼</span>
+            </div>
+            <div class="card-body" id="regionals-body" style="max-height: 9999px;">
+                <div class="table-wrap">
+                    <table id="regionalsTable">
+                        <thead><tr>
+                            <th onclick="sortTable('regionalsTable',0)">Date</th>
+                            <th onclick="sortTable('regionalsTable',1)">Event</th>
+                            <th onclick="sortTable('regionalsTable',2)">Result</th>
+                            <th onclick="sortTable('regionalsTable',3)">Applicants</th>
+                        </tr></thead>
+                        <tbody id="regionalsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header row-flex" onclick="toggleCard('players')">
+                <h2>Results by Player</h2>
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();exportExcel()">&#8675; Export Excel</button>
+                    <span class="toggle-icon" id="players-icon">▼</span>
+                </div>
+            </div>
+            <div class="card-body" id="players-body" style="max-height: 9999px;">
+
+            <!-- Player search -->
+            <div style="margin-bottom:1rem;">
+                <label for="playerSearchInput">Filter by player</label>
+                <div class="player-search-wrap">
+                    <input type="text" id="playerSearchInput" placeholder="Type a player name…"
+                        autocomplete="off"
+                        oninput="onPlayerSearchInput()"
+                        onkeydown="onPlayerSearchKey(event)"
+                        onfocus="showAutocomplete()"
+                        onblur="hideAutocomplete()">
+                    <ul class="player-autocomplete" id="playerAutocomplete"></ul>
+                </div>
+            </div>
+
+            <!-- vs banner (shown when a player is selected) -->
+            <div class="vs-banner" id="vsBanner">
+                vs <strong id="vsName"></strong>:
+                <span id="vsStats"></span>
+                <button class="btn btn-outline btn-sm btn-clear" onclick="clearPlayerFilter()">&#10005; Show all</button>
+            </div>
+
+            <div class="table-wrap">
+                <table id="playerTable">
+                    <thead><tr>
+                        <th onclick="sortTable('playerTable',0)">Player</th>
+                        <th onclick="sortTable('playerTable',1)">W</th>
+                        <th onclick="sortTable('playerTable',2)">L</th>
+                        <th onclick="sortTable('playerTable',3)">Total</th>
+                        <th onclick="sortTable('playerTable',4)">Win%</th>
+                        <th onclick="sortTable('playerTable',5)">Events</th>
+                    </tr></thead>
+                    <tbody id="playerBody"></tbody>
+                </table>
+            </div>
+            </div>
+        </div>
+
+<div class="card" id="compareCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('compare')">
+                <h2>Multi-user Comparison</h2>
+                <span class="toggle-icon" id="compare-icon">▼</span>
+            </div>
+            <div class="card-body" id="compare-body" style="max-height:9999px;">
+                <div class="filter-row" style="margin-top:0;margin-bottom:1.25rem;">
+                    <div class="filter-group" style="flex:1;min-width:180px;">
+                        <label for="compareUserSelect">Compare with</label>
+                        <select id="compareUserSelect" onchange="onCompareUserChange()">
+                            <option value="">— select a user —</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="compareContent"></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Opponent profile modal -->
+<div class="modal-overlay" id="opponentModal" onclick="closeOpponentModal(event)">
+    <div class="modal-box">
+        <button class="modal-close" onclick="document.getElementById('opponentModal').classList.remove('open')">&#10005;</button>
+        <div class="modal-title" id="modalPlayerName"></div>
+        <div class="modal-sub" id="modalPlayerRecord"></div>
+        <div class="modal-section">
+            <h3>Match History</h3>
+            <div class="table-wrap">
+                <table id="modalMatchTable">
+                    <thead><tr>
+                        <th>Date</th>
+                        <th>Event</th>
+                        <th>W</th>
+                        <th>L</th>
+                    </tr></thead>
+                    <tbody id="modalMatchBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SET_PERIODS = [
+    { name: "Pre OP-01",                              date: null },
+    { name: "OP-01 · Romance Dawn",                   date: new Date("2022-12-02") },
+    { name: "OP-02 · Paramount War",                  date: new Date("2023-03-10") },
+    { name: "OP-03 · Pillars of Strength",            date: new Date("2023-06-02") },
+    { name: "OP-04 · Kingdoms of Intrigue",           date: new Date("2023-09-01") },
+    { name: "OP-05 · Awakening of the New Era",       date: new Date("2023-11-03") },
+    { name: "OP-06 · Wings of the Captain",           date: new Date("2024-02-23") },
+    { name: "OP-07 · 500 Years in the Future",        date: new Date("2024-06-28") },
+    { name: "OP-08 · Two Legends",                    date: new Date("2024-09-13") },
+    { name: "OP-09 · Emperors in the New World",      date: new Date("2024-12-13") },
+    { name: "OP-10 · Royal Blood",                    date: new Date("2025-03-21") },
+    { name: "OP-11 · A Fist of Divine Speed",         date: new Date("2025-06-06") },
+    { name: "OP-12 · Legacy of the Master",           date: new Date("2025-08-22") },
+    { name: "OP-13 · Carrying On His Will",           date: new Date("2025-11-07") },
+    { name: "OP-14 / EB-04 · The Azure Sea's Seven",  date: new Date("2026-01-16") },
+];
+
+const REGIONALS = [
+    { date: "2025-08-02", name: "One Piece Offline Regionals 02/05 - Day 1" },
+    { date: "2025-08-03", name: "One Piece Offline Regionals 02/05 - Day 2" },
+    { date: "2025-11-08", name: "Latam TCG One Piece Regional - Brazil" },
+    { date: "2025-11-09", name: "Offline Treasure Cup - Brazil Day 2" },
+];
+
+// State
+let _usersWithToken    = []; // { name, bandaiId, token }
+let _usernameMap       = {}; // bandaiId → name  (all entries, with or without token)
+let _playerResults     = null;
+let _allEventData      = [];
+let _selectedPlayerId  = null; // bandai id of the player being filtered, or null
+let _acHighlight       = -1;   // autocomplete keyboard highlight index
+let _selectedStore          = null;  // store name filter, or null
+let _regionalsOnly          = false; // when true, show only regional events
+let _opponentMatchHistory   = {};    // pid -> [{dateStr, evName, w, l}]
+
+function toggleCard(cardId) {
+    const body = document.getElementById(cardId + '-body');
+    const icon = document.getElementById(cardId + '-icon');
+    if (!body) return;
+    body.classList.toggle('collapsed');
+    if (icon) icon.style.transform = body.classList.contains('collapsed') ? 'rotate(-90deg)' : '';
+}
+
+// ── File / parse ───────────────────────────────────────────────────────────
+
+function parseMapText(text) {
+    const users = [];
+    const nameMap = {};
+
+    for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Split only on the first two colons so the JWT (which has no colons) is safe
+        // Format: Name:BandaiID  OR  Name:BandaiID:BearerToken
+        const firstColon  = trimmed.indexOf(':');
+        if (firstColon === -1) continue;
+        const secondColon = trimmed.indexOf(':', firstColon + 1);
+
+        const name     = trimmed.slice(0, firstColon).trim();
+        const bandaiId = secondColon === -1
+            ? trimmed.slice(firstColon + 1).trim()
+            : trimmed.slice(firstColon + 1, secondColon).trim();
+        const token    = secondColon !== -1 ? trimmed.slice(secondColon + 1).trim() : null;
+
+        if (!name || !bandaiId) continue;
+        nameMap[bandaiId] = name;
+        if (token) users.push({ name, bandaiId, token });
+    }
+
+    return { users, nameMap };
+}
+
+function applyParsed({ users, nameMap }) {
+    _usersWithToken = users;
+    _usernameMap    = nameMap;
+
+    const select = document.getElementById('userSelect');
+    const status = document.getElementById('fileStatus');
+
+    if (users.length === 0) {
+        select.innerHTML = '<option value="">— no users with bearer tokens found —</option>';
+        select.disabled = true;
+        status.className = 'file-status warn';
+        status.textContent = `${Object.keys(nameMap).length} players loaded — add a token to a user entry to enable fetching`;
+        document.getElementById('fetchBtn').disabled = true;
+        return;
+    }
+
+    select.innerHTML = '<option value="">— select a user —</option>';
+    for (let i = 0; i < users.length; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = users[i].name;
+        select.appendChild(opt);
+    }
+    if (users.length === 1) select.selectedIndex = 1;
+    select.disabled = false;
+
+    const total = Object.keys(nameMap).length;
+    status.className = 'file-status ok';
+    status.textContent = `${total} players loaded — ${users.length} with token`;
+
+    onUserChange();
+}
+
+function loadMapFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('usernameMap').value = e.target.result;
+        applyParsed(parseMapText(e.target.result));
+        const status = document.getElementById('fileStatus');
+        status.textContent = status.textContent.replace('loaded', `loaded · ${file.name}`);
+    };
+    reader.readAsText(file);
+}
+
+function parsePasted() {
+    const text = document.getElementById('usernameMap').value;
+    applyParsed(parseMapText(text));
+}
+
+function onUserChange() {
+    const idx = document.getElementById('userSelect').value;
+    document.getElementById('fetchBtn').disabled = (idx === '');
+    if (idx === '') {
+        document.getElementById('cacheBar').style.display = 'none';
+        return;
+    }
+    const user = _usersWithToken[parseInt(idx)];
+    updateCacheBar(user.bandaiId);
+}
+
+// ── Cache (localStorage, keyed per Bandai ID) ──────────────────────────────
+
+const CACHE_PREFIX = 'bandai_events_';
+
+function cacheKey(bandaiId) { return CACHE_PREFIX + bandaiId; }
+
+function loadCache(bandaiId) {
+    try {
+        const raw = localStorage.getItem(cacheKey(bandaiId));
+        return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+}
+
+function saveCache(bandaiId, cache) {
+    try {
+        localStorage.setItem(cacheKey(bandaiId), JSON.stringify(cache));
+    } catch (e) {
+        console.warn('localStorage write failed — cache not saved:', e);
+    }
+}
+
+function clearCacheForUser(bandaiId) {
+    localStorage.removeItem(cacheKey(bandaiId));
+}
+
+function updateCacheBar(bandaiId) {
+    const cache   = loadCache(bandaiId);
+    const count   = Object.keys(cache).length;
+    const bar     = document.getElementById('cacheBar');
+    const inner   = document.getElementById('cacheBarInner');
+    const text    = document.getElementById('cacheBarText');
+    bar.style.display = '';
+    if (count === 0) {
+        inner.className = 'cache-bar';
+        text.innerHTML  = 'No cached data yet — first run will fetch everything.';
+    } else {
+        inner.className = 'cache-bar has-cache';
+        text.innerHTML  = `<strong>${count}</strong> events cached locally.`;
+    }
+}
+
+function confirmClearCache() {
+    const idx  = document.getElementById('userSelect').value;
+    if (idx === '') return;
+    const user = _usersWithToken[parseInt(idx)];
+    if (!confirm(`Clear all cached events for ${user.name}?\nNext run will re-fetch everything from the API.`)) return;
+    clearCacheForUser(user.bandaiId);
+    updateCacheBar(user.bandaiId);
+}
+
+// Called by "Sync new events only" — just runs fetchAndAnalyze (cache is automatic)
+function refreshCache() { fetchAndAnalyze(); }
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function getPeriodForDate(dateStr) {
+    const d = new Date(dateStr);
+    let period = SET_PERIODS[0].name;
+    for (let i = 1; i < SET_PERIODS.length; i++) {
+        if (d >= SET_PERIODS[i].date) period = SET_PERIODS[i].name;
+        else break;
+    }
+    return period;
+}
+
+function setProgress(text, pct) {
+    document.getElementById('progressText').textContent = text;
+    document.getElementById('progressBar').style.width = pct + '%';
+}
+
+function showError(html) {
+    const box = document.getElementById('errorBox');
+    box.innerHTML = `<div class="error-box">${html}</div>`;
+    box.style.display = 'block';
+}
+
+function clearError() {
+    const box = document.getElementById('errorBox');
+    box.style.display = 'none';
+    box.innerHTML = '';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Fetch & Analyze ────────────────────────────────────────────────────────
+
+async function fetchAndAnalyze() {
+    const idx = document.getElementById('userSelect').value;
+    if (idx === '') { showError('Please select a user.'); return; }
+
+    const user  = _usersWithToken[parseInt(idx)];
+    const token = user.token;
+
+    clearError();
+    document.getElementById('progress').style.display = 'block';
+    document.getElementById('results').style.display  = 'none';
+    document.getElementById('fetchBtn').disabled = true;
+
+    try {
+        // 1. Event list
+        setProgress(`Fetching event list for ${user.name}…`, 5);
+        const listUrl = 'https://api.bandai-tcg-plus.com/api/user/my/event'
+            + '?favorite=0&game_title_id=&limit=1000&offset=0&past_event_display_flg=1&selected_tab=3';
+
+        const listResp = await fetch(listUrl, { headers: { 'X-Authentication': token } });
+        if (!listResp.ok) throw new Error(`Event list request failed (HTTP ${listResp.status})`);
+        const events = (await listResp.json()).success.events;
+
+        // 2. Load cache and figure out what needs fetching
+        const cache      = loadCache(user.bandaiId);
+        const newEvents  = events.filter(ev => !cache[String(ev.id)]);
+        const cachedCount = events.length - newEvents.length;
+
+        // Patch metadata from fresh event list into cached entries (safe update)
+        for (const ev of events) {
+            if (cache[String(ev.id)]) {
+                const entry = cache[String(ev.id)];
+                entry._start_datetime  = ev.start_datetime;
+                entry._event_name      = ev.name ?? ev.event_name ?? ev.title ?? null;
+                entry._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+                    ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+                    ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name ?? null;
+                // Try several possible field names the API might use for participant count
+                entry._applicant_count = ev.joinedCount ?? ev.joined_count
+                    ?? ev.aplicantes ?? ev.aplicants
+                    ?? ev.entry_count ?? ev.applicant_count
+                    ?? ev.participant_count ?? ev.entries ?? null;
+                entry._capacity        = ev.capacity ?? ev.max_capacity
+                    ?? ev.max_entry_count ?? null;
+            }
+        }
+
+        // 3. Fetch only new events
+        if (newEvents.length === 0) {
+            setProgress(`All ${cachedCount} events loaded from cache.`, 95);
+        } else {
+            for (let i = 0; i < newEvents.length; i++) {
+                const ev = newEvents[i];
+                setProgress(
+                    `Fetching ${i + 1} of ${newEvents.length} new events (${cachedCount} from cache)…`,
+                    5 + Math.round((i / newEvents.length) * 88)
+                );
+                const evResp = await fetch(
+                    `https://api.bandai-tcg-plus.com/api/user/event/${ev.id}/history`,
+                    { headers: { 'X-Authentication': token } }
+                );
+                if (evResp.ok) {
+                    const evData = (await evResp.json()).success;
+                    evData._start_datetime  = ev.start_datetime;
+                    evData._event_name      = ev.name ?? ev.event_name ?? ev.title
+                        ?? evData.event?.name ?? evData.event?.event_name ?? null;
+                    evData._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+                        ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+                        ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
+                        ?? evData.event?.organizer_name ?? evData.event?.organizer
+                        ?? evData.event?.organization_name ?? evData.event?.hosted_by
+                        ?? evData.event?.store_name ?? evData.event?.shop_name
+                        ?? evData.event?.venue_name ?? evData.event?.store?.name
+                        ?? evData.event?.organizer?.name ?? null;
+                    // Log the first new event's raw data to help identify field names
+                    if (i === 0) console.log('[Bandai] raw event list entry:', ev);
+                    if (i === 0) console.log('[Bandai] raw event history data:', evData);
+                    // Participant count: try event list fields first, then the nested event object
+                    evData._applicant_count = ev.joinedCount ?? ev.joined_count
+                        ?? ev.aplicantes ?? ev.aplicants
+                        ?? ev.entry_count ?? ev.applicant_count
+                        ?? ev.participant_count ?? ev.entries
+                        ?? evData.event?.joinedCount ?? evData.event?.joined_count
+                        ?? evData.event?.aplicantes ?? evData.event?.aplicants
+                        ?? evData.event?.entry_count ?? evData.event?.applicant_count
+                        ?? evData.event?.participant_count ?? null;
+                    evData._capacity        = ev.capacity ?? ev.max_capacity
+                        ?? ev.max_entry_count
+                        ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
+                    cache[String(ev.id)] = evData;
+                }
+                await sleep(300);
+            }
+            saveCache(user.bandaiId, cache);
+        }
+
+        // 4. Build full dataset from cache in event-list order
+        const allEventData = events.map(ev => cache[String(ev.id)]).filter(Boolean);
+        _allEventData     = allEventData;
+        _selectedPlayerId = null;
+        _selectedStore    = null;
+        _regionalsOnly    = false;
+        document.getElementById('playerSearchInput').value = '';
+        document.getElementById('vsBanner').style.display  = 'none';
+        document.getElementById('dateFrom').value = '';
+        document.getElementById('dateTo').value   = '';
+        document.getElementById('regionalsOnlyBtn').classList.remove('active');
+
+        updateCacheBar(user.bandaiId);
+        setProgress('Processing data…', 97);
+
+        // 3. Overall W/L
+        let totalW = 0, totalL = 0;
+        for (const ev of allEventData) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) { if (r.is_win) totalW++; else totalL++; }
+        }
+
+        // 4. By period
+        const periodMap = {};
+        for (const p of SET_PERIODS) periodMap[p.name] = { w: 0, l: 0 };
+        for (const ev of allEventData) {
+            if (!ev?.rounds) continue;
+            const period = ev._start_datetime
+                ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+            for (const r of ev.rounds) {
+                if (r.is_win) periodMap[period].w++; else periodMap[period].l++;
+            }
+        }
+
+        // 5. By player
+        const playerMap = {};
+        for (const ev of allEventData) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) {
+                const pid = r.opponent_users?.[0]?.membership_number;
+                if (!pid) continue;
+                if (!playerMap[pid]) playerMap[pid] = [0, 0];
+                if (r.is_win) playerMap[pid][0]++; else playerMap[pid][1]++;
+            }
+        }
+        _playerResults = playerMap;
+
+        setProgress('Done!', 100);
+        setTimeout(() => { document.getElementById('progress').style.display = 'none'; }, 600);
+
+        buildFilterChips(allEventData);
+        buildStoreFilter(allEventData);
+        buildCompareCard();
+        displayResults(user.name, totalW, totalL, periodMap, playerMap, allEventData);
+
+    } catch (err) {
+        document.getElementById('progress').style.display = 'none';
+        let msg = err.message;
+        if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
+            msg = `<strong>Network / CORS error</strong> — the browser blocked the request to the Bandai API.<br><br>
+The API is designed for the mobile app and does not include CORS headers.
+To bypass this, launch Chrome with web-security disabled:<br><br>
+<code>"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --disable-web-security --user-data-dir="%TEMP%\\chrome-no-cors"</code><br><br>
+Then open <code>analyzer.html</code> in that window.`;
+        }
+        showError(msg);
+    } finally {
+        document.getElementById('fetchBtn').disabled = false;
+    }
+}
+
+// ── Date filter ────────────────────────────────────────────────────────────
+
+function clearYearChips() {
+    document.querySelectorAll('#yearChips .chip').forEach(c => c.classList.remove('active'));
+}
+
+function onYearChip(btn) {
+    const year     = btn.dataset.year;
+    const isActive = btn.classList.contains('active');
+    clearYearChips();
+    if (isActive) {
+        document.getElementById('dateFrom').value = '';
+        document.getElementById('dateTo').value   = '';
+    } else {
+        btn.classList.add('active');
+        document.getElementById('dateFrom').value = `${year}-01-01`;
+        document.getElementById('dateTo').value   = `${year}-12-31`;
+    }
+    applyFilter();
+}
+
+// When the user edits dates manually, deselect year chips (they may no longer match)
+function onDateRangeChange() {
+    clearYearChips();
+    applyFilter();
+}
+
+function clearDateFilter() {
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value   = '';
+    clearYearChips();
+    applyFilter();
+}
+
+function getDateRange() {
+    const from = document.getElementById('dateFrom').value; // 'YYYY-MM-DD' or ''
+    const to   = document.getElementById('dateTo').value;
+    return {
+        from: from ? new Date(from) : null,
+        to:   to   ? new Date(to + 'T23:59:59') : null,
+    };
+}
+
+// ── Store filter ───────────────────────────────────────────────────────────
+
+function buildStoreFilter(allEventData) {
+    const stores = new Set();
+    for (const ev of allEventData) {
+        if (ev._store_name) stores.add(ev._store_name);
+    }
+    const sel = document.getElementById('storeSelect');
+    sel.innerHTML = '<option value="">— all stores —</option>';
+    const sorted = [...stores].sort((a, b) => a.localeCompare(b));
+    for (const name of sorted) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    }
+    // Restore previous selection if still valid
+    if (_selectedStore && stores.has(_selectedStore)) sel.value = _selectedStore;
+    else _selectedStore = null;
+}
+
+function onStoreChange() {
+    const val = document.getElementById('storeSelect').value;
+    _selectedStore = val || null;
+    applyFilter();
+}
+
+function clearStoreFilter() {
+    _selectedStore = null;
+    document.getElementById('storeSelect').value = '';
+    applyFilter();
+}
+
+// ── Regionals filter ───────────────────────────────────────────────────────
+
+const _regionalDates = new Set(REGIONALS.map(r => r.date));
+
+function toggleRegionalsOnly() {
+    _regionalsOnly = !_regionalsOnly;
+    document.getElementById('regionalsOnlyBtn').classList.toggle('active', _regionalsOnly);
+    applyFilter();
+}
+
+// ── Player filter / autocomplete ───────────────────────────────────────────
+
+function buildPlayerList() {
+    // Returns sorted list of { id, name } for players that appear in _allEventData
+    const seen = new Map();
+    for (const ev of _allEventData) {
+        if (!ev?.rounds) continue;
+        for (const r of ev.rounds) {
+            const pid = r.opponent_users?.[0]?.membership_number;
+            if (pid && !seen.has(pid)) seen.set(pid, _usernameMap[pid] || pid);
+        }
+    }
+    return [...seen.entries()]
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function onPlayerSearchInput() {
+    _selectedPlayerId = null;
+    _acHighlight = -1;
+    const q = document.getElementById('playerSearchInput').value.trim().toLowerCase();
+    if (!q) { hideAutocomplete(); return; }
+    const matches = buildPlayerList().filter(p => p.name.toLowerCase().includes(q)).slice(0, 20);
+    renderAutocomplete(matches);
+}
+
+function renderAutocomplete(matches) {
+    const ul = document.getElementById('playerAutocomplete');
+    ul.innerHTML = '';
+    if (matches.length === 0) { ul.style.display = 'none'; return; }
+    matches.forEach((p, i) => {
+        const li = document.createElement('li');
+        li.textContent = p.name;
+        li.dataset.pid = p.id;
+        li.onmousedown = () => selectPlayer(p.id, p.name); // mousedown fires before blur
+        ul.appendChild(li);
+    });
+    ul.style.display = 'block';
+}
+
+function showAutocomplete() {
+    const q = document.getElementById('playerSearchInput').value.trim();
+    if (q) onPlayerSearchInput();
+}
+
+function hideAutocomplete() {
+    setTimeout(() => {
+        document.getElementById('playerAutocomplete').style.display = 'none';
+        _acHighlight = -1;
+    }, 150);
+}
+
+function onPlayerSearchKey(e) {
+    const ul    = document.getElementById('playerAutocomplete');
+    const items = [...ul.querySelectorAll('li')];
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _acHighlight = Math.min(_acHighlight + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _acHighlight = Math.max(_acHighlight - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (_acHighlight >= 0) {
+            const li = items[_acHighlight];
+            selectPlayer(li.dataset.pid, li.textContent);
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        clearPlayerFilter();
+        return;
+    }
+
+    items.forEach((li, i) => li.classList.toggle('highlighted', i === _acHighlight));
+    if (_acHighlight >= 0) items[_acHighlight].scrollIntoView({ block: 'nearest' });
+}
+
+function selectPlayer(pid, name) {
+    _selectedPlayerId = pid;
+    document.getElementById('playerSearchInput').value = name;
+    document.getElementById('playerAutocomplete').style.display = 'none';
+    applyFilter();
+}
+
+function clearPlayerFilter() {
+    _selectedPlayerId = null;
+    document.getElementById('playerSearchInput').value = '';
+    document.getElementById('vsBanner').style.display = 'none';
+    applyFilter();
+}
+
+// ── Period filter ──────────────────────────────────────────────────────────
+
+function buildFilterChips(allEventData) {
+    // Determine which periods actually have events
+    const periodsWithData = new Set();
+    for (const ev of allEventData) {
+        if (!ev?.rounds) continue;
+        const period = ev._start_datetime ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+        periodsWithData.add(period);
+    }
+
+    const container = document.getElementById('periodChips');
+    container.innerHTML = '';
+
+    // "All" chip
+    const allChip = document.createElement('button');
+    allChip.className = 'chip chip-all active';
+    allChip.textContent = 'All';
+    allChip.dataset.period = 'all';
+    allChip.onclick = () => {
+        const indiv = [...container.querySelectorAll('.chip:not(.chip-all)')];
+        const allOn = indiv.every(c => c.classList.contains('active'));
+        indiv.forEach(c => c.classList.toggle('active', !allOn));
+        allChip.classList.toggle('active', !allOn);
+        applyFilter();
+    };
+    container.appendChild(allChip);
+
+    // One chip per period that has data
+    for (const p of SET_PERIODS) {
+        if (!periodsWithData.has(p.name)) continue;
+        const chip = document.createElement('button');
+        chip.className = 'chip active';
+        chip.textContent = p.name.split(' · ')[0]; // short label
+        chip.title = p.name;                        // full name on hover
+        chip.dataset.period = p.name;
+        chip.onclick = () => {
+            chip.classList.toggle('active');
+            const indiv = [...container.querySelectorAll('.chip:not(.chip-all)')];
+            const allOn = indiv.every(c => c.classList.contains('active'));
+            allChip.classList.toggle('active', allOn);
+            applyFilter();
+        };
+        container.appendChild(chip);
+    }
+
+    document.getElementById('filterCard').style.display = 'block';
+}
+
+function getSelectedPeriods() {
+    const chips = document.querySelectorAll('#periodChips .chip:not(.chip-all)');
+    return new Set([...chips].filter(c => c.classList.contains('active')).map(c => c.dataset.period));
+}
+
+function applyFilter() {
+    const selected  = getSelectedPeriods();
+    const { from, to } = getDateRange();
+
+    const filtered = _allEventData.filter(ev => {
+        if (!ev?.rounds) return false;
+
+        // Period chip filter
+        if (selected.size > 0) {
+            const period = ev._start_datetime ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+            if (!selected.has(period)) return false;
+        }
+
+        // Date range filter
+        if (ev._start_datetime) {
+            const d = new Date(ev._start_datetime);
+            if (from && d < from) return false;
+            if (to   && d > to)   return false;
+        }
+
+        // Store filter
+        if (_selectedStore && ev._store_name !== _selectedStore) return false;
+
+        // Regionals-only filter
+        if (_regionalsOnly) {
+            const d = ev._start_datetime?.slice(0, 10);
+            if (!d || !_regionalDates.has(d)) return false;
+        }
+
+        return true;
+    });
+
+    let totalW = 0, totalL = 0;
+    for (const ev of filtered) {
+        if (!ev?.rounds) continue;
+        for (const r of ev.rounds) { if (r.is_win) totalW++; else totalL++; }
+    }
+
+    const periodMap = {};
+    for (const p of SET_PERIODS) periodMap[p.name] = { w: 0, l: 0 };
+    for (const ev of filtered) {
+        if (!ev?.rounds) continue;
+        const period = ev._start_datetime ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+        for (const r of ev.rounds) { if (r.is_win) periodMap[period].w++; else periodMap[period].l++; }
+    }
+
+    const playerMap = {};
+    for (const ev of filtered) {
+        if (!ev?.rounds) continue;
+        for (const r of ev.rounds) {
+            const pid = r.opponent_users?.[0]?.membership_number;
+            if (!pid) continue;
+            if (!playerMap[pid]) playerMap[pid] = [0, 0];
+            if (r.is_win) playerMap[pid][0]++; else playerMap[pid][1]++;
+        }
+    }
+    _playerResults = playerMap;
+
+    // Update vs banner when a specific player is selected
+    const banner = document.getElementById('vsBanner');
+    if (_selectedPlayerId && playerMap[_selectedPlayerId]) {
+        const [w, l] = playerMap[_selectedPlayerId];
+        const t   = w + l;
+        const pct = t > 0 ? (w / t * 100).toFixed(1) : '0.0';
+        document.getElementById('vsName').textContent  = _usernameMap[_selectedPlayerId] || _selectedPlayerId;
+        document.getElementById('vsStats').innerHTML   = `<span style="color:var(--win)">${w}W</span> / <span style="color:var(--loss)">${l}L</span> — <strong>${pct}%</strong> win rate over ${t} match${t !== 1 ? 'es' : ''}`;
+        banner.style.display = 'flex';
+    } else if (_selectedPlayerId) {
+        document.getElementById('vsName').textContent  = _usernameMap[_selectedPlayerId] || _selectedPlayerId;
+        document.getElementById('vsStats').innerHTML   = 'No matches in the selected period';
+        banner.style.display = 'flex';
+    } else {
+        banner.style.display = 'none';
+    }
+
+    displayResults('', totalW, totalL, periodMap, playerMap, filtered);
+}
+
+// ── Display ────────────────────────────────────────────────────────────────
+
+function displayResults(userName, totalW, totalL, periodMap, playerMap, eventData) {
+    const total  = totalW + totalL;
+    const winPct = total > 0 ? (totalW / total * 100).toFixed(1) : '0.0';
+
+    document.getElementById('overallStats').innerHTML = `
+        <div class="stat-box"><div class="val w-val">${totalW}</div><div class="lbl">Wins</div></div>
+        <div class="stat-box"><div class="val l-val">${totalL}</div><div class="lbl">Losses</div></div>
+        <div class="stat-box"><div class="val t-val">${total}</div><div class="lbl">Total</div></div>
+        <div class="stat-box"><div class="val pct-val">${winPct}%</div><div class="lbl">Win Rate</div></div>`;
+
+    displayStreaks(computeStreaks(eventData));
+
+    const periodBody = document.getElementById('periodBody');
+    periodBody.innerHTML = '';
+    for (const p of SET_PERIODS) {
+        const s = periodMap[p.name] || { w: 0, l: 0 };
+        if (s.w === 0 && s.l === 0) continue;
+        const t   = s.w + s.l;
+        const pct = (s.w / t * 100).toFixed(1);
+        const tr  = document.createElement('tr');
+        tr.innerHTML = `<td>${p.name}</td>
+            <td class="td-num">${s.w}</td><td class="td-num">${s.l}</td>
+            <td class="td-num">${t}</td><td class="td-pct">${pct}%</td>`;
+        periodBody.appendChild(tr);
+    }
+
+    // Build per-player event count and match history
+    const playerEventsCount = {};
+    const opponentHistory   = {};
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds) continue;
+        const dateStr = ev._start_datetime ? new Date(ev._start_datetime).toLocaleDateString('en-CA') : '—';
+        const evName  = ev._event_name ?? ev.event?.name ?? '—';
+        const seenThisEv = new Set();
+        const evOpponents = new Map();
+        for (const r of ev.rounds) {
+            const pid = r.opponent_users?.[0]?.membership_number;
+            if (!pid) continue;
+            if (!seenThisEv.has(pid)) {
+                seenThisEv.add(pid);
+                playerEventsCount[pid] = (playerEventsCount[pid] || 0) + 1;
+            }
+            if (!evOpponents.has(pid)) evOpponents.set(pid, { w: 0, l: 0 });
+            if (r.is_win) evOpponents.get(pid).w++; else evOpponents.get(pid).l++;
+        }
+        for (const [pid, res] of evOpponents) {
+            if (!opponentHistory[pid]) opponentHistory[pid] = [];
+            opponentHistory[pid].push({ dateStr, evName, w: res.w, l: res.l });
+        }
+    }
+    _opponentMatchHistory = opponentHistory;
+
+    const playerBody = document.getElementById('playerBody');
+    playerBody.innerHTML = '';
+    const sorted = Object.entries(playerMap)
+        .sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]));
+    for (const [pid, res] of sorted) {
+        const tag = _usernameMap[pid] || pid;
+        const [w, l] = res;
+        const t   = w + l;
+        const pct = (w / t * 100).toFixed(1);
+        const evCount = playerEventsCount[pid] || 0;
+        const tr  = document.createElement('tr');
+        if (pid === _selectedPlayerId) tr.classList.add('row-highlight');
+        tr.innerHTML = `<td>${tag}</td>
+            <td class="td-num">${w}</td><td class="td-num">${l}</td>
+            <td class="td-num">${t}</td><td class="td-pct">${pct}%</td>
+            <td class="td-num">${evCount}</td>`;
+        tr.style.cursor = 'pointer';
+        tr.onclick = () => openOpponentModal(pid);
+        playerBody.appendChild(tr);
+    }
+
+    // Tournament history table
+    if (eventData) {
+        const tourneyBody = document.getElementById('tourneyBody');
+        tourneyBody.innerHTML = '';
+        const evList = [...eventData].reverse(); // newest first
+
+        for (const ev of evList) {
+            if (!ev?.rounds) continue;
+            let evW = 0, evL = 0;
+            for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
+
+            const dateStr   = ev._start_datetime
+                ? new Date(ev._start_datetime).toLocaleDateString('en-CA') : '—';
+            const storeName = ev._store_name ?? ev.event?.organizer_name ?? ev.event?.organizer
+                ?? ev.event?.store_name ?? ev.event?.shop_name ?? null;
+            const storeStr  = storeName ?? '—';
+            const evName    = ev._event_name ?? ev.event?.name ?? '—';
+            const appCount  = ev._applicant_count ?? ev.event?.entry_count
+                ?? ev.event?.applicant_count ?? null;
+            const capCount  = ev._capacity ?? ev.event?.capacity ?? null;
+            const appStr    = appCount !== null
+                ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
+                : '—';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${dateStr}</td>
+                <td>${storeStr}</td>
+                <td>${evName}</td>
+                <td class="td-num">${evW}-${evL}</td>
+                <td class="td-num">${appStr}</td>`;
+            tourneyBody.appendChild(tr);
+        }
+
+    }
+
+    displayMonthly(eventData);
+    displayEventSize(eventData);
+    displayRoundByRound(eventData);
+    displayRegionals(eventData);
+    displayCharts(totalW, totalL, periodMap, eventData);
+
+    document.getElementById('results').style.display = 'block';
+}
+
+// ── Charts ─────────────────────────────────────────────────────────────────
+
+// Keep chart instances so we can destroy/recreate on filter changes
+const _charts = {};
+
+function destroyChart(id) {
+    if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+}
+
+function displayCharts(totalW, totalL, periodMap, eventData) {
+    const card = document.getElementById('chartsCard');
+    if (totalW + totalL === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const accent  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()   || '#048A81';
+    const win     = getComputedStyle(document.documentElement).getPropertyValue('--win').trim()       || '#28a745';
+    const loss    = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim()      || '#dc3545';
+    const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()   || '#2E4057';
+    const muted   = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()     || '#6c757d';
+
+    // ── 1. Win / Loss doughnut ──────────────────────────────────────────────
+    destroyChart('donut');
+    _charts['donut'] = new Chart(document.getElementById('chartDonut'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Wins', 'Losses'],
+            datasets: [{ data: [totalW, totalL], backgroundColor: [win, loss], borderWidth: 0 }]
+        },
+        options: {
+            cutout: '68%',
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 11 }, color: muted } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const t = totalW + totalL;
+                            const pct = (ctx.parsed / t * 100).toFixed(1);
+                            return ` ${ctx.parsed} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // ── 2. Results by Set Period bar chart ─────────────────────────────────
+    destroyChart('periodBar');
+    const periodLabels = [], periodWins = [], periodLosses = [];
+    for (const p of SET_PERIODS) {
+        const s = periodMap[p.name];
+        if (!s || (s.w === 0 && s.l === 0)) continue;
+        periodLabels.push(p.name.split(' · ')[0]); // short label
+        periodWins.push(s.w);
+        periodLosses.push(s.l);
+    }
+    _charts['periodBar'] = new Chart(document.getElementById('chartPeriodBar'), {
+        type: 'bar',
+        data: {
+            labels: periodLabels,
+            datasets: [
+                { label: 'Wins',   data: periodWins,   backgroundColor: win  + 'cc', borderRadius: 4 },
+                { label: 'Losses', data: periodLosses, backgroundColor: loss + 'cc', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { stacked: false, ticks: { font: { size: 10 }, color: muted }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { precision: 0, color: muted }, grid: { color: '#eee' } }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 11 }, color: muted } },
+                tooltip: {
+                    callbacks: {
+                        footer: items => {
+                            const idx  = items[0].dataIndex;
+                            const w    = periodWins[idx];
+                            const l    = periodLosses[idx];
+                            const t    = w + l;
+                            const pct  = t > 0 ? (w / t * 100).toFixed(1) : '0.0';
+                            return `Win rate: ${pct}%`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // ── 3. Win rate over time (per tournament, chronological) ──────────────
+    destroyChart('timeline');
+    const evListChron = [...(eventData || [])].filter(ev => ev?.rounds && ev._start_datetime);
+    evListChron.sort((a, b) => new Date(a._start_datetime) - new Date(b._start_datetime));
+
+    const timeLabels = [], timeWinRates = [], timeTotals = [], timeRolling = [];
+    let cumW = 0, cumL = 0;
+    const ROLLING_N = 5;
+    for (let i = 0; i < evListChron.length; i++) {
+        const ev = evListChron[i];
+        for (const r of ev.rounds) { if (r.is_win) cumW++; else cumL++; }
+        const t   = cumW + cumL;
+        timeWinRates.push(t > 0 ? parseFloat((cumW / t * 100).toFixed(1)) : 0);
+        timeTotals.push(t);
+        timeLabels.push(new Date(ev._start_datetime).toLocaleDateString('en-CA'));
+        // Rolling window
+        let rW = 0, rL = 0;
+        for (let j = Math.max(0, i - ROLLING_N + 1); j <= i; j++) {
+            for (const r of evListChron[j].rounds) { if (r.is_win) rW++; else rL++; }
+        }
+        const rt = rW + rL;
+        timeRolling.push(rt > 0 ? parseFloat((rW / rt * 100).toFixed(1)) : null);
+    }
+
+    _charts['timeline'] = new Chart(document.getElementById('chartTimeline'), {
+        type: 'line',
+        data: {
+            labels: timeLabels,
+            datasets: [
+            {
+                label: 'Cumulative Win %',
+                data: timeWinRates,
+                borderColor: accent,
+                backgroundColor: accent + '22',
+                fill: true,
+                tension: 0.3,
+                pointRadius: evListChron.length > 40 ? 0 : 3,
+                pointHoverRadius: 5,
+                borderWidth: 2
+            },
+            {
+                label: `Rolling ${ROLLING_N} Win %`,
+                data: timeRolling,
+                borderColor: primary,
+                backgroundColor: 'transparent',
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 1.5,
+                borderDash: [5, 3]
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: {
+                    ticks: {
+                        font: { size: 9 }, color: muted,
+                        maxTicksLimit: 12,
+                        maxRotation: 45
+                    },
+                    grid: { display: false }
+                },
+                y: {
+                    min: 0, max: 100,
+                    ticks: {
+                        callback: v => v + '%',
+                        font: { size: 10 }, color: muted
+                    },
+                    grid: { color: '#eee' }
+                }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 11 }, color: muted } },
+                tooltip: {
+                    callbacks: {
+                        title: items => `Tournament: ${items[0].label}`,
+                        label: ctx => {
+                            if (ctx.datasetIndex === 0)
+                                return ` Cumulative: ${ctx.parsed.y}%  (${timeTotals[ctx.dataIndex]} matches)`;
+                            return ` Rolling ${ROLLING_N}: ${ctx.parsed.y ?? '—'}%`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ── Streaks ────────────────────────────────────────────────────────────────
+
+function computeStreaks(eventData) {
+    const evs = [...(eventData || [])].filter(ev => ev?.rounds && ev._start_datetime);
+    evs.sort((a, b) => new Date(a._start_datetime) - new Date(b._start_datetime));
+    const rounds = [];
+    for (const ev of evs) for (const r of ev.rounds) rounds.push(r.is_win);
+    if (!rounds.length) return { current: 0, type: null, bestWin: 0, worstLoss: 0 };
+
+    let bestWin = 0, worstLoss = 0, curW = 0, curL = 0;
+    for (const isWin of rounds) {
+        if (isWin) { curW++; curL = 0; if (curW > bestWin) bestWin = curW; }
+        else       { curL++; curW = 0; if (curL > worstLoss) worstLoss = curL; }
+    }
+    const type = rounds[rounds.length - 1] ? 'W' : 'L';
+    let current = 0;
+    for (let i = rounds.length - 1; i >= 0; i--) {
+        if (rounds[i] === (type === 'W')) current++; else break;
+    }
+    return { current, type, bestWin, worstLoss };
+}
+
+function displayStreaks(streaks) {
+    const el = document.getElementById('streakStats');
+    if (!streaks || streaks.current === 0) { el.innerHTML = ''; return; }
+    const color = streaks.type === 'W' ? 'var(--win)' : 'var(--loss)';
+    el.innerHTML = `<div class="streak-grid">
+        <div class="stat-box"><div class="val" style="color:${color}">${streaks.current}${streaks.type}</div><div class="lbl">Current Streak</div></div>
+        <div class="stat-box"><div class="val w-val">${streaks.bestWin}</div><div class="lbl">Best Win Streak</div></div>
+        <div class="stat-box"><div class="val l-val">${streaks.worstLoss}</div><div class="lbl">Worst Loss Streak</div></div>
+    </div>`;
+}
+
+// ── Monthly breakdown ──────────────────────────────────────────────────────
+
+function displayMonthly(eventData) {
+    const card = document.getElementById('monthlyCard');
+    const monthly = {};
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds || !ev._start_datetime) continue;
+        const d = new Date(ev._start_datetime);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (!monthly[key]) monthly[key] = { w: 0, l: 0 };
+        for (const r of ev.rounds) { if (r.is_win) monthly[key].w++; else monthly[key].l++; }
+    }
+    const keys = Object.keys(monthly).sort();
+    if (!keys.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const tbody = document.getElementById('monthlyBody');
+    tbody.innerHTML = '';
+    for (const key of keys) {
+        const s = monthly[key];
+        const t = s.w + s.l;
+        const pct = (s.w / t * 100).toFixed(1);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${key}</td>
+            <td class="td-num">${s.w}</td><td class="td-num">${s.l}</td>
+            <td class="td-num">${t}</td><td class="td-pct">${pct}%</td>`;
+        tbody.appendChild(tr);
+    }
+
+    destroyChart('monthly');
+    const win   = getComputedStyle(document.documentElement).getPropertyValue('--win').trim()   || '#28a745';
+    const loss  = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim()  || '#dc3545';
+    const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#6c757d';
+    _charts['monthly'] = new Chart(document.getElementById('chartMonthly'), {
+        type: 'bar',
+        data: {
+            labels: keys,
+            datasets: [
+                { label: 'Wins',   data: keys.map(k => monthly[k].w), backgroundColor: win  + 'cc', borderRadius: 3 },
+                { label: 'Losses', data: keys.map(k => monthly[k].l), backgroundColor: loss + 'cc', borderRadius: 3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { stacked: true, ticks: { font: { size: 9 }, color: muted, maxRotation: 45 }, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0, color: muted }, grid: { color: '#eee' } }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 11 }, color: muted } },
+                tooltip: {
+                    callbacks: {
+                        footer: items => {
+                            const s = monthly[items[0].label];
+                            const t = s.w + s.l;
+                            return `Win rate: ${(s.w / t * 100).toFixed(1)}%`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ── Performance by event size ──────────────────────────────────────────────
+
+function displayEventSize(eventData) {
+    const card = document.getElementById('eventSizeCard');
+    const brackets = [
+        { label: 'Small (≤ 16)',   test: n => n !== null && n <= 16 },
+        { label: 'Medium (17–32)', test: n => n !== null && n >= 17 && n <= 32 },
+        { label: 'Large (33+)',    test: n => n !== null && n >= 33 },
+        { label: 'Unknown',        test: n => n === null },
+    ];
+    const stats = brackets.map(() => ({ w: 0, l: 0 }));
+    let hasData = false;
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds) continue;
+        const n = ev._applicant_count ?? null;
+        const bi = brackets.findIndex(b => b.test(n));
+        if (bi === -1) continue;
+        for (const r of ev.rounds) {
+            if (r.is_win) stats[bi].w++; else stats[bi].l++;
+            hasData = true;
+        }
+    }
+    if (!hasData) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const tbody = document.getElementById('eventSizeBody');
+    tbody.innerHTML = '';
+    for (let i = 0; i < brackets.length; i++) {
+        const s = stats[i];
+        if (s.w === 0 && s.l === 0) continue;
+        const t = s.w + s.l;
+        const pct = (s.w / t * 100).toFixed(1);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${brackets[i].label}</td>
+            <td class="td-num">${s.w}</td><td class="td-num">${s.l}</td>
+            <td class="td-num">${t}</td><td class="td-pct">${pct}%</td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+// ── Round by round ─────────────────────────────────────────────────────────
+
+function displayRoundByRound(eventData) {
+    const card = document.getElementById('roundCard');
+    const roundMap = {};
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds) continue;
+        ev.rounds.forEach((r, idx) => {
+            if (!roundMap[idx]) roundMap[idx] = { w: 0, l: 0 };
+            if (r.is_win) roundMap[idx].w++; else roundMap[idx].l++;
+        });
+    }
+    const indices = Object.keys(roundMap).map(Number).sort((a, b) => a - b);
+    if (!indices.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const tbody = document.getElementById('roundBody');
+    tbody.innerHTML = '';
+    for (const idx of indices) {
+        const s = roundMap[idx];
+        const t = s.w + s.l;
+        const pct = (s.w / t * 100).toFixed(1);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>Round ${idx + 1}</td>
+            <td class="td-num">${s.w}</td><td class="td-num">${s.l}</td>
+            <td class="td-num">${t}</td><td class="td-pct">${pct}%</td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+// ── Opponent profile modal ─────────────────────────────────────────────────
+
+function openOpponentModal(pid) {
+    const name    = _usernameMap[pid] || pid;
+    const history = _opponentMatchHistory[pid] || [];
+    const [w, l]  = _playerResults[pid] || [0, 0];
+    const t       = w + l;
+    const pct     = t > 0 ? (w / t * 100).toFixed(1) : '0.0';
+
+    document.getElementById('modalPlayerName').textContent = `vs ${name}`;
+    document.getElementById('modalPlayerRecord').innerHTML =
+        `<span style="color:var(--win)">${w}W</span> / <span style="color:var(--loss)">${l}L</span> — ${pct}% win rate · ${history.length} event${history.length !== 1 ? 's' : ''}`;
+
+    const tbody = document.getElementById('modalMatchBody');
+    tbody.innerHTML = '';
+    const sorted = [...history].sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+    for (const m of sorted) {
+        const tr = document.createElement('tr');
+        const resultColor = m.w > m.l ? 'var(--win)' : m.l > m.w ? 'var(--loss)' : 'var(--muted)';
+        tr.innerHTML = `<td>${m.dateStr}</td><td>${m.evName}</td>
+            <td class="td-num" style="color:${resultColor};font-weight:600">${m.w}</td>
+            <td class="td-num" style="color:${resultColor};font-weight:600">${m.l}</td>`;
+        tbody.appendChild(tr);
+    }
+    document.getElementById('opponentModal').classList.add('open');
+}
+
+function closeOpponentModal(event) {
+    if (event.target === document.getElementById('opponentModal'))
+        document.getElementById('opponentModal').classList.remove('open');
+}
+
+// ── Multi-user comparison ──────────────────────────────────────────────────
+
+function buildCompareCard() {
+    const card = document.getElementById('compareCard');
+    if (_usersWithToken.length < 2) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const currentIdx = parseInt(document.getElementById('userSelect').value);
+    const sel = document.getElementById('compareUserSelect');
+    sel.innerHTML = '<option value="">— select a user —</option>';
+    _usersWithToken.forEach((u, i) => {
+        if (i === currentIdx) return;
+        const opt = document.createElement('option');
+        opt.value = i; opt.textContent = u.name;
+        sel.appendChild(opt);
+    });
+    document.getElementById('compareContent').innerHTML = '';
+}
+
+function onCompareUserChange() {
+    const idx = document.getElementById('compareUserSelect').value;
+    if (idx === '') { document.getElementById('compareContent').innerHTML = ''; return; }
+
+    const currentIdx = parseInt(document.getElementById('userSelect').value);
+    const userA = _usersWithToken[currentIdx];
+    const userB = _usersWithToken[parseInt(idx)];
+
+    const cacheB = loadCache(userB.bandaiId);
+    const evDataB = Object.values(cacheB);
+    if (evDataB.length === 0) {
+        document.getElementById('compareContent').innerHTML =
+            `<p style="color:var(--muted);font-size:0.88rem;">No cached data for <strong>${userB.name}</strong>. Run Fetch &amp; Analyze for that user first.</p>`;
+        return;
+    }
+    renderCompare(computeUserStats(userA.name, _allEventData), computeUserStats(userB.name, evDataB));
+}
+
+function computeUserStats(name, eventData) {
+    let w = 0, l = 0, tournaments = 0;
+    const periodMap = {};
+    for (const p of SET_PERIODS) periodMap[p.name] = { w: 0, l: 0 };
+    for (const ev of eventData) {
+        if (!ev?.rounds) continue;
+        tournaments++;
+        const period = ev._start_datetime ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+        for (const r of ev.rounds) {
+            if (r.is_win) { w++; periodMap[period].w++; } else { l++; periodMap[period].l++; }
+        }
+    }
+    let bestPeriod = null, bestPct = -1;
+    for (const [pname, s] of Object.entries(periodMap)) {
+        const t = s.w + s.l;
+        if (t < 3) continue;
+        const pct = s.w / t * 100;
+        if (pct > bestPct) { bestPct = pct; bestPeriod = pname.split(' · ')[0]; }
+    }
+    return { name, w, l, tournaments, bestPeriod, bestPct };
+}
+
+function renderCompare(a, b) {
+    const tA = a.w + a.l, tB = b.w + b.l;
+    const pctA = tA > 0 ? (a.w / tA * 100).toFixed(1) : '0.0';
+    const pctB = tB > 0 ? (b.w / tB * 100).toFixed(1) : '0.0';
+    const aLeads = parseFloat(pctA) > parseFloat(pctB);
+    const bLeads = parseFloat(pctB) > parseFloat(pctA);
+
+    function userBox(u, pct, leads) {
+        return `<div class="compare-user-box ${leads ? 'compare-active' : ''}">
+            <h3>${u.name}${leads ? ' ◀' : ''}</h3>
+            <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);gap:0.6rem;">
+                <div class="stat-box"><div class="val w-val" style="font-size:1.5rem">${u.w}</div><div class="lbl">Wins</div></div>
+                <div class="stat-box"><div class="val l-val" style="font-size:1.5rem">${u.l}</div><div class="lbl">Losses</div></div>
+                <div class="stat-box"><div class="val pct-val" style="font-size:1.5rem">${pct}%</div><div class="lbl">Win Rate</div></div>
+                <div class="stat-box"><div class="val t-val" style="font-size:1.5rem">${u.tournaments}</div><div class="lbl">Events</div></div>
+            </div>
+            <div class="compare-bar-wrap">
+                <div class="compare-bar-label">
+                    <span>Win Rate</span>
+                    <span class="${leads ? 'compare-winner' : ''}">${pct}%</span>
+                </div>
+                <div class="compare-bar"><div class="compare-bar-fill" style="width:${pct}%"></div></div>
+            </div>
+            ${u.bestPeriod ? `<p style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem;">Best set: <strong>${u.bestPeriod}</strong> (${u.bestPct.toFixed(1)}%)</p>` : ''}
+        </div>`;
+    }
+    document.getElementById('compareContent').innerHTML =
+        `<div class="compare-cols">${userBox(a, pctA, aLeads)}${userBox(b, pctB, bLeads)}</div>`;
+}
+
+function displayRegionals(eventData) {
+    // Build a map of date → event data for quick lookup
+    const byDate = {};
+    for (const ev of (eventData || [])) {
+        if (!ev?._start_datetime) continue;
+        const d = ev._start_datetime.slice(0, 10);
+        if (!byDate[d]) byDate[d] = ev;
+    }
+
+    const card = document.getElementById('regionalsCard');
+    const body = document.getElementById('regionalsBody');
+    body.innerHTML = '';
+
+    // Show card only if at least one regional is defined
+    if (REGIONALS.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    for (const reg of REGIONALS) {
+        const ev = byDate[reg.date];
+        let resultStr = '—';
+        let appStr    = '—';
+
+        if (ev?.rounds) {
+            let evW = 0, evL = 0;
+            for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
+            resultStr = `${evW}-${evL}`;
+            const appCount = ev._applicant_count ?? null;
+            const capCount = ev._capacity ?? null;
+            appStr = appCount !== null
+                ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
+                : '—';
+        }
+
+        const tr = document.createElement('tr');
+        if (!ev?.rounds) tr.style.opacity = '0.5'; // not yet attended
+        tr.innerHTML = `<td>${reg.date}</td>
+            <td>${reg.name}</td>
+            <td class="td-num">${resultStr}</td>
+            <td class="td-num">${appStr}</td>`;
+        body.appendChild(tr);
+    }
+}
+
+// ── Sortable tables ────────────────────────────────────────────────────────
+
+const sortState = {};
+function sortTable(tableId, col) {
+    const table = document.getElementById(tableId);
+    const tbody = table.querySelector('tbody');
+    const rows  = Array.from(tbody.querySelectorAll('tr'));
+    const key   = tableId + '_' + col;
+    const asc   = sortState[key] !== true;
+    sortState[key] = asc;
+
+    table.querySelectorAll('thead th').forEach((th, i) => {
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        if (i === col) th.classList.add(asc ? 'sorted-asc' : 'sorted-desc');
+    });
+
+    rows.sort((a, b) => {
+        let av = a.cells[col].textContent.replace('%', '').trim();
+        let bv = b.cells[col].textContent.replace('%', '').trim();
+        const an = parseFloat(av), bn = parseFloat(bv);
+        if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+        return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+
+function exportExcel() {
+    if (!_playerResults) return;
+    const sorted = Object.entries(_playerResults)
+        .sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]));
+
+    const data = [["Player", "W", "L", "Total", "Win%"]];
+    for (const [pid, res] of sorted) {
+        const tag   = _usernameMap[pid] || pid;
+        const [w, l] = res;
+        const t     = w + l;
+        const pct   = t > 0 ? parseFloat((w / t * 100).toFixed(1)) : 0;
+        data.push([tag, w, l, t, pct]);
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 24 }, { wch: 6 }, { wch: 6 }, { wch: 8 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, ws, "Results");
+    XLSX.writeFile(wb, "bandai_results.xlsx");
+}
+</script>
+</body>
+</html>
