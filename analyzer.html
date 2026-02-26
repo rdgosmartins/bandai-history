@@ -191,6 +191,50 @@
         .chart-panel h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
         .chart-canvas-wrap { position: relative; }
 
+        /* PDF toolbar */
+        .pdf-toolbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+
+        /* ── Print / PDF styles ─────────────────────────────────────────── */
+        @media print {
+            /* Hide UI chrome */
+            header, #configCard, #progress, #errorBox, #filterCard,
+            .pdf-toolbar, .cache-bar, .modal-overlay,
+            .toggle-icon, .btn, #vsBanner, .player-search-wrap > input,
+            #playerAutocomplete { display: none !important; }
+
+            /* Show all card bodies, even collapsed ones */
+            .card-body, .card-body.collapsed {
+                display: block !important;
+                max-height: none !important;
+                opacity: 1 !important;
+                overflow: visible !important;
+                pointer-events: auto !important;
+            }
+
+            /* Layout */
+            body { background: white; }
+            .container { max-width: 100%; margin: 0; padding: 0.25rem 0.5rem; }
+            .card { box-shadow: none !important; border: 1px solid #dee2e6; margin-bottom: 0.75rem; padding: 1rem; }
+            .card h2 { margin-bottom: 0.75rem; }
+
+            /* Avoid breaking inside small cards; allow breaks between big ones */
+            .card { break-inside: avoid; }
+            #tourneyCard, #playerCard, #chartsCard { break-inside: auto; }
+            thead { display: table-header-group; }
+            tr { break-inside: avoid; }
+
+            /* Charts */
+            .charts-grid { grid-template-columns: 1fr 2fr; }
+            canvas { max-width: 100% !important; }
+
+            /* Stat boxes */
+            .stat-grid { grid-template-columns: repeat(4, 1fr); }
+            .streak-grid { grid-template-columns: repeat(3, 1fr); }
+
+            /* Comparison columns */
+            .compare-cols { grid-template-columns: 1fr 1fr; }
+        }
+
     </style>
 </head>
 <body>
@@ -203,7 +247,7 @@
 <div class="container">
 
     <!-- Config card -->
-    <div class="card">
+    <div class="card" id="configCard">
         <h2>Configuration</h2>
 
         <!-- Step 1: load file -->
@@ -269,6 +313,10 @@
 
     <!-- Results -->
     <div id="results">
+
+        <div class="pdf-toolbar">
+            <button class="btn btn-outline" onclick="exportPDF()">&#128438; Export PDF</button>
+        </div>
 
         <!-- Filters card -->
         <div class="card" id="filterCard" style="display:none">
@@ -354,8 +402,26 @@
                         </div>
                     </div>
                 </div>
+                <div class="chart-panel" style="margin-top:1.5rem;" id="storeChartPanel">
+                    <h3>Win Rate by Store</h3>
+                    <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Win % at each venue. Bar width reflects number of matches played there. Only stores with ≥ 2 matches shown.</p>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartStore"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel" style="margin-top:1.5rem;">
+                    <h3>Streak History (per tournament)</h3>
+                    <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Running streak value after each tournament. Positive = win streak, negative = loss streak. Quickly shows hot and cold patches.</p>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartStreak"></canvas>
+                    </div>
+                </div>
                 <div class="chart-panel" style="margin-top:1.5rem;">
                     <h3>Win Rate Over Time (per tournament)</h3>
+                    <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;line-height:1.5;">
+                        <strong style="color:var(--accent);">&#9644; Cumulative Win %</strong> — running win rate across all tournaments up to that point &nbsp;|&nbsp;
+                        <strong style="color:var(--primary);">&#9135;&#9135; Rolling 5 Win %</strong> — win rate over the last 5 tournaments only (recent form)
+                    </p>
                     <div class="chart-canvas-wrap">
                         <canvas id="chartTimeline"></canvas>
                     </div>
@@ -458,6 +524,13 @@
                 <span class="toggle-icon" id="rounds-icon">▼</span>
             </div>
             <div class="card-body" id="rounds-body" style="max-height:9999px;">
+                <div class="chart-panel" style="margin-bottom:1.5rem;">
+                    <h3>Win % by Round</h3>
+                    <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Win percentage for each round slot across all tournaments. Reveals if performance drops in later rounds.</p>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartRoundBar"></canvas>
+                    </div>
+                </div>
                 <div class="table-wrap">
                     <table id="roundTable">
                         <thead><tr>
@@ -479,6 +552,13 @@
                 <span class="toggle-icon" id="regionals-icon">▼</span>
             </div>
             <div class="card-body" id="regionals-body" style="max-height: 9999px;">
+                <div class="chart-panel" id="regionalScatterPanel" style="margin-bottom:1.5rem;display:none;">
+                    <h3>Tournament Size vs. Result</h3>
+                    <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Each dot is a regional event. X = number of applicants, Y = win % achieved. Larger events to the right.</p>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartRegionalScatter"></canvas>
+                    </div>
+                </div>
                 <div class="table-wrap">
                     <table id="regionalsTable">
                         <thead><tr>
@@ -502,6 +582,15 @@
                 </div>
             </div>
             <div class="card-body" id="players-body" style="max-height: 9999px;">
+
+            <!-- Top Opponents chart -->
+            <div class="chart-panel" style="margin-bottom:1.5rem;">
+                <h3>Top 10 Opponents</h3>
+                <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Most-faced opponents by total matches. <span style="color:var(--win);">&#9632;</span> Wins &nbsp;<span style="color:#dc3545;">&#9632;</span> Losses.</p>
+                <div class="chart-canvas-wrap">
+                    <canvas id="chartTopOpponents"></canvas>
+                </div>
+            </div>
 
             <!-- Player search -->
             <div style="margin-bottom:1rem;">
@@ -775,6 +864,14 @@ function confirmClearCache() {
 function refreshCache() { fetchAndAnalyze(); }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// Format a YYYY-MM-DD (or ISO datetime) string as DD/MM/YYYY
+function fmtDate(dateStr) {
+    if (!dateStr || dateStr === '—') return '—';
+    const part = dateStr.slice(0, 10); // works for both 'YYYY-MM-DD' and full ISO
+    const [y, m, d] = part.split('-');
+    return `${d}/${m}/${y}`;
+}
 
 function getPeriodForDate(dateStr) {
     const d = new Date(dateStr);
@@ -1317,7 +1414,7 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
     const opponentHistory   = {};
     for (const ev of (eventData || [])) {
         if (!ev?.rounds) continue;
-        const dateStr = ev._start_datetime ? new Date(ev._start_datetime).toLocaleDateString('en-CA') : '—';
+        const dateStr = ev._start_datetime ? ev._start_datetime.slice(0, 10) : '—';
         const evName  = ev._event_name ?? ev.event?.name ?? '—';
         const seenThisEv = new Set();
         const evOpponents = new Map();
@@ -1359,6 +1456,45 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
         playerBody.appendChild(tr);
     }
 
+    // Top Opponents chart
+    {
+        const TOP_N = 10;
+        const topOpp = sorted.slice(0, TOP_N);
+        const oppWin  = getComputedStyle(document.documentElement).getPropertyValue('--win').trim()   || '#28a745';
+        const oppLoss = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim()  || '#dc3545';
+        const oppMuted= getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#6c757d';
+        destroyChart('topOpponents');
+        _charts['topOpponents'] = new Chart(document.getElementById('chartTopOpponents'), {
+            type: 'bar',
+            data: {
+                labels: topOpp.map(([pid]) => _usernameMap[pid] || pid),
+                datasets: [
+                    { label: 'Wins',   data: topOpp.map(([,r]) => r[0]), backgroundColor: oppWin  + 'cc', borderRadius: 4 },
+                    { label: 'Losses', data: topOpp.map(([,r]) => r[1]), backgroundColor: oppLoss + 'cc', borderRadius: 4 }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                scales: {
+                    x: { stacked: true, ticks: { font: { size: 10 }, color: oppMuted }, grid: { color: '#eee' } },
+                    y: { stacked: true, ticks: { font: { size: 10 }, color: oppMuted }, grid: { display: false } }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 11 }, color: oppMuted } },
+                    tooltip: { callbacks: {
+                        afterBody: items => {
+                            const [pid] = topOpp[items[0].dataIndex];
+                            const [w, l] = playerMap[pid];
+                            const t = w + l;
+                            return [`Win rate: ${(w / t * 100).toFixed(1)}%  (${t} matches)`];
+                        }
+                    }}
+                }
+            }
+        });
+    }
+
     // Tournament history table
     if (eventData) {
         const tourneyBody = document.getElementById('tourneyBody');
@@ -1370,8 +1506,7 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
             let evW = 0, evL = 0;
             for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
 
-            const dateStr   = ev._start_datetime
-                ? new Date(ev._start_datetime).toLocaleDateString('en-CA') : '—';
+            const dateStr   = fmtDate(ev._start_datetime);
             const storeName = ev._store_name ?? ev.event?.organizer_name ?? ev.event?.organizer
                 ?? ev.event?.store_name ?? ev.event?.shop_name ?? null;
             const storeStr  = storeName ?? '—';
@@ -1505,7 +1640,7 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
         const t   = cumW + cumL;
         timeWinRates.push(t > 0 ? parseFloat((cumW / t * 100).toFixed(1)) : 0);
         timeTotals.push(t);
-        timeLabels.push(new Date(ev._start_datetime).toLocaleDateString('en-CA'));
+        timeLabels.push(fmtDate(ev._start_datetime));
         // Rolling window
         let rW = 0, rL = 0;
         for (let j = Math.max(0, i - ROLLING_N + 1); j <= i; j++) {
@@ -1579,6 +1714,117 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
             }
         }
     });
+
+    // ── 5. Win Rate by Store ────────────────────────────────────────────────
+    {
+        const storeMap = {};
+        for (const ev of (eventData || [])) {
+            if (!ev?.rounds) continue;
+            const name = ev._store_name ?? ev.event?.organizer_name ?? ev.event?.organizer
+                ?? ev.event?.store_name ?? ev.event?.shop_name ?? null;
+            if (!name) continue;
+            if (!storeMap[name]) storeMap[name] = { w: 0, l: 0 };
+            for (const r of ev.rounds) {
+                if (r.is_win) storeMap[name].w++; else storeMap[name].l++;
+            }
+        }
+        const storePanel = document.getElementById('storeChartPanel');
+        const storeEntries = Object.entries(storeMap)
+            .filter(([, s]) => s.w + s.l >= 2)
+            .sort((a, b) => (b[1].w + b[1].l) - (a[1].w + a[1].l));
+
+        if (storeEntries.length === 0) {
+            storePanel.style.display = 'none';
+        } else {
+            storePanel.style.display = '';
+            destroyChart('store');
+            _charts['store'] = new Chart(document.getElementById('chartStore'), {
+                type: 'bar',
+                data: {
+                    labels: storeEntries.map(([name]) => name),
+                    datasets: [
+                        { label: 'Wins',   data: storeEntries.map(([,s]) => s.w), backgroundColor: win  + 'cc', borderRadius: 4 },
+                        { label: 'Losses', data: storeEntries.map(([,s]) => s.l), backgroundColor: loss + 'cc', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true, ticks: { font: { size: 10 }, color: muted }, grid: { color: '#eee' } },
+                        y: { stacked: true, ticks: { font: { size: 10 }, color: muted }, grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { size: 11 }, color: muted } },
+                        tooltip: { callbacks: {
+                            afterBody: items => {
+                                const [, s] = storeEntries[items[0].dataIndex];
+                                const t = s.w + s.l;
+                                return [`Win rate: ${(s.w / t * 100).toFixed(1)}%  (${t} matches)`];
+                            }
+                        }}
+                    }
+                }
+            });
+        }
+    }
+
+    // ── 6. Streak History (bar) ─────────────────────────────────────────────
+    {
+        const evsSorted = [...(eventData || [])]
+            .filter(ev => ev?.rounds && ev._start_datetime)
+            .sort((a, b) => new Date(a._start_datetime) - new Date(b._start_datetime));
+
+        const streakLabels = [];
+        const streakData   = [];
+        let cur = 0, curType = null;
+        for (const ev of evsSorted) {
+            for (const r of ev.rounds) {
+                if (r.is_win) {
+                    cur = curType === 'W' ? cur + 1 : 1;
+                    curType = 'W';
+                } else {
+                    cur = curType === 'L' ? cur + 1 : 1;
+                    curType = 'L';
+                }
+            }
+            streakLabels.push(fmtDate(ev._start_datetime));
+            streakData.push(curType === 'W' ? cur : -cur);
+        }
+
+        destroyChart('streak');
+        _charts['streak'] = new Chart(document.getElementById('chartStreak'), {
+            type: 'bar',
+            data: {
+                labels: streakLabels,
+                datasets: [{
+                    label: 'Streak',
+                    data: streakData,
+                    backgroundColor: streakData.map(v => v > 0 ? win + 'cc' : loss + 'cc'),
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { ticks: { font: { size: 9 }, color: muted, maxTicksLimit: 14, maxRotation: 45 }, grid: { display: false } },
+                    y: { ticks: { font: { size: 10 }, color: muted,
+                            callback: v => v > 0 ? `+${v}W` : `${Math.abs(v)}L`
+                         }, grid: { color: '#eee' } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: {
+                        title: items => `Tournament: ${items[0].label}`,
+                        label: ctx => {
+                            const v = ctx.parsed.y;
+                            return v > 0 ? ` Win streak: ${v}` : ` Loss streak: ${Math.abs(v)}`;
+                        }
+                    }}
+                }
+            }
+        });
+    }
 }
 
 // ── Streaks ────────────────────────────────────────────────────────────────
@@ -1746,6 +1992,48 @@ function displayRoundByRound(eventData) {
             <td class="td-num">${t}</td><td class="td-pct">${pct}%</td>`;
         tbody.appendChild(tr);
     }
+
+    // Chart
+    const accent  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()  || '#048A81';
+    const win     = getComputedStyle(document.documentElement).getPropertyValue('--win').trim()      || '#28a745';
+    const muted   = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()    || '#6c757d';
+    destroyChart('roundBar');
+    _charts['roundBar'] = new Chart(document.getElementById('chartRoundBar'), {
+        type: 'bar',
+        data: {
+            labels: indices.map(i => `Round ${i + 1}`),
+            datasets: [{
+                label: 'Win %',
+                data: indices.map(i => {
+                    const s = roundMap[i]; return s ? +(s.w / (s.w + s.l) * 100).toFixed(1) : 0;
+                }),
+                backgroundColor: indices.map(i => {
+                    const s = roundMap[i];
+                    const pct = s ? s.w / (s.w + s.l) * 100 : 0;
+                    return pct >= 50 ? win + 'cc' : '#dc3545cc';
+                }),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            scales: {
+                x: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 }, color: muted }, grid: { color: '#eee' } },
+                y: { ticks: { font: { size: 11 }, color: muted }, grid: { display: false } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: {
+                    label: ctx => {
+                        const i = indices[ctx.dataIndex];
+                        const s = roundMap[i];
+                        return ` Win%: ${ctx.parsed.x}%  (${s.w}W / ${s.l}L)`;
+                    }
+                }}
+            }
+        }
+    });
 }
 
 // ── Opponent profile modal ─────────────────────────────────────────────────
@@ -1767,7 +2055,7 @@ function openOpponentModal(pid) {
     for (const m of sorted) {
         const tr = document.createElement('tr');
         const resultColor = m.w > m.l ? 'var(--win)' : m.l > m.w ? 'var(--loss)' : 'var(--muted)';
-        tr.innerHTML = `<td>${m.dateStr}</td><td>${m.evName}</td>
+        tr.innerHTML = `<td>${fmtDate(m.dateStr)}</td><td>${m.evName}</td>
             <td class="td-num" style="color:${resultColor};font-weight:600">${m.w}</td>
             <td class="td-num" style="color:${resultColor};font-weight:600">${m.l}</td>`;
         tbody.appendChild(tr);
@@ -1904,11 +2192,70 @@ function displayRegionals(eventData) {
 
         const tr = document.createElement('tr');
         if (!ev?.rounds) tr.style.opacity = '0.5'; // not yet attended
-        tr.innerHTML = `<td>${reg.date}</td>
+        tr.innerHTML = `<td>${fmtDate(reg.date)}</td>
             <td>${reg.name}</td>
             <td class="td-num">${resultStr}</td>
             <td class="td-num">${appStr}</td>`;
         body.appendChild(tr);
+    }
+
+    // Scatter: tournament size vs win %
+    {
+        const scatterPanel = document.getElementById('regionalScatterPanel');
+        const scatterPoints = [];
+        const scatterLabels = [];
+        for (const reg of REGIONALS) {
+            const ev = byDate[reg.date];
+            if (!ev?.rounds) continue;
+            const applicants = ev._applicant_count ?? null;
+            if (applicants === null) continue;
+            let evW = 0, evL = 0;
+            for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
+            const t = evW + evL;
+            if (t === 0) continue;
+            scatterPoints.push({ x: applicants, y: +(evW / t * 100).toFixed(1) });
+            scatterLabels.push(reg.name);
+        }
+        if (scatterPoints.length < 2) {
+            scatterPanel.style.display = 'none';
+        } else {
+            scatterPanel.style.display = '';
+            const scWin  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#048A81';
+            const scMuted= getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()  || '#6c757d';
+            destroyChart('regionalScatter');
+            _charts['regionalScatter'] = new Chart(document.getElementById('chartRegionalScatter'), {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Regional',
+                        data: scatterPoints,
+                        backgroundColor: scatterPoints.map(p => p.y >= 50 ? '#28a745cc' : '#dc3545cc'),
+                        pointRadius: 8,
+                        pointHoverRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Applicants', color: scMuted, font: { size: 11 } },
+                             ticks: { font: { size: 10 }, color: scMuted }, grid: { color: '#eee' } },
+                        y: { min: 0, max: 100,
+                             title: { display: true, text: 'Win %', color: scMuted, font: { size: 11 } },
+                             ticks: { callback: v => v + '%', font: { size: 10 }, color: scMuted },
+                             grid: { color: '#eee' } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: {
+                            label: ctx => {
+                                const lbl = scatterLabels[ctx.dataIndex];
+                                return [`${lbl}`, `Applicants: ${ctx.parsed.x}`, `Win %: ${ctx.parsed.y}%`];
+                            }
+                        }}
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -1936,6 +2283,25 @@ function sortTable(tableId, col) {
         return asc ? av.localeCompare(bv) : bv.localeCompare(av);
     });
     rows.forEach(r => tbody.appendChild(r));
+}
+
+// ── PDF export ─────────────────────────────────────────────────────────────
+
+function exportPDF() {
+    // Remember which card bodies were collapsed
+    const wasCollapsed = [...document.querySelectorAll('.card-body.collapsed')];
+
+    // Expand them all so content prints
+    wasCollapsed.forEach(body => body.classList.remove('collapsed'));
+
+    // Restore collapsed state after the print dialog closes
+    function restore() {
+        wasCollapsed.forEach(body => body.classList.add('collapsed'));
+        window.removeEventListener('afterprint', restore);
+    }
+    window.addEventListener('afterprint', restore);
+
+    window.print();
 }
 
 // ── Export ─────────────────────────────────────────────────────────────────
