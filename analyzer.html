@@ -366,7 +366,7 @@
 
             /* Avoid breaking inside small cards; allow breaks between big ones */
             .card { break-inside: avoid; }
-            #tourneyCard, #playerCard, #chartsCard, #placementsCard { break-inside: auto; }
+            #tourneyCard, #playerCard, #chartsCard { break-inside: auto; }
             .rivalry-grid { grid-template-columns: 1fr 1fr; }
             .rivalry-card { cursor: default; }
             thead { display: table-header-group; }
@@ -556,6 +556,11 @@
                 <div class="stat-grid" id="overallStats"></div>
                 <div id="streakStats"></div>
                 <div id="bogeymanStats"></div>
+                <div id="placementsInline" style="display:none; margin-top:1.5rem;">
+                    <h3 style="font-family:'Cinzel',serif;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--primary);font-weight:700;margin-bottom:1rem;">&#127942; Placement History</h3>
+                    <div class="stat-grid" id="placementsStats" style="margin-bottom:1.25rem;"></div>
+                    <div id="placementsTiers"></div>
+                </div>
             </div>
         </div>
 
@@ -672,30 +677,6 @@
                             <th onclick="sortTable('tourneyTable',7)">Applicants</th>
                         </tr></thead>
                         <tbody id="tourneyBody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="card" id="placementsCard" style="display:none">
-            <div class="card-header" onclick="toggleCard('placements')">
-                <h2><span class="section-icon">&#127942;</span> Placement History</h2>
-                <span class="toggle-icon" id="placements-icon">▼</span>
-            </div>
-            <div class="card-body" id="placements-body" style="max-height:9999px;">
-                <div class="stat-grid" id="placementsStats" style="margin-bottom:1.5rem;"></div>
-                <div id="placementsTiers" style="margin-bottom:1.5rem;"></div>
-                <div class="table-wrap">
-                    <table id="placementsTable">
-                        <thead><tr>
-                            <th onclick="sortTable('placementsTable',0)">Date</th>
-                            <th onclick="sortTable('placementsTable',1)">Event</th>
-                            <th onclick="sortTable('placementsTable',2)">Store</th>
-                            <th onclick="sortTable('placementsTable',3)">Rank</th>
-                            <th onclick="sortTable('placementsTable',4)">Applicants</th>
-                            <th onclick="sortTable('placementsTable',5)">Result</th>
-                        </tr></thead>
-                        <tbody id="placementsBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -2154,7 +2135,7 @@ function displayRivalry(playerMap) {
 // ── Placement History ──────────────────────────────────────────────────────
 
 function displayPlacements(eventData) {
-    const card = document.getElementById('placementsCard');
+    const section = document.getElementById('placementsInline');
 
     // Collect events that have a rank, excluding regionals
     const regionalDates = new Set(REGIONALS.map(r => r.date));
@@ -2163,8 +2144,8 @@ function displayPlacements(eventData) {
             && !regionalDates.has(ev._start_datetime.slice(0, 10)))
         .sort((a, b) => new Date(b._start_datetime) - new Date(a._start_datetime));
 
-    if (ranked.length === 0) { card.style.display = 'none'; return; }
-    card.style.display = 'block';
+    if (ranked.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = '';
 
     const total = ranked.length;
     const best  = Math.min(...ranked.map(e => e._rank));
@@ -2187,15 +2168,14 @@ function displayPlacements(eventData) {
 
     // ── Tier breakdown ─────────────────────────────────────────────────────
     const tiers = [
-        { label: '1st Place', max: 1,  color: '#c9a84c' },
-        { label: 'Top 4',     max: 4,  color: '#048A81' },
-        { label: 'Top 8',     max: 8,  color: '#2E4057' },
-        { label: 'Top 16',    max: 16, color: '#6c757d' },
-        { label: 'Top 32',    max: 32, color: '#adb5bd' },
+        { label: '1st Place', max: 1,        color: '#c9a84c' },
+        { label: 'Top 4',     max: 4,        color: '#048A81' },
+        { label: 'Top 8',     max: 8,        color: '#2E4057' },
+        { label: 'Top 16',    max: 16,       color: '#6c757d' },
+        { label: 'Top 32',    max: 32,       color: '#adb5bd' },
         { label: '33+',       max: Infinity, color: '#dee2e6' },
     ];
 
-    // Count per tier (exclusive: each event counted in its best tier)
     const counts = tiers.map(() => 0);
     for (const ev of ranked) {
         const idx = tiers.findIndex(t => ev._rank <= t.max);
@@ -2207,9 +2187,9 @@ function displayPlacements(eventData) {
     tiersEl.innerHTML = '';
     tiers.forEach((t, i) => {
         if (counts[i] === 0) return;
-        const pct = (counts[i] / total * 100).toFixed(0);
+        const pct  = (counts[i] / total * 100).toFixed(0);
         const barW = (counts[i] / maxCount * 100).toFixed(1);
-        const row = document.createElement('div');
+        const row  = document.createElement('div');
         row.className = 'tier-row';
         row.innerHTML = `
             <span class="tier-label">${t.label}</span>
@@ -2220,32 +2200,6 @@ function displayPlacements(eventData) {
             <span class="tier-pct">${pct}%</span>`;
         tiersEl.appendChild(row);
     });
-
-    // ── Full table ─────────────────────────────────────────────────────────
-    const tbody = document.getElementById('placementsBody');
-    tbody.innerHTML = '';
-    for (const ev of ranked) {
-        let evW = 0, evL = 0;
-        for (const r of (ev.rounds || [])) { if (r.is_win) evW++; else evL++; }
-        const evName   = ev._event_name ?? ev.event?.series_title ?? ev.event?.name ?? '—';
-        const storeStr = ev._store_name ?? '—';
-        const appCount = ev._applicant_count;
-        const appStr   = appCount != null ? String(appCount) : '—';
-        const rankColor = ev._rank === 1 ? 'var(--gold)'
-            : ev._rank <= 4  ? 'var(--accent)'
-            : ev._rank <= 8  ? 'var(--primary)'
-            : 'var(--text)';
-        const resultColor = evW > evL ? 'var(--win)' : evW < evL ? 'var(--loss)' : 'var(--muted)';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${fmtDate(ev._start_datetime)}</td>
-            <td>${evName}</td>
-            <td>${storeStr}</td>
-            <td class="td-num" style="color:${rankColor};font-weight:700;">#${ev._rank}</td>
-            <td class="td-num">${appStr}</td>
-            <td class="td-num" style="color:${resultColor};font-weight:600;">${evW}-${evL}</td>`;
-        tbody.appendChild(tr);
-    }
 }
 
 // ── Monthly breakdown ──────────────────────────────────────────────────────
