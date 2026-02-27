@@ -22,7 +22,68 @@
             --border:  #dee2e6;
             --win:     #28a745;
             --loss:    #dc3545;
+            --wave-fill: #f0f4f8;
         }
+        [data-theme="dark"] {
+            --primary: #7eb8d4;
+            --accent:  #2ecfc5;
+            --gold:    #e8c96a;
+            --gold-lt: #f5df9a;
+            --bg:      #0f1923;
+            --card:    #1a2535;
+            --text:    #e8edf2;
+            --muted:   #8a9bb0;
+            --border:  #2a3a50;
+            --win:     #4cbb6e;
+            --loss:    #f0546a;
+            --wave-fill: #0f1923;
+        }
+        /* Dark mode element overrides */
+        [data-theme="dark"] body {
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(46,207,197,0.05) 0%, transparent 50%),
+                radial-gradient(circle at 85% 20%, rgba(126,184,212,0.04) 0%, transparent 50%);
+        }
+        [data-theme="dark"] tbody tr:nth-child(even) td { background: #1f2f42; }
+        [data-theme="dark"] tbody tr:hover td { background: #253647; }
+        [data-theme="dark"] .stat-box { background: linear-gradient(160deg, #1a2535, #1f3045); }
+        [data-theme="dark"] .rivalry-card { background: linear-gradient(160deg, #1a2535, #1f3045); }
+        [data-theme="dark"] select,
+        [data-theme="dark"] textarea,
+        [data-theme="dark"] input[type="text"],
+        [data-theme="dark"] input[type="date"] { background: #1a2535; color: var(--text); border-color: var(--border); }
+        [data-theme="dark"] .player-autocomplete { background: #1a2535; border-color: var(--border); }
+        [data-theme="dark"] .player-autocomplete li:hover,
+        [data-theme="dark"] .player-autocomplete li.highlighted { background: #253647; }
+        [data-theme="dark"] .vs-banner { background: #1a3040; border-color: var(--accent); }
+        [data-theme="dark"] .inspector-block { background: #0d1117; }
+        [data-theme="dark"] .cache-bar { background: var(--card); border-color: var(--border); }
+        [data-theme="dark"] .cache-bar.has-cache { background: #1a3040; border-color: var(--accent); }
+        [data-theme="dark"] .tier-bar-wrap { background: #2a3a50; }
+        [data-theme="dark"] .round-opp-card { background: #1a2535; border-color: var(--border); }
+        [data-theme="dark"] thead th { background: linear-gradient(135deg, #1a2d42, #253d56); }
+
+        /* Theme toggle button */
+        .theme-toggle {
+            position: absolute;
+            top: 1.1rem;
+            right: 1.5rem;
+            background: rgba(255,255,255,0.1);
+            border: 1.5px solid rgba(201,168,76,0.4);
+            color: white;
+            border-radius: 999px;
+            padding: 0.3rem 0.85rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: background 0.2s, border-color 0.2s;
+            z-index: 10;
+        }
+        .theme-toggle:hover { background: rgba(255,255,255,0.18); border-color: var(--gold-lt); }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -355,7 +416,11 @@
                 pointer-events: auto !important;
             }
 
-            /* Layout */
+            /* Layout — always print light */
+            :root, [data-theme="dark"] {
+                --bg: #ffffff; --card: #ffffff; --text: #1a1a2e;
+                --muted: #6c757d; --border: #dee2e6; --primary: #2E4057;
+            }
             body { background: white; }
             .container { max-width: 100%; margin: 0; padding: 0.25rem 0.5rem; }
             .card { box-shadow: none !important; border: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-bottom: 0.75rem; padding: 1rem; }
@@ -390,6 +455,7 @@
 <body>
 
 <header>
+    <button class="theme-toggle" onclick="toggleTheme()" id="themeToggleBtn">&#127775; Light</button>
     <div class="header-inner">
         <div class="header-skull">&#9760;&#65039;</div>
         <div class="header-text">
@@ -398,8 +464,8 @@
         </div>
     </div>
     <div class="header-divider">
-        <svg viewBox="0 0 1440 40" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M0,20 C240,40 480,0 720,20 C960,40 1200,0 1440,20 L1440,40 L0,40 Z" fill="#f0f4f8"/>
+        <svg viewBox="0 0 1440 40" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" id="waveSvg">
+            <path id="wavePath" d="M0,20 C240,40 480,0 720,20 C960,40 1200,0 1440,20 L1440,40 L0,40 Z" fill="#f0f4f8"/>
         </svg>
     </div>
 </header>
@@ -2812,6 +2878,39 @@ function buildInspector() {
         container.appendChild(div);
     }
 }
+
+// ── Dark / Light mode ──────────────────────────────────────────────────────
+
+function applyTheme(dark) {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) btn.innerHTML = dark ? '&#9728;&#65039; Light' : '&#127775; Dark';
+    // Update wave SVG fill to match background
+    const wavePath = document.getElementById('wavePath');
+    if (wavePath) {
+        const bg = getComputedStyle(document.documentElement).getPropertyValue('--wave-fill').trim();
+        wavePath.setAttribute('fill', bg);
+    }
+    // Redraw charts so colors update
+    if (typeof _allEventData !== 'undefined' && _allEventData.length) {
+        const sel = document.getElementById('userSelect');
+        if (sel && sel.value !== '') applyFilter();
+    }
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const next   = !isDark;
+    localStorage.setItem('op-theme', next ? 'dark' : 'light');
+    applyTheme(next);
+}
+
+// Apply saved or system preference on load
+(function () {
+    const saved  = localStorage.getItem('op-theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(saved ? saved === 'dark' : prefersDark);
+})();
 
 // ── PDF export ─────────────────────────────────────────────────────────────
 
