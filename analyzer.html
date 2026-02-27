@@ -205,7 +205,9 @@
         @media (max-width: 720px) { .charts-grid { grid-template-columns: 1fr; } }
         .chart-panel { display: flex; flex-direction: column; gap: 0.5rem; }
         .chart-panel h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
-        .chart-canvas-wrap { position: relative; }
+        .chart-canvas-wrap { position: relative; height: 280px; }
+        .chart-canvas-wrap.tall { height: 380px; }
+        .chart-canvas-wrap.short { height: 200px; }
 
         /* PDF toolbar */
         .pdf-toolbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
@@ -244,6 +246,7 @@
             /* Charts */
             .charts-grid { grid-template-columns: 1fr 2fr; }
             canvas { max-width: 100% !important; }
+            .chart-canvas-wrap, .chart-canvas-wrap.tall, .chart-canvas-wrap.short { height: auto !important; }
 
             /* Stat boxes */
             .stat-grid { grid-template-columns: repeat(4, 1fr); }
@@ -410,7 +413,7 @@
                 <div class="charts-grid">
                     <div class="chart-panel">
                         <h3>Win / Loss</h3>
-                        <div class="chart-canvas-wrap" style="max-width:240px; margin:0 auto;">
+                        <div class="chart-canvas-wrap short" style="max-width:240px; margin:0 auto;">
                             <canvas id="chartDonut"></canvas>
                         </div>
                     </div>
@@ -424,7 +427,7 @@
                 <div class="chart-panel" style="margin-top:1.5rem;" id="storeChartPanel">
                     <h3>Win Rate by Store</h3>
                     <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Win % at each venue. Bar width reflects number of matches played there. Only stores with ≥ 2 matches shown.</p>
-                    <div class="chart-canvas-wrap">
+                    <div class="chart-canvas-wrap tall">
                         <canvas id="chartStore"></canvas>
                     </div>
                 </div>
@@ -606,7 +609,7 @@
             <div class="chart-panel" style="margin-bottom:1.5rem;">
                 <h3>Top 10 Opponents</h3>
                 <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;">Most-faced opponents by total matches. <span style="color:var(--win);">&#9632;</span> Wins &nbsp;<span style="color:#dc3545;">&#9632;</span> Losses.</p>
-                <div class="chart-canvas-wrap">
+                <div class="chart-canvas-wrap tall">
                     <canvas id="chartTopOpponents"></canvas>
                 </div>
             </div>
@@ -1498,6 +1501,7 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
             options: {
                 indexAxis: 'y',
                 responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     x: { stacked: true, ticks: { font: { size: 10 }, color: oppMuted }, grid: { color: '#eee' } },
                     y: { stacked: true, ticks: { font: { size: 10 }, color: oppMuted }, grid: { display: false } }
@@ -1589,6 +1593,8 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
             datasets: [{ data: [totalW, totalL], backgroundColor: [win, loss], borderWidth: 0 }]
         },
         options: {
+            responsive: true,
+            maintainAspectRatio: false,
             cutout: '68%',
             plugins: {
                 legend: { position: 'bottom', labels: { font: { size: 11 }, color: muted } },
@@ -1626,6 +1632,7 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 x: { stacked: false, ticks: { font: { size: 10 }, color: muted }, grid: { display: false } },
                 y: { beginAtZero: true, ticks: { precision: 0, color: muted }, grid: { color: '#eee' } }
@@ -1703,6 +1710,7 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 x: {
                     ticks: {
@@ -1772,6 +1780,7 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
                 options: {
                     indexAxis: 'y',
                     responsive: true,
+                    maintainAspectRatio: false,
                     scales: {
                         x: { stacked: true, ticks: { font: { size: 10 }, color: muted }, grid: { color: '#eee' } },
                         y: { stacked: true, ticks: { font: { size: 10 }, color: muted }, grid: { display: false } }
@@ -1828,6 +1837,7 @@ function displayCharts(totalW, totalL, periodMap, eventData) {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     x: { ticks: { font: { size: 9 }, color: muted, maxTicksLimit: 14, maxRotation: 45 }, grid: { display: false } },
                     y: { ticks: { font: { size: 10 }, color: muted,
@@ -1970,6 +1980,7 @@ function displayMonthly(eventData) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 x: { stacked: true, ticks: { font: { size: 9 }, color: muted, maxRotation: 45 }, grid: { display: false } },
                 y: { stacked: true, beginAtZero: true, ticks: { precision: 0, color: muted }, grid: { color: '#eee' } }
@@ -2084,6 +2095,7 @@ function displayRoundByRound(eventData) {
         options: {
             indexAxis: 'y',
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 x: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 }, color: muted }, grid: { color: '#eee' } },
                 y: { ticks: { font: { size: 11 }, color: muted }, grid: { display: false } }
@@ -2302,6 +2314,7 @@ function displayRegionals(eventData) {
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     scales: {
                         x: { title: { display: true, text: 'Applicants', color: scMuted, font: { size: 11 } },
                              ticks: { font: { size: 10 }, color: scMuted }, grid: { color: '#eee' } },
