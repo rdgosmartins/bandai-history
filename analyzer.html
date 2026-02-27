@@ -173,6 +173,17 @@
         .modal-sub { font-size:0.82rem; color:var(--muted); margin-bottom:1.25rem; }
         .modal-section h3 { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin-bottom:0.6rem; margin-top:1.25rem; }
 
+        /* Most Faced per Round mini-cards */
+        #roundOppGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; }
+        @media (max-width: 700px) { #roundOppGrid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 430px) { #roundOppGrid { grid-template-columns: repeat(2, 1fr); } }
+        .round-opp-card { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 0.75rem 0.6rem; text-align: center; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+        .round-opp-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .round-opp-card .roc-round { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.3rem; }
+        .round-opp-card .roc-name  { font-size: 0.82rem; font-weight: 700; color: var(--primary); margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .round-opp-card .roc-count { font-size: 0.75rem; color: var(--muted); }
+        .round-opp-card .roc-record{ font-size: 0.78rem; font-weight: 600; margin-top: 0.2rem; }
+
         /* Bogeyman / Victim rivalry cards */
         .rivalry-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
         @media (max-width:560px) { .rivalry-grid { grid-template-columns:1fr; } }
@@ -564,6 +575,11 @@
                         </tr></thead>
                         <tbody id="roundBody"></tbody>
                     </table>
+                </div>
+
+                <div id="roundOppSection" style="margin-top:1.5rem; display:none;">
+                    <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:600;margin-bottom:0.75rem;">Most Faced Opponent per Round</h3>
+                    <div id="roundOppGrid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;"></div>
                 </div>
             </div>
         </div>
@@ -2112,6 +2128,58 @@ function displayRoundByRound(eventData) {
             }
         }
     });
+
+    // ── Most Faced Opponent per Round ───────────────────────────────────────
+    const MAX_ROUND = 5;
+    // roundOppMap[idx][pid] = { w, l, count }
+    const roundOppMap = {};
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds) continue;
+        ev.rounds.forEach((r, idx) => {
+            if (idx >= MAX_ROUND) return;
+            const pid = r.opponent_users?.[0]?.membership_number;
+            if (!pid) return;
+            if (!roundOppMap[idx]) roundOppMap[idx] = {};
+            if (!roundOppMap[idx][pid]) roundOppMap[idx][pid] = { w: 0, l: 0 };
+            if (r.is_win) roundOppMap[idx][pid].w++; else roundOppMap[idx][pid].l++;
+        });
+    }
+
+    const section = document.getElementById('roundOppSection');
+    const grid    = document.getElementById('roundOppGrid');
+    grid.innerHTML = '';
+    let anyFound = false;
+
+    for (let idx = 0; idx < MAX_ROUND; idx++) {
+        const oppMap = roundOppMap[idx];
+        if (!oppMap) continue;
+
+        // Pick opponent with most appearances in this round slot
+        const top = Object.entries(oppMap)
+            .sort((a, b) => (b[1].w + b[1].l) - (a[1].w + a[1].l))[0];
+        if (!top) continue;
+
+        anyFound = true;
+        const [pid, stats] = top;
+        const name  = _usernameMap[pid] || pid;
+        const times = stats.w + stats.l;
+        const winColor  = getComputedStyle(document.documentElement).getPropertyValue('--win').trim()  || '#28a745';
+        const lossColor = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim() || '#dc3545';
+        const recColor  = stats.w >= stats.l ? winColor : lossColor;
+
+        const card = document.createElement('div');
+        card.className = 'round-opp-card';
+        card.title = `Open ${name}'s profile`;
+        card.onclick = () => openOpponentModal(pid);
+        card.innerHTML = `
+            <div class="roc-round">Round ${idx + 1}</div>
+            <div class="roc-name">${name}</div>
+            <div class="roc-count">${times}× faced</div>
+            <div class="roc-record" style="color:${recColor}">${stats.w}W &ndash; ${stats.l}L</div>`;
+        grid.appendChild(card);
+    }
+
+    section.style.display = anyFound ? '' : 'none';
 }
 
 // ── Opponent profile modal ─────────────────────────────────────────────────
