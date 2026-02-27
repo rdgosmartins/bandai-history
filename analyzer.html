@@ -550,7 +550,10 @@
                             <th onclick="sortTable('tourneyTable',1)">Store</th>
                             <th onclick="sortTable('tourneyTable',2)">Event</th>
                             <th onclick="sortTable('tourneyTable',3)">Result</th>
-                            <th onclick="sortTable('tourneyTable',4)">Applicants</th>
+                            <th onclick="sortTable('tourneyTable',4)">Games</th>
+                            <th onclick="sortTable('tourneyTable',5)">Points</th>
+                            <th onclick="sortTable('tourneyTable',6)">Rank</th>
+                            <th onclick="sortTable('tourneyTable',7)">Applicants</th>
                         </tr></thead>
                         <tbody id="tourneyBody"></tbody>
                     </table>
@@ -729,8 +732,8 @@
                     <thead><tr>
                         <th>Date</th>
                         <th>Event</th>
-                        <th>W</th>
-                        <th>L</th>
+                        <th>Result</th>
+                        <th>Games</th>
                     </tr></thead>
                     <tbody id="modalMatchBody"></tbody>
                 </table>
@@ -1002,7 +1005,8 @@ async function fetchAndAnalyze() {
             if (cache[String(ev.id)]) {
                 const entry = cache[String(ev.id)];
                 entry._start_datetime  = ev.start_datetime;
-                entry._event_name      = ev.name ?? ev.event_name ?? ev.title ?? null;
+                entry._event_name      = ev.name ?? ev.event_name ?? ev.title
+                    ?? entry.event?.series_title ?? null;
                 entry._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
                     ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
                     ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name ?? null;
@@ -1013,6 +1017,11 @@ async function fetchAndAnalyze() {
                     ?? ev.participant_count ?? ev.entries ?? null;
                 entry._capacity        = ev.capacity ?? ev.max_capacity
                     ?? ev.max_entry_count ?? null;
+                // Backfill rank/points for cached entries that predate this feature
+                if (entry._rank == null && entry.user?.rank != null)
+                    entry._rank = entry.user.rank;
+                if (entry._match_points == null && entry.user?.match_point != null)
+                    entry._match_points = Number(entry.user.match_point);
             }
         }
 
@@ -1034,7 +1043,11 @@ async function fetchAndAnalyze() {
                     const evData = (await evResp.json()).success;
                     evData._start_datetime  = ev.start_datetime;
                     evData._event_name      = ev.name ?? ev.event_name ?? ev.title
-                        ?? evData.event?.name ?? evData.event?.event_name ?? null;
+                        ?? evData.event?.name ?? evData.event?.event_name
+                        ?? evData.event?.series_title ?? null;
+                    evData._rank            = evData.user?.rank ?? null;
+                    evData._match_points    = evData.user?.match_point != null
+                        ? Number(evData.user.match_point) : null;
                     evData._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
                         ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
                         ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
@@ -1481,22 +1494,29 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
     for (const ev of (eventData || [])) {
         if (!ev?.rounds) continue;
         const dateStr = ev._start_datetime ? ev._start_datetime.slice(0, 10) : '—';
-        const evName  = ev._event_name ?? ev.event?.name ?? '—';
+        const evName  = ev._event_name ?? ev.event?.series_title ?? ev.event?.name ?? '—';
         const seenThisEv = new Set();
         const evOpponents = new Map();
         for (const r of ev.rounds) {
-            const pid = r.opponent_users?.[0]?.membership_number;
+            const pid  = r.opponent_users?.[0]?.membership_number;
+            const pName = r.opponent_users?.[0]?.player_name?.trim();
             if (!pid) continue;
+            // Enrich username map from round data (always up-to-date)
+            if (pName && !_usernameMap[pid]) _usernameMap[pid] = pName;
             if (!seenThisEv.has(pid)) {
                 seenThisEv.add(pid);
                 playerEventsCount[pid] = (playerEventsCount[pid] || 0) + 1;
             }
-            if (!evOpponents.has(pid)) evOpponents.set(pid, { w: 0, l: 0 });
-            if (r.is_win) evOpponents.get(pid).w++; else evOpponents.get(pid).l++;
+            if (!evOpponents.has(pid)) evOpponents.set(pid, { w: 0, l: 0, gw: 0, gl: 0 });
+            const opp = evOpponents.get(pid);
+            if (r.is_win) opp.w++; else opp.l++;
+            // Game-level scores (win_count / lose_count within the match)
+            opp.gw += r.win_count  ?? (r.is_win ? 1 : 0);
+            opp.gl += r.lose_count ?? (r.is_win ? 0 : 1);
         }
         for (const [pid, res] of evOpponents) {
             if (!opponentHistory[pid]) opponentHistory[pid] = [];
-            opponentHistory[pid].push({ dateStr, evName, w: res.w, l: res.l });
+            opponentHistory[pid].push({ dateStr, evName, w: res.w, l: res.l, gw: res.gw, gl: res.gl });
         }
     }
     _opponentMatchHistory = opponentHistory;
@@ -1573,26 +1593,36 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
 
         for (const ev of evList) {
             if (!ev?.rounds) continue;
-            let evW = 0, evL = 0;
-            for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
+            let evW = 0, evL = 0, evGW = 0, evGL = 0;
+            for (const r of ev.rounds) {
+                if (r.is_win) evW++; else evL++;
+                evGW += r.win_count  ?? (r.is_win ? 1 : 0);
+                evGL += r.lose_count ?? (r.is_win ? 0 : 1);
+            }
 
             const dateStr   = fmtDate(ev._start_datetime);
             const storeName = ev._store_name ?? ev.event?.organizer_name ?? ev.event?.organizer
                 ?? ev.event?.store_name ?? ev.event?.shop_name ?? null;
             const storeStr  = storeName ?? '—';
-            const evName    = ev._event_name ?? ev.event?.name ?? '—';
+            const evName    = ev._event_name ?? ev.event?.series_title ?? ev.event?.name ?? '—';
             const appCount  = ev._applicant_count ?? ev.event?.entry_count
                 ?? ev.event?.applicant_count ?? null;
             const capCount  = ev._capacity ?? ev.event?.capacity ?? null;
             const appStr    = appCount !== null
                 ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
                 : '—';
+            const rankStr   = ev._rank   != null ? `#${ev._rank}`   : '—';
+            const ptsStr    = ev._match_points != null ? ev._match_points : '—';
+            const resultColor = evW > evL ? 'var(--win)' : evW < evL ? 'var(--loss)' : 'var(--muted)';
 
             const tr = document.createElement('tr');
             tr.innerHTML = `<td>${dateStr}</td>
                 <td>${storeStr}</td>
                 <td>${evName}</td>
-                <td class="td-num">${evW}-${evL}</td>
+                <td class="td-num" style="color:${resultColor};font-weight:600">${evW}-${evL}</td>
+                <td class="td-num">${evGW}-${evGL}</td>
+                <td class="td-num">${ptsStr}</td>
+                <td class="td-num">${rankStr}</td>
                 <td class="td-num">${appStr}</td>`;
             tourneyBody.appendChild(tr);
         }
@@ -2229,9 +2259,11 @@ function openOpponentModal(pid) {
     for (const m of sorted) {
         const tr = document.createElement('tr');
         const resultColor = m.w > m.l ? 'var(--win)' : m.l > m.w ? 'var(--loss)' : 'var(--muted)';
+        const resultStr = `${m.w}W-${m.l}L`;
+        const gameStr   = (m.gw != null && m.gl != null) ? `${m.gw}-${m.gl}` : '—';
         tr.innerHTML = `<td>${fmtDate(m.dateStr)}</td><td>${m.evName}</td>
-            <td class="td-num" style="color:${resultColor};font-weight:600">${m.w}</td>
-            <td class="td-num" style="color:${resultColor};font-weight:600">${m.l}</td>`;
+            <td class="td-num" style="color:${resultColor};font-weight:600">${resultStr}</td>
+            <td class="td-num">${gameStr}</td>`;
         tbody.appendChild(tr);
     }
     document.getElementById('opponentModal').classList.add('open');
@@ -2373,11 +2405,14 @@ function displayRegionals(eventData) {
         body.appendChild(tr);
     }
 
-    // Scatter: tournament size vs win %
+    // Scatter: tournament size vs final rank (or win% as fallback)
     {
         const scatterPanel = document.getElementById('regionalScatterPanel');
         const scatterPoints = [];
         const scatterLabels = [];
+        const scatterMeta   = []; // { rank, winPct, applicants }
+        let   useRank = false;
+
         for (const reg of REGIONALS) {
             const ev = byDate[reg.date];
             if (!ev?.rounds) continue;
@@ -2387,15 +2422,34 @@ function displayRegionals(eventData) {
             for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
             const t = evW + evL;
             if (t === 0) continue;
-            scatterPoints.push({ x: applicants, y: +(evW / t * 100).toFixed(1) });
+            const rank   = ev._rank ?? null;
+            const winPct = +(evW / t * 100).toFixed(1);
+            if (rank !== null) useRank = true;
+            scatterMeta.push({ rank, winPct, applicants });
             scatterLabels.push(reg.name);
         }
+
+        // Build points: prefer rank on Y when available for all events, else win%
+        for (const m of scatterMeta) {
+            const y = useRank ? (m.rank ?? m.winPct) : m.winPct;
+            scatterPoints.push({ x: m.applicants, y });
+        }
+
+        // Update subtitle accordingly
+        const scatterTitle = document.querySelector('#regionalScatterPanel h3');
+        const scatterSub   = document.querySelector('#regionalScatterPanel p');
+        if (scatterTitle) scatterTitle.textContent = useRank
+            ? 'Tournament Size vs. Final Rank'
+            : 'Tournament Size vs. Result';
+        if (scatterSub) scatterSub.textContent = useRank
+            ? 'Each dot is a regional event. X = applicants, Y = final rank (lower is better).'
+            : 'Each dot is a regional event. X = applicants, Y = win % achieved.';
+
         if (scatterPoints.length < 2) {
             scatterPanel.style.display = 'none';
         } else {
             scatterPanel.style.display = '';
-            const scWin  = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#048A81';
-            const scMuted= getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()  || '#6c757d';
+            const scMuted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#6c757d';
             destroyChart('regionalScatter');
             _charts['regionalScatter'] = new Chart(document.getElementById('chartRegionalScatter'), {
                 type: 'scatter',
@@ -2403,7 +2457,14 @@ function displayRegionals(eventData) {
                     datasets: [{
                         label: 'Regional',
                         data: scatterPoints,
-                        backgroundColor: scatterPoints.map(p => p.y >= 50 ? '#28a745cc' : '#dc3545cc'),
+                        backgroundColor: scatterPoints.map((p, i) => {
+                            if (useRank) {
+                                // lower rank = better (top half of field)
+                                const half = (scatterMeta[i].applicants || 2) / 2;
+                                return p.y <= half ? '#28a745cc' : '#dc3545cc';
+                            }
+                            return p.y >= 50 ? '#28a745cc' : '#dc3545cc';
+                        }),
                         pointRadius: 8,
                         pointHoverRadius: 10
                     }]
@@ -2414,17 +2475,26 @@ function displayRegionals(eventData) {
                     scales: {
                         x: { title: { display: true, text: 'Applicants', color: scMuted, font: { size: 11 } },
                              ticks: { font: { size: 10 }, color: scMuted }, grid: { color: '#eee' } },
-                        y: { min: 0, max: 100,
-                             title: { display: true, text: 'Win %', color: scMuted, font: { size: 11 } },
-                             ticks: { callback: v => v + '%', font: { size: 10 }, color: scMuted },
-                             grid: { color: '#eee' } }
+                        y: useRank
+                            ? { reverse: true,
+                                title: { display: true, text: 'Final Rank (lower = better)', color: scMuted, font: { size: 11 } },
+                                ticks: { callback: v => `#${v}`, font: { size: 10 }, color: scMuted },
+                                grid: { color: '#eee' } }
+                            : { min: 0, max: 100,
+                                title: { display: true, text: 'Win %', color: scMuted, font: { size: 11 } },
+                                ticks: { callback: v => v + '%', font: { size: 10 }, color: scMuted },
+                                grid: { color: '#eee' } }
                     },
                     plugins: {
                         legend: { display: false },
                         tooltip: { callbacks: {
                             label: ctx => {
+                                const m   = scatterMeta[ctx.dataIndex];
                                 const lbl = scatterLabels[ctx.dataIndex];
-                                return [`${lbl}`, `Applicants: ${ctx.parsed.x}`, `Win %: ${ctx.parsed.y}%`];
+                                const lines = [`${lbl}`, `Applicants: ${m.applicants}`];
+                                if (m.rank   != null) lines.push(`Final rank: #${m.rank}`);
+                                lines.push(`Win rate: ${m.winPct}%`);
+                                return lines;
                             }
                         }}
                     }
