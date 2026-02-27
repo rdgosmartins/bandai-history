@@ -4,31 +4,116 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bandai TCG History Analyzer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --primary: #2E4057;
-            --accent: #048A81;
-            --bg: #f5f7fa;
-            --card: #ffffff;
-            --text: #1a1a2e;
-            --muted: #6c757d;
-            --border: #dee2e6;
-            --win: #28a745;
-            --loss: #dc3545;
+            --accent:  #048A81;
+            --gold:    #c9a84c;
+            --gold-lt: #e8c96a;
+            --bg:      #f0f4f8;
+            --card:    #ffffff;
+            --text:    #1a1a2e;
+            --muted:   #6c757d;
+            --border:  #dee2e6;
+            --win:     #28a745;
+            --loss:    #dc3545;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(4,138,129,0.04) 0%, transparent 50%),
+                radial-gradient(circle at 85% 20%, rgba(46,64,87,0.05) 0%, transparent 50%);
+        }
 
-        header { background: var(--primary); color: white; padding: 1.25rem 2rem; }
-        header h1 { font-size: 1.4rem; font-weight: 700; }
-        header p  { font-size: 0.82rem; opacity: 0.75; margin-top: 0.2rem; }
+        header {
+            background: linear-gradient(135deg, #1a2a3e 0%, var(--primary) 50%, #1e3a4a 100%);
+            color: white;
+            padding: 2rem 2rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+        header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                radial-gradient(ellipse at 80% 50%, rgba(201,168,76,0.08) 0%, transparent 60%),
+                repeating-linear-gradient(45deg, transparent, transparent 60px, rgba(255,255,255,0.01) 60px, rgba(255,255,255,0.01) 61px);
+            pointer-events: none;
+        }
+        .header-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 1rem 1.75rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+        .header-skull {
+            font-size: 2.8rem;
+            line-height: 1;
+            filter: drop-shadow(0 0 12px rgba(201,168,76,0.5));
+            flex-shrink: 0;
+        }
+        .header-text h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 1.65rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            background: linear-gradient(90deg, #ffffff 0%, var(--gold-lt) 60%, #ffffff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+        .header-text p {
+            font-size: 0.8rem;
+            opacity: 0.65;
+            margin-top: 0.3rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .header-divider {
+            width: 100%;
+            line-height: 0;
+            display: block;
+        }
+        .header-divider svg { display: block; width: 100%; }
 
-        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+        .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
 
-        .card { background: var(--card); border-radius: 10px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.07); margin-bottom: 1.5rem; }
-        .card h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 1.25rem; }
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(201,168,76,0.15);
+            border-top: 3px solid var(--gold);
+            transition: box-shadow 0.2s;
+        }
+        .card:hover { box-shadow: 0 6px 28px rgba(0,0,0,0.1), 0 0 0 1px rgba(201,168,76,0.2); }
+        .card h2 {
+            font-family: 'Cinzel', serif;
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--primary);
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .card h2 .section-icon { font-size: 1rem; }
 
         label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
@@ -46,14 +131,15 @@
         textarea { width: 100%; padding: 0.65rem 0.9rem; border: 1px solid var(--border); border-radius: 7px; font-size: 0.85rem; font-family: monospace; resize: vertical; height: 130px; transition: border-color 0.2s; }
         textarea:focus { outline: none; border-color: var(--accent); }
 
-        .btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.5rem; border: none; border-radius: 7px; cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: opacity 0.2s, transform 0.1s; }
-        .btn:hover   { opacity: 0.88; }
-        .btn:active  { transform: scale(0.98); }
-        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-outline { background: transparent; border: 1.5px solid var(--primary); color: var(--primary); }
+        .btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: all 0.18s; letter-spacing: 0.02em; }
+        .btn:hover   { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .btn:active  { transform: scale(0.98) translateY(0); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), #036b64); color: white; box-shadow: 0 2px 8px rgba(4,138,129,0.3); }
+        .btn-outline { background: transparent; border: 1.5px solid var(--gold); color: var(--primary); }
+        .btn-outline:hover { background: rgba(201,168,76,0.08); border-color: var(--gold); }
         .btn-file    { background: transparent; border: 1.5px solid var(--border); color: var(--text); padding: 0.5rem 1rem; font-size: 0.84rem; }
-        .btn-file:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-file:hover { border-color: var(--gold); color: var(--primary); }
         .btn-sm      { padding: 0.4rem 1rem; font-size: 0.8rem; }
 
         .file-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
@@ -70,9 +156,18 @@
 
         .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
         @media (max-width: 600px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
-        .stat-box { text-align: center; padding: 1.25rem 1rem; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
-        .stat-box .val { font-size: 2rem; font-weight: 800; line-height: 1; }
-        .stat-box .lbl { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .stat-box {
+            text-align: center;
+            padding: 1.35rem 1rem;
+            background: linear-gradient(160deg, var(--bg) 0%, #eaf0fb 100%);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            border-bottom: 2px solid var(--gold);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .stat-box:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(201,168,76,0.15); }
+        .stat-box .val { font-size: 2.1rem; font-weight: 800; line-height: 1; font-family: 'Cinzel', serif; }
+        .stat-box .lbl { font-size: 0.68rem; color: var(--muted); margin-top: 0.45rem; text-transform: uppercase; letter-spacing: 0.08em; }
         .w-val   { color: var(--win); }
         .l-val   { color: var(--loss); }
         .pct-val { color: var(--accent); }
@@ -80,7 +175,7 @@
 
         .table-wrap { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
-        thead th { background: var(--primary); color: white; padding: 0.65rem 0.9rem; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; }
+        thead th { background: linear-gradient(135deg, var(--primary), #3d5472); color: white; padding: 0.65rem 0.9rem; text-align: left; cursor: pointer; user-select: none; white-space: nowrap; font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.05em; }
         thead th:hover { background: #3d5472; }
         thead th.sorted-asc::after  { content: " ▲"; font-size: 0.7rem; }
         thead th.sorted-desc::after { content: " ▼"; font-size: 0.7rem; }
@@ -118,8 +213,8 @@
 
         .chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
         .chip { display: inline-flex; align-items: center; padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: white; color: var(--muted); transition: all 0.15s; user-select: none; }
-        .chip:hover { border-color: var(--accent); color: var(--accent); }
-        .chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+        .chip:hover { border-color: var(--gold); color: var(--primary); }
+        .chip.active { background: var(--primary); border-color: var(--gold); color: white; box-shadow: 0 0 0 1px var(--gold); }
         .chip.chip-all { border-color: var(--primary); color: var(--primary); }
         .chip.chip-all.active { background: var(--primary); border-color: var(--primary); color: white; }
 
@@ -153,9 +248,9 @@
 
         tbody tr.row-highlight td { background: #fffbe6 !important; font-weight: 600; }
 
-        .card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; padding-bottom: 1rem; border-bottom: 1px solid rgba(201,168,76,0.2); margin-bottom: 1.25rem; }
         .card-header h2 { margin-bottom: 0; }
-        .card-header .toggle-icon { font-size: 0.75rem; color: var(--muted); transition: transform 0.2s; }
+        .card-header .toggle-icon { font-size: 0.75rem; color: var(--gold); transition: transform 0.2s; }
         .card-body { overflow: hidden; transition: max-height 0.3s ease, opacity 0.2s ease; }
         .card-body.collapsed { max-height: 0 !important; opacity: 0; pointer-events: none; }
 
@@ -166,7 +261,7 @@
         /* Opponent modal */
         .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center; padding:1rem; }
         .modal-overlay.open { display:flex; }
-        .modal-box { background:var(--card); border-radius:12px; padding:1.75rem; max-width:640px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:0 8px 40px rgba(0,0,0,0.25); position:relative; }
+        .modal-box { background:var(--card); border-radius:14px; padding:1.75rem; max-width:640px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:0 12px 50px rgba(0,0,0,0.3); position:relative; border-top:3px solid var(--gold); }
         .modal-close { position:absolute; top:0.85rem; right:1rem; background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--muted); padding:0.2rem; line-height:1; }
         .modal-close:hover { color:var(--text); }
         .modal-title { font-size:1.05rem; font-weight:700; color:var(--primary); margin-bottom:0.2rem; }
@@ -199,8 +294,8 @@
         /* Bogeyman / Victim rivalry cards */
         .rivalry-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
         @media (max-width:560px) { .rivalry-grid { grid-template-columns:1fr; } }
-        .rivalry-card { border-radius:8px; border:1.5px solid var(--border); padding:1rem 1.25rem; cursor:pointer; transition:border-color 0.15s, box-shadow 0.15s; }
-        .rivalry-card:hover { border-color:var(--accent); box-shadow:0 2px 10px rgba(0,0,0,0.08); }
+        .rivalry-card { border-radius:10px; border:1.5px solid var(--border); padding:1rem 1.25rem; cursor:pointer; transition:all 0.18s; background: linear-gradient(160deg, var(--bg), #eaf0fb); }
+        .rivalry-card:hover { border-color:var(--gold); box-shadow:0 4px 16px rgba(201,168,76,0.18); transform: translateY(-2px); }
         .rivalry-card.bogeyman { border-left:4px solid var(--loss); }
         .rivalry-card.victim   { border-left:4px solid var(--win); }
         .rivalry-label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem; }
@@ -227,7 +322,7 @@
         .charts-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start; }
         @media (max-width: 720px) { .charts-grid { grid-template-columns: 1fr; } }
         .chart-panel { display: flex; flex-direction: column; gap: 0.5rem; }
-        .chart-panel h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+        .chart-panel h3 { font-family: 'Cinzel', serif; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--primary); font-weight: 700; }
         .chart-canvas-wrap { position: relative; height: 280px; }
         .chart-canvas-wrap.tall { height: 380px; }
         .chart-canvas-wrap.short { height: 200px; }
@@ -255,7 +350,10 @@
             /* Layout */
             body { background: white; }
             .container { max-width: 100%; margin: 0; padding: 0.25rem 0.5rem; }
-            .card { box-shadow: none !important; border: 1px solid #dee2e6; margin-bottom: 0.75rem; padding: 1rem; }
+            .card { box-shadow: none !important; border: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-bottom: 0.75rem; padding: 1rem; }
+            .card:hover { box-shadow: none !important; transform: none; }
+            header::before, header .header-divider { display: none; }
+            .stat-box:hover, .rivalry-card:hover, .btn:hover { transform: none; box-shadow: none; }
             .card h2 { margin-bottom: 0.75rem; }
 
             /* Avoid breaking inside small cards; allow breaks between big ones */
@@ -284,15 +382,25 @@
 <body>
 
 <header>
-    <h1>Bandai TCG History Analyzer</h1>
-    <p>Analyze your tournament results from the Bandai TCG+ app</p>
+    <div class="header-inner">
+        <div class="header-skull">&#9760;&#65039;</div>
+        <div class="header-text">
+            <h1>One Piece TCG · History Analyzer</h1>
+            <p>&#9875; Track your voyage across the Grand Line of tournaments</p>
+        </div>
+    </div>
+    <div class="header-divider">
+        <svg viewBox="0 0 1440 40" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,20 C240,40 480,0 720,20 C960,40 1200,0 1440,20 L1440,40 L0,40 Z" fill="#f0f4f8"/>
+        </svg>
+    </div>
 </header>
 
 <div class="container">
 
     <!-- Config card -->
     <div class="card" id="configCard">
-        <h2>Configuration</h2>
+        <h2><span class="section-icon">&#9875;</span> Configuration</h2>
 
         <!-- Step 1: load file -->
         <div class="step">
@@ -366,7 +474,7 @@
         <!-- API Field Inspector -->
         <div class="card" id="inspectorCard" style="display:none; margin-bottom:1rem;">
             <div class="card-header" onclick="toggleCard('inspector')">
-                <h2>&#128269; API Field Inspector</h2>
+                <h2><span class="section-icon">&#128269;</span> API Field Inspector</h2>
                 <span class="toggle-icon" id="inspector-icon">▼</span>
             </div>
             <div class="card-body" id="inspector-body" style="max-height:9999px;">
@@ -381,7 +489,7 @@
         <!-- Filters card -->
         <div class="card" id="filterCard" style="display:none">
             <div class="card-header" onclick="toggleCard('filters')">
-                <h2>Filters</h2>
+                <h2><span class="section-icon">&#9874;&#65039;</span> Filters</h2>
                 <span class="toggle-icon" id="filters-icon">▼</span>
             </div>
             <div class="card-body" id="filters-body" style="max-height: 9999px;">
@@ -433,7 +541,7 @@
 
         <div class="card">
             <div class="card-header" onclick="toggleCard('overall')">
-                <h2>Overall Results</h2>
+                <h2><span class="section-icon">&#127381;</span> Overall Results</h2>
                 <span class="toggle-icon" id="overall-icon">▼</span>
             </div>
             <div class="card-body" id="overall-body" style="max-height: 9999px;">
@@ -445,7 +553,7 @@
 
         <div class="card" id="chartsCard" style="display:none">
             <div class="card-header" onclick="toggleCard('charts')">
-                <h2>Charts</h2>
+                <h2><span class="section-icon">&#128202;</span> Charts</h2>
                 <span class="toggle-icon" id="charts-icon">▼</span>
             </div>
             <div class="card-body" id="charts-body" style="max-height: 9999px;">
@@ -492,7 +600,7 @@
 
         <div class="card" id="monthlyCard" style="display:none">
             <div class="card-header" onclick="toggleCard('monthly')">
-                <h2>Results by Month</h2>
+                <h2><span class="section-icon">&#128197;</span> Results by Month</h2>
                 <span class="toggle-icon" id="monthly-icon">▼</span>
             </div>
             <div class="card-body" id="monthly-body" style="max-height:9999px;">
@@ -518,7 +626,7 @@
 
         <div class="card">
             <div class="card-header" onclick="toggleCard('period')">
-                <h2>Results by Set Period</h2>
+                <h2><span class="section-icon">&#128218;</span> Results by Set Period</h2>
                 <span class="toggle-icon" id="period-icon">▼</span>
             </div>
             <div class="card-body" id="period-body" style="max-height: 9999px;">
@@ -539,7 +647,7 @@
 
         <div class="card">
             <div class="card-header" onclick="toggleCard('tourney')">
-                <h2>Tournament History</h2>
+                <h2><span class="section-icon">&#9875;</span> Tournament History</h2>
                 <span class="toggle-icon" id="tourney-icon">▼</span>
             </div>
             <div class="card-body" id="tourney-body" style="max-height: 9999px;">
@@ -563,7 +671,7 @@
 
         <div class="card" id="eventSizeCard" style="display:none">
             <div class="card-header" onclick="toggleCard('eventsize')">
-                <h2>Performance by Event Size</h2>
+                <h2><span class="section-icon">&#128081;</span> Performance by Event Size</h2>
                 <span class="toggle-icon" id="eventsize-icon">▼</span>
             </div>
             <div class="card-body" id="eventsize-body" style="max-height:9999px;">
@@ -584,7 +692,7 @@
 
         <div class="card" id="roundCard" style="display:none">
             <div class="card-header" onclick="toggleCard('rounds')">
-                <h2>Round by Round</h2>
+                <h2><span class="section-icon">&#9876;&#65039;</span> Round by Round</h2>
                 <span class="toggle-icon" id="rounds-icon">▼</span>
             </div>
             <div class="card-body" id="rounds-body" style="max-height:9999px;">
@@ -617,7 +725,7 @@
 
         <div class="card" id="regionalsCard" style="display:none">
             <div class="card-header" onclick="toggleCard('regionals')">
-                <h2>Regionals</h2>
+                <h2><span class="section-icon">&#127942;</span> Regionals</h2>
                 <span class="toggle-icon" id="regionals-icon">▼</span>
             </div>
             <div class="card-body" id="regionals-body" style="max-height: 9999px;">
@@ -644,7 +752,7 @@
 
         <div class="card">
             <div class="card-header row-flex" onclick="toggleCard('players')">
-                <h2>Results by Player</h2>
+                <h2><span class="section-icon">&#9876;&#65039;</span> Results by Player</h2>
                 <div style="display:flex;align-items:center;gap:0.5rem;">
                     <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();exportExcel()">&#8675; Export Excel</button>
                     <span class="toggle-icon" id="players-icon">▼</span>
@@ -700,7 +808,7 @@
 
 <div class="card" id="compareCard" style="display:none">
             <div class="card-header" onclick="toggleCard('compare')">
-                <h2>Multi-user Comparison</h2>
+                <h2><span class="section-icon">&#9760;&#65039;</span> Multi-user Comparison</h2>
                 <span class="toggle-icon" id="compare-icon">▼</span>
             </div>
             <div class="card-body" id="compare-body" style="max-height:9999px;">
