@@ -2629,8 +2629,11 @@ function sortTable(tableId, col) {
     });
 
     rows.sort((a, b) => {
-        let av = a.cells[col].textContent.replace('%', '').trim();
-        let bv = b.cells[col].textContent.replace('%', '').trim();
+        // Strip formatting chars so numeric values always parse correctly:
+        // %, #, leading/trailing spaces; also handle "X / Y" and "X-Y" by taking first number
+        const clean = v => v.replace(/[%#]/g, '').trim();
+        let av = clean(a.cells[col].textContent);
+        let bv = clean(b.cells[col].textContent);
         const an = parseFloat(av), bn = parseFloat(bv);
         if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
         return asc ? av.localeCompare(bv) : bv.localeCompare(av);
