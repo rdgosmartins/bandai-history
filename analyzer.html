@@ -173,6 +173,18 @@
         .modal-sub { font-size:0.82rem; color:var(--muted); margin-bottom:1.25rem; }
         .modal-section h3 { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); font-weight:700; margin-bottom:0.6rem; margin-top:1.25rem; }
 
+        /* API Field Inspector */
+        .inspector-section { margin-bottom: 1.25rem; }
+        .inspector-section h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 700; margin-bottom: 0.5rem; }
+        .inspector-block { position: relative; background: #1e1e2e; color: #cdd6f4; font-family: monospace; font-size: 0.78rem; line-height: 1.6; padding: 1rem; border-radius: 8px; overflow-x: auto; white-space: pre; max-height: 340px; overflow-y: auto; }
+        .inspector-copy { position: absolute; top: 0.5rem; right: 0.5rem; background: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 5px; padding: 0.2rem 0.6rem; font-size: 0.72rem; cursor: pointer; }
+        .inspector-copy:hover { background: #45475a; }
+        .inspector-key   { color: #89dceb; }
+        .inspector-str   { color: #a6e3a1; }
+        .inspector-num   { color: #fab387; }
+        .inspector-bool  { color: #cba6f7; }
+        .inspector-null  { color: #6c7086; }
+
         /* Most Faced per Round mini-cards */
         #roundOppGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; }
         @media (max-width: 700px) { #roundOppGrid { grid-template-columns: repeat(3, 1fr); } }
@@ -227,7 +239,7 @@
         @media print {
             /* Hide UI chrome */
             header, #configCard, #progress, #errorBox, #filterCard,
-            .pdf-toolbar, .cache-bar, .modal-overlay,
+            #inspectorCard, .pdf-toolbar, .cache-bar, .modal-overlay,
             .toggle-icon, .btn, #vsBanner, .player-search-wrap > input,
             #playerAutocomplete { display: none !important; }
 
@@ -348,6 +360,22 @@
 
         <div class="pdf-toolbar">
             <button class="btn btn-outline" onclick="exportPDF()">&#128438; Export PDF</button>
+            <button class="btn btn-outline" onclick="toggleInspector()" id="inspectorBtn" style="margin-left:0.5rem;">&#128269; Inspect API Fields</button>
+        </div>
+
+        <!-- API Field Inspector -->
+        <div class="card" id="inspectorCard" style="display:none; margin-bottom:1rem;">
+            <div class="card-header" onclick="toggleCard('inspector')">
+                <h2>&#128269; API Field Inspector</h2>
+                <span class="toggle-icon" id="inspector-icon">▼</span>
+            </div>
+            <div class="card-body" id="inspector-body" style="max-height:9999px;">
+                <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+                    Raw JSON from the first available event. Use this to discover all fields the Bandai API returns.
+                    <strong style="color:var(--loss);">Remove this before sharing the file</strong> — it contains raw API data.
+                </p>
+                <div id="inspectorSections"></div>
+            </div>
         </div>
 
         <!-- Filters card -->
@@ -2430,6 +2458,94 @@ function sortTable(tableId, col) {
         return asc ? av.localeCompare(bv) : bv.localeCompare(av);
     });
     rows.forEach(r => tbody.appendChild(r));
+}
+
+// ── API Field Inspector ────────────────────────────────────────────────────
+
+function toggleInspector() {
+    const card = document.getElementById('inspectorCard');
+    if (card.style.display === 'none') {
+        buildInspector();
+        card.style.display = '';
+        // ensure body is not collapsed
+        document.getElementById('inspector-body').classList.remove('collapsed');
+    } else {
+        card.style.display = 'none';
+    }
+}
+
+function syntaxHighlight(json) {
+    // Escape HTML then colorise keys, strings, numbers, booleans, nulls
+    return json
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) return `<span class="inspector-key">${match}</span>`;
+                return `<span class="inspector-str">${match}</span>`;
+            }
+            if (/true|false/.test(match)) return `<span class="inspector-bool">${match}</span>`;
+            if (/null/.test(match))       return `<span class="inspector-null">${match}</span>`;
+            return `<span class="inspector-num">${match}</span>`;
+        });
+}
+
+function makeBlock(id, data) {
+    const json = JSON.stringify(data, null, 2);
+    const highlighted = syntaxHighlight(json);
+    return `<div class="inspector-block" id="${id}">` +
+        `<button class="inspector-copy" onclick="copyInspector('${id}','${id}-btn')" id="${id}-btn">Copy</button>` +
+        highlighted +
+        `</div>`;
+}
+
+function copyInspector(blockId, btnId) {
+    const text = document.getElementById(blockId).innerText.replace(/^Copy\n?/, '');
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById(btnId);
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 1800);
+    });
+}
+
+function buildInspector() {
+    const container = document.getElementById('inspectorSections');
+    container.innerHTML = '';
+
+    if (!_allEventData || _allEventData.length === 0) {
+        container.innerHTML = '<p style="color:var(--loss)">No event data loaded yet. Fetch data first.</p>';
+        return;
+    }
+
+    // Pick the first event that has rounds
+    const ev = _allEventData.find(e => e?.rounds?.length) || _allEventData[0];
+
+    // 1. Top-level event history keys (strip rounds for brevity, show separately)
+    const evTop = Object.fromEntries(
+        Object.entries(ev).filter(([k]) => k !== 'rounds')
+    );
+
+    // 2. Nested event object (if present)
+    const evNested = ev.event ?? null;
+
+    // 3. First round object
+    const round0 = ev.rounds?.[0] ?? null;
+
+    // 4. opponent_users entry (if present)
+    const oppUser = round0?.opponent_users?.[0] ?? null;
+
+    const sections = [
+        { label: 'Event History — top-level fields (rounds excluded)', id: 'isp-evtop', data: evTop },
+        { label: 'Event History — nested `event` object', id: 'isp-evnested', data: evNested },
+        { label: 'Round object — rounds[0]', id: 'isp-round', data: round0 },
+        { label: 'Opponent user — rounds[0].opponent_users[0]', id: 'isp-oppuser', data: oppUser },
+    ];
+
+    for (const s of sections) {
+        const div = document.createElement('div');
+        div.className = 'inspector-section';
+        div.innerHTML = `<h3>${s.label}</h3>` + (s.data !== null ? makeBlock(s.id, s.data) : `<p style="color:var(--muted);font-size:0.82rem;">Not present in this event.</p>`);
+        container.appendChild(div);
+    }
 }
 
 // ── PDF export ─────────────────────────────────────────────────────────────
