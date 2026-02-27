@@ -2156,9 +2156,11 @@ function displayRivalry(playerMap) {
 function displayPlacements(eventData) {
     const card = document.getElementById('placementsCard');
 
-    // Collect events that have a rank
+    // Collect events that have a rank, excluding regionals
+    const regionalDates = new Set(REGIONALS.map(r => r.date));
     const ranked = (eventData || [])
-        .filter(ev => ev?._rank != null && ev._start_datetime)
+        .filter(ev => ev?._rank != null && ev._start_datetime
+            && !regionalDates.has(ev._start_datetime.slice(0, 10)))
         .sort((a, b) => new Date(b._start_datetime) - new Date(a._start_datetime));
 
     if (ranked.length === 0) { card.style.display = 'none'; return; }
