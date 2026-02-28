@@ -451,6 +451,111 @@
         .prog-toggle { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
         .prog-toggle .tab-btn { font-family: 'Inter', sans-serif; font-size: 0.8rem; letter-spacing: 0; padding: 0.4rem 1rem; }
 
+        /* ── Podium ─────────────────────────────────────────────────────── */
+        .podium-stage {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 0 1rem 0;
+            min-height: 260px;
+        }
+        .podium-slot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            max-width: 160px;
+        }
+        .podium-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.55rem;
+            font-weight: 800;
+            font-family: 'Cinzel', serif;
+            color: white;
+            margin-bottom: 0.4rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            position: relative;
+        }
+        .podium-medal {
+            position: absolute;
+            bottom: -6px;
+            right: -6px;
+            font-size: 1.05rem;
+            line-height: 1;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+        }
+        .podium-name {
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-align: center;
+            color: var(--text);
+            margin-bottom: 0.2rem;
+            max-width: 130px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .podium-pct {
+            font-family: 'Cinzel', serif;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 0.45rem;
+        }
+        .podium-sub {
+            font-size: 0.68rem;
+            color: var(--muted);
+            margin-bottom: 0.5rem;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .podium-bar {
+            width: 100%;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 0.6rem;
+            font-family: 'Cinzel', serif;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: rgba(255,255,255,0.85);
+            transition: height 0.6s cubic-bezier(.34,1.56,.64,1);
+        }
+        /* rank-specific heights and colors */
+        .podium-slot[data-pos="1"] .podium-bar { height: 155px; background: linear-gradient(180deg,#d4a017,#c9a84c); box-shadow: 0 -4px 18px rgba(201,168,76,0.45); }
+        .podium-slot[data-pos="2"] .podium-bar { height: 115px; background: linear-gradient(180deg,#8a9bb0,#6b7f95); box-shadow: 0 -4px 14px rgba(107,127,149,0.35); }
+        .podium-slot[data-pos="3"] .podium-bar { height: 90px;  background: linear-gradient(180deg,#b87333,#9c5e24); box-shadow: 0 -4px 12px rgba(184,115,51,0.35); }
+        .podium-slot[data-pos="4"] .podium-bar { height: 68px;  background: linear-gradient(180deg,#4a6080,#3a4e68); }
+        .podium-slot[data-pos="5"] .podium-bar { height: 50px;  background: linear-gradient(180deg,#3d5472,#2e4057); }
+        .podium-slot[data-pos="1"] .podium-avatar { background: linear-gradient(135deg,#e8c96a,#c9a84c); border: 3px solid #e8c96a; }
+        .podium-slot[data-pos="2"] .podium-avatar { background: linear-gradient(135deg,#a8b8cc,#8a9bb0); border: 3px solid #a8b8cc; }
+        .podium-slot[data-pos="3"] .podium-avatar { background: linear-gradient(135deg,#d4956a,#b87333); border: 3px solid #d4956a; }
+        .podium-slot[data-pos="4"] .podium-avatar { background: linear-gradient(135deg,#5b7a9d,#4a6080); border: 3px solid #5b7a9d; }
+        .podium-slot[data-pos="5"] .podium-avatar { background: linear-gradient(135deg,#4a6080,#3a4e68); border: 3px solid #4a6080; }
+        .podium-slot[data-pos="1"] .podium-pct { color: var(--gold); }
+        .podium-floor {
+            height: 6px;
+            background: linear-gradient(90deg, var(--border), var(--gold) 50%, var(--border));
+            border-radius: 3px;
+            margin-top: 0;
+        }
+        [data-theme="dark"] .podium-slot[data-pos="1"] .podium-bar { box-shadow: 0 -4px 22px rgba(232,201,106,0.4); }
+        @media (max-width: 600px) {
+            .podium-stage { gap: 0.4rem; }
+            .podium-slot { max-width: 80px; }
+            .podium-avatar { width: 40px; height: 40px; font-size: 1.1rem; }
+            .podium-name { font-size: 0.68rem; }
+            .podium-pct  { font-size: 0.85rem; }
+        }
+
         /* ── Print / PDF styles ─────────────────────────────────────────── */
         @media print {
             /* Hide UI chrome */
@@ -979,7 +1084,8 @@
                 <span class="toggle-icon" id="rankBoard-icon">&#9660;</span>
             </div>
             <div class="card-body" id="rankBoard-body" style="max-height:9999px;">
-                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Aggregated across all cached events for each tracked player.</p>
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1.25rem;">Aggregated across all cached events for each tracked player.</p>
+                <div id="podium" style="margin-bottom:2rem;"></div>
                 <div class="table-wrap">
                     <table id="leaderboardTable">
                         <thead><tr>
@@ -3215,7 +3321,8 @@ function buildGlobalRankings() {
 
 // ── A: Overall Leaderboard ──────────────────────────────────────────────────
 function renderLeaderboard(allUsers) {
-    const tbody = document.getElementById('leaderboardBody');
+    const tbody  = document.getElementById('leaderboardBody');
+    const podium = document.getElementById('podium');
     if (!tbody) return;
 
     const rows = allUsers.map(u => {
@@ -3228,11 +3335,47 @@ function renderLeaderboard(allUsers) {
         }
         const total = w + l;
         const pct   = total ? (w / total * 100) : 0;
-        const avgRank = ranks.length ? (ranks.reduce((a,b)=>a+b,0) / ranks.length) : null;
+        const avgRank  = ranks.length ? (ranks.reduce((a,b)=>a+b,0) / ranks.length) : null;
         const bestRank = ranks.length ? Math.min(...ranks) : null;
         return { name: u.name, w, l, total, pct, tournaments: u.events.length, avgRank, bestRank, pts };
     }).sort((a, b) => b.pct - a.pct || b.total - a.total);
 
+    // ── Podium graphic (top 5) ──────────────────────────────────────────────
+    if (podium) {
+        const top = rows.slice(0, 5);
+        if (top.length === 0) {
+            podium.innerHTML = '';
+        } else {
+            // Classic podium visual order: 4th · 2nd · 1st · 3rd · 5th
+            // (only use positions that exist)
+            const displayOrder = [3, 1, 0, 2, 4].filter(i => i < top.length);
+            const medals = ['🥇','🥈','🥉','',''];
+
+            const initials = name => name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0,2).join('');
+
+            const slots = displayOrder.map(i => {
+                const p   = top[i];
+                const pos = i + 1; // 1-based rank
+                return `
+                <div class="podium-slot" data-pos="${pos}">
+                    <div class="podium-avatar">
+                        ${initials(p.name)}
+                        ${medals[i] ? `<span class="podium-medal">${medals[i]}</span>` : ''}
+                    </div>
+                    <div class="podium-name" title="${p.name}">${p.name}</div>
+                    <div class="podium-pct">${p.pct.toFixed(1)}%</div>
+                    <div class="podium-sub">${p.w}W · ${p.l}L<br>${p.tournaments} event${p.tournaments !== 1 ? 's' : ''}</div>
+                    <div class="podium-bar">#${pos}</div>
+                </div>`;
+            }).join('');
+
+            podium.innerHTML = `
+                <div class="podium-stage">${slots}</div>
+                <div class="podium-floor"></div>`;
+        }
+    }
+
+    // ── Leaderboard table ───────────────────────────────────────────────────
     const medals = ['🥇','🥈','🥉'];
     tbody.innerHTML = rows.map((r, i) => `
         <tr>
