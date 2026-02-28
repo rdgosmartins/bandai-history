@@ -587,7 +587,12 @@
             header, #configCard, #progress, #errorBox, #filterCard,
             #inspectorCard, .pdf-toolbar, .cache-bar, .modal-overlay,
             .toggle-icon, .btn, #vsBanner, .player-search-wrap > input,
-            #playerAutocomplete, .tab-nav, #rankingsTab { display: none !important; }
+            #playerAutocomplete, .tab-nav { display: none !important; }
+            /* Hide whichever tab is NOT being printed (controlled by JS body class) */
+            body.print-rankings #results    { display: none !important; }
+            body.print-my-stats #rankingsTab { display: none !important; }
+            /* Default (no class): hide rankings tab */
+            body:not(.print-rankings):not(.print-my-stats) #rankingsTab { display: none !important; }
 
             /* Show all card bodies, even collapsed ones */
             .card-body, .card-body.collapsed {
@@ -1277,6 +1282,10 @@
 
     <!-- Global Rankings Tab -->
     <div id="rankingsTab" style="display:none">
+
+        <div class="pdf-toolbar">
+            <button class="btn btn-outline" onclick="exportRankingsPDF()">&#128438; Export PDF</button>
+        </div>
 
         <!-- Rankings Filters -->
         <div class="card" id="rankFilterCard">
@@ -4337,22 +4346,22 @@ function renderCommunityOpponents(allUsers) {
 
 // ── PDF export ─────────────────────────────────────────────────────────────
 
-function exportPDF() {
-    // Remember which card bodies were collapsed
+function _doPrint(bodyClass) {
     const wasCollapsed = [...document.querySelectorAll('.card-body.collapsed')];
-
-    // Expand them all so content prints
     wasCollapsed.forEach(body => body.classList.remove('collapsed'));
+    document.body.classList.add(bodyClass);
 
-    // Restore collapsed state after the print dialog closes
     function restore() {
         wasCollapsed.forEach(body => body.classList.add('collapsed'));
+        document.body.classList.remove(bodyClass);
         window.removeEventListener('afterprint', restore);
     }
     window.addEventListener('afterprint', restore);
-
     window.print();
 }
+
+function exportPDF()         { _doPrint('print-my-stats'); }
+function exportRankingsPDF() { _doPrint('print-rankings'); }
 
 // ── Export ─────────────────────────────────────────────────────────────────
 
