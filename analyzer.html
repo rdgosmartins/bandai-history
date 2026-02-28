@@ -1542,8 +1542,11 @@ async function fetchUserEvents(user, onProgress) {
             }
             await sleep(300);
         }
-        saveCache(user.bandaiId, cache);
     }
+
+    // Always save — metadata patches (rank, points, applicant count) are applied
+    // to cached entries regardless of whether new events were fetched.
+    saveCache(user.bandaiId, cache);
 
     return { newCount: newEvents.length, totalCount: events.length };
 }
