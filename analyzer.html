@@ -1488,6 +1488,7 @@ async function fetchUserEvents(user, onProgress) {
                 ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
                 ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name ?? null;
             entry._applicant_count = ev.joinedCount ?? ev.joined_count
+                ?? ev.countApplicants ?? ev.numberOfPeople
                 ?? ev.aplicantes ?? ev.aplicants
                 ?? ev.entry_count ?? ev.applicant_count
                 ?? ev.participant_count ?? ev.entries ?? null;
@@ -1528,10 +1529,12 @@ async function fetchUserEvents(user, onProgress) {
                     ?? evData.event?.venue_name ?? evData.event?.store?.name
                     ?? evData.event?.organizer?.name ?? null;
                 evData._applicant_count = ev.joinedCount ?? ev.joined_count
+                    ?? ev.countApplicants ?? ev.numberOfPeople
                     ?? ev.aplicantes ?? ev.aplicants
                     ?? ev.entry_count ?? ev.applicant_count
                     ?? ev.participant_count ?? ev.entries
                     ?? evData.event?.joinedCount ?? evData.event?.joined_count
+                    ?? evData.event?.countApplicants ?? evData.event?.numberOfPeople
                     ?? evData.event?.aplicantes ?? evData.event?.aplicants
                     ?? evData.event?.entry_count ?? evData.event?.applicant_count
                     ?? evData.event?.participant_count ?? null;
@@ -2209,8 +2212,11 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
                 ?? ev.event?.store_name ?? ev.event?.shop_name ?? null;
             const storeStr  = storeName ?? '—';
             const evName    = ev._event_name ?? ev.event?.series_title ?? ev.event?.name ?? '—';
-            const appCount  = ev._applicant_count ?? ev.event?.entry_count
-                ?? ev.event?.applicant_count ?? null;
+            const appCount  = ev._applicant_count
+                ?? ev.event?.joinedCount ?? ev.event?.joined_count
+                ?? ev.event?.countApplicants ?? ev.event?.numberOfPeople
+                ?? ev.event?.entry_count ?? ev.event?.applicant_count
+                ?? ev.event?.participant_count ?? null;
             const capCount  = ev._capacity ?? ev.event?.capacity ?? null;
             const appStr    = appCount !== null
                 ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
