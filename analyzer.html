@@ -636,6 +636,78 @@
             .tier-bar-wrap { overflow: visible !important; }
         }
 
+        /* Elite Four */
+        .elite-four-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+        @media (max-width: 700px) { .elite-four-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 400px) { .elite-four-grid { grid-template-columns: 1fr; } }
+        .elite-card {
+            position: relative;
+            border-radius: 14px;
+            padding: 1.4rem 1rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 0.4rem;
+            overflow: hidden;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+            transition: transform 0.18s, box-shadow 0.18s;
+        }
+        .elite-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.16); }
+        .elite-card[data-pos="1"] { background: linear-gradient(145deg,#2a1f00,#4a3800); border: 1.5px solid var(--gold); }
+        .elite-card[data-pos="2"] { background: linear-gradient(145deg,#0d1a24,#1c3244); border: 1.5px solid #7aabcc; }
+        .elite-card[data-pos="3"] { background: linear-gradient(145deg,#1a0d06,#3a1e10); border: 1.5px solid #d4956a; }
+        .elite-card[data-pos="4"] { background: linear-gradient(145deg,#0d1520,#1a2a3a); border: 1.5px solid #4a6080; }
+        [data-theme="light"] .elite-card[data-pos="1"] { background: linear-gradient(145deg,#fdf3dc,#fce9b0); border-color: var(--gold); }
+        [data-theme="light"] .elite-card[data-pos="2"] { background: linear-gradient(145deg,#e8f4fb,#cce5f5); border-color: #5b9dc0; }
+        [data-theme="light"] .elite-card[data-pos="3"] { background: linear-gradient(145deg,#fdf0e8,#f5d9c0); border-color: #b87333; }
+        [data-theme="light"] .elite-card[data-pos="4"] { background: linear-gradient(145deg,#edf1f5,#d8e4ee); border-color: #6888a8; }
+        .elite-rank-badge {
+            position: absolute;
+            top: 0.55rem; left: 0.65rem;
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+        .elite-avatar {
+            width: 62px; height: 62px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; font-weight: 800; font-family: 'Cinzel', serif;
+            color: white; flex-shrink: 0;
+            margin-bottom: 0.2rem;
+        }
+        .elite-card[data-pos="1"] .elite-avatar { background: linear-gradient(135deg,#e8c96a,#c9a84c); box-shadow: 0 0 16px rgba(201,168,76,0.5); }
+        .elite-card[data-pos="2"] .elite-avatar { background: linear-gradient(135deg,#a8c8e0,#5b9dc0); box-shadow: 0 0 12px rgba(91,157,192,0.4); }
+        .elite-card[data-pos="3"] .elite-avatar { background: linear-gradient(135deg,#e0a882,#b87333); box-shadow: 0 0 12px rgba(184,115,51,0.4); }
+        .elite-card[data-pos="4"] .elite-avatar { background: linear-gradient(135deg,#6888a8,#4a6080); }
+        .elite-name {
+            font-family: 'Cinzel', serif; font-size: 0.82rem;
+            font-weight: 700; letter-spacing: 0.04em;
+            color: white; word-break: break-word;
+        }
+        [data-theme="light"] .elite-name { color: var(--text); }
+        .elite-wins {
+            font-size: 2rem; font-weight: 900; line-height: 1;
+            color: white;
+        }
+        .elite-card[data-pos="1"] .elite-wins { color: var(--gold); }
+        [data-theme="light"] .elite-wins { color: var(--primary); }
+        [data-theme="light"] .elite-card[data-pos="1"] .elite-wins { color: #8a6800; }
+        .elite-wins-lbl {
+            font-size: 0.65rem; text-transform: uppercase;
+            letter-spacing: 0.1em; color: rgba(255,255,255,0.55);
+            margin-top: -0.1rem;
+        }
+        [data-theme="light"] .elite-wins-lbl { color: var(--muted); }
+        .elite-sub {
+            font-size: 0.72rem; color: rgba(255,255,255,0.6);
+            margin-top: 0.2rem;
+        }
+        [data-theme="light"] .elite-sub { color: var(--muted); }
+
         /* Round-by-round heatmap */
         .heatmap-table { border-collapse: collapse; font-size: 0.75rem; }
         .heatmap-table th {
@@ -1267,6 +1339,18 @@
                     <button class="btn btn-outline btn-sm" onclick="clearRankFilters()">&#10005; Clear all filters</button>
                     <span id="rankFilterSummary" style="margin-left:0.75rem;font-size:0.8rem;color:var(--muted);"></span>
                 </div>
+            </div>
+        </div>
+
+        <!-- Elite Four -->
+        <div class="card" id="eliteFourCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('eliteFour')">
+                <h2><span class="section-icon">&#9889;</span> Elite Four</h2>
+                <span class="toggle-icon" id="eliteFour-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="eliteFour-body" style="max-height:9999px;">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1.5rem;">The 4 most winning players in the current filter.</p>
+                <div id="eliteFourGrid"></div>
             </div>
         </div>
 
@@ -3972,6 +4056,7 @@ function applyRankingsFilter() {
     }));
 
     _updateRankFilterSummary(allUsers, filteredUsers);
+    renderEliteFour(filteredUsers);
     renderLeaderboard(filteredUsers);
     renderH2HMatrix(filteredUsers);
     renderCommunityOpponents(filteredUsers);
@@ -3998,6 +4083,44 @@ function buildGlobalRankings() {
 
     // Apply any active filters, then render
     applyRankingsFilter();
+}
+
+// ── Elite Four ──────────────────────────────────────────────────────────────
+function renderEliteFour(allUsers) {
+    const card = document.getElementById('eliteFourCard');
+    const grid = document.getElementById('eliteFourGrid');
+    if (!card || !grid) return;
+
+    // Aggregate wins per user
+    const rows = allUsers.map(u => {
+        let w = 0, l = 0, pts = 0;
+        for (const ev of u.events) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
+            const mp = ev._match_points ?? (ev.user?.match_point != null ? Number(ev.user.match_point) : null);
+            if (mp != null) pts += mp;
+        }
+        const total = w + l;
+        const pct   = total > 0 ? (w / total * 100) : 0;
+        return { name: u.name, w, l, total, pct, pts, events: u.events.length };
+    }).sort((a, b) => b.w - a.w || b.pct - a.pct).slice(0, 4);
+
+    if (rows.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const medals  = ['🥇', '🥈', '🥉', '4️⃣'];
+    const initials = name => name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0, 2).join('');
+
+    grid.innerHTML = `<div class="elite-four-grid">${rows.map((p, i) => `
+        <div class="elite-card" data-pos="${i + 1}">
+            <div class="elite-rank-badge">${medals[i]}</div>
+            <div class="elite-avatar">${initials(p.name)}</div>
+            <div class="elite-name">${p.name}</div>
+            <div class="elite-wins">${p.w}</div>
+            <div class="elite-wins-lbl">Wins</div>
+            <div class="elite-sub">${p.l}L &middot; ${p.pct.toFixed(1)}% &middot; ${p.events} event${p.events !== 1 ? 's' : ''}</div>
+        </div>`).join('')}
+    </div>`;
 }
 
 // ── A: Overall Leaderboard ──────────────────────────────────────────────────
