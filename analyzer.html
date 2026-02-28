@@ -1225,6 +1225,33 @@
                     </div>
                 </div>
 
+                <!-- Date range presets -->
+                <div class="filter-row" style="margin-top:1rem;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+                    <span style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Date Range</span>
+                    <div class="chip-row" id="rankDatePresetChips" style="flex-wrap:wrap;">
+                        <button class="chip active" data-preset="all"      onclick="onRankDatePreset(this)">All Time</button>
+                        <button class="chip"        data-preset="7d"       onclick="onRankDatePreset(this)">Last 7 days</button>
+                        <button class="chip"        data-preset="30d"      onclick="onRankDatePreset(this)">Last 30 days</button>
+                        <button class="chip"        data-preset="90d"      onclick="onRankDatePreset(this)">Last 3 months</button>
+                        <button class="chip"        data-preset="this-month"  onclick="onRankDatePreset(this)">This month</button>
+                        <button class="chip"        data-preset="last-month"  onclick="onRankDatePreset(this)">Last month</button>
+                        <button class="chip"        data-preset="this-year"   onclick="onRankDatePreset(this)">This year</button>
+                        <button class="chip"        data-preset="custom"   onclick="onRankDatePreset(this)">Custom&hellip;</button>
+                    </div>
+                </div>
+
+                <!-- Custom date range (hidden until "Custom" chip selected) -->
+                <div id="rankCustomDateRow" style="display:none;margin-top:0.6rem;align-items:center;gap:0.75rem;flex-wrap:wrap;" class="filter-row">
+                    <div class="filter-group">
+                        <label for="rankDateFrom">From</label>
+                        <input type="date" id="rankDateFrom" onchange="applyRankingsFilter()" style="font-size:0.82rem;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);">
+                    </div>
+                    <div class="filter-group">
+                        <label for="rankDateTo">To</label>
+                        <input type="date" id="rankDateTo" onchange="applyRankingsFilter()" style="font-size:0.82rem;padding:0.35rem 0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);">
+                    </div>
+                </div>
+
                 <!-- Store filter -->
                 <div class="filter-row" style="margin-top:0.75rem;">
                     <div class="filter-group" style="flex:1;min-width:200px;">
@@ -3759,7 +3786,50 @@ function switchTab(tab) {
 
 
 // ── Rankings filter state ───────────────────────────────────────────────────
-let _rankStore = null; // selected store name or null
+let _rankStore       = null; // selected store name or null
+let _rankDatePreset  = 'all'; // active preset key
+
+function _getRankDateRange() {
+    const now   = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    if (_rankDatePreset === 'custom') {
+        const from = document.getElementById('rankDateFrom')?.value || null;
+        const to   = document.getElementById('rankDateTo')?.value   || null;
+        return { from, to };
+    }
+
+    const startOf = (d, unit) => {
+        const r = new Date(d);
+        if (unit === 'month') { r.setDate(1); }
+        if (unit === 'year')  { r.setMonth(0); r.setDate(1); }
+        return r.toISOString().slice(0, 10);
+    };
+    const sub = (d, days) => { const r = new Date(d); r.setDate(r.getDate() - days); return r.toISOString().slice(0, 10); };
+
+    switch (_rankDatePreset) {
+        case '7d':         return { from: sub(now, 7),   to: today };
+        case '30d':        return { from: sub(now, 30),  to: today };
+        case '90d':        return { from: sub(now, 90),  to: today };
+        case 'this-month': return { from: startOf(now, 'month'), to: today };
+        case 'last-month': {
+            const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const lme = new Date(now.getFullYear(), now.getMonth(), 0);
+            return { from: lm.toISOString().slice(0, 10), to: lme.toISOString().slice(0, 10) };
+        }
+        case 'this-year':  return { from: startOf(now, 'year'), to: today };
+        default:           return { from: null, to: null }; // all time
+    }
+}
+
+function onRankDatePreset(btn) {
+    _rankDatePreset = btn.dataset.preset;
+    document.querySelectorAll('#rankDatePresetChips .chip').forEach(c =>
+        c.classList.toggle('active', c === btn));
+    const customRow = document.getElementById('rankCustomDateRow');
+    if (customRow) customRow.style.display = _rankDatePreset === 'custom' ? 'flex' : 'none';
+    applyRankingsFilter();
+}
 
 function _getRankSelectedPeriods() {
     const chips = document.querySelectorAll('#rankPeriodChips .chip:not(.chip-all)');
@@ -3773,8 +3843,9 @@ function _getRankSelectedYears() {
 
 // Filter a single user's event array using the rankings filter state
 function _applyRankFilter(events) {
-    const periods = _getRankSelectedPeriods();
-    const years   = _getRankSelectedYears();
+    const periods       = _getRankSelectedPeriods();
+    const years         = _getRankSelectedYears();
+    const { from, to }  = _getRankDateRange();
     return events.filter(ev => {
         if (!ev?.rounds) return false;
         if (ev._start_datetime) {
@@ -3785,6 +3856,8 @@ function _applyRankFilter(events) {
                 const period = getPeriodForDate(ev._start_datetime);
                 if (!periods.has(period)) return false;
             }
+            if (from && dateStr < from) return false;
+            if (to   && dateStr > to)   return false;
         }
         if (_rankStore && ev._store_name !== _rankStore) return false;
         return true;
@@ -3808,12 +3881,18 @@ function clearRankStoreFilter() {
 }
 
 function clearRankFilters() {
-    _rankStore = null;
+    _rankStore      = null;
+    _rankDatePreset = 'all';
     document.getElementById('rankStoreSelect').value = '';
     // Activate all year chips
     document.querySelectorAll('#rankYearChips .chip').forEach(c => c.classList.add('active'));
     // Activate all period chips
     document.querySelectorAll('#rankPeriodChips .chip').forEach(c => c.classList.add('active'));
+    // Reset date preset to "All Time"
+    document.querySelectorAll('#rankDatePresetChips .chip').forEach(c =>
+        c.classList.toggle('active', c.dataset.preset === 'all'));
+    const customRow = document.getElementById('rankCustomDateRow');
+    if (customRow) customRow.style.display = 'none';
     applyRankingsFilter();
 }
 
