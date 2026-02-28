@@ -573,9 +573,15 @@
 
         <hr>
 
-        <button class="btn btn-primary" id="fetchBtn" onclick="fetchAndAnalyze()" disabled>
-            &#9654; Fetch &amp; Analyze
-        </button>
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-top:0.9rem;">
+            <button class="btn btn-primary" id="fetchBtn" onclick="fetchAndAnalyze()" disabled>
+                &#9654; Fetch &amp; Analyze
+            </button>
+            <button class="btn btn-outline" id="syncAllBtn" onclick="syncAllUsers()" disabled title="Fetch new events for every user with a token">
+                &#8635; Sync All Users
+            </button>
+            <span id="syncAllSummary" style="display:none;font-size:0.8rem;color:var(--win);font-weight:600;"></span>
+        </div>
     </div>
 
     <!-- Progress -->
@@ -1166,6 +1172,8 @@ function applyParsed({ users, nameMap }) {
     status.className = 'file-status ok';
     status.textContent = `${total} players loaded — ${users.length} with token`;
 
+    document.getElementById('syncAllBtn').disabled = users.length < 2;
+
     onUserChange();
 }
 
@@ -1292,6 +1300,198 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Fetch & Analyze ────────────────────────────────────────────────────────
 
+// Core fetch+cache logic for a single user. Returns { newCount, totalCount }.
+// onProgress(text, pct) is called to update the shared progress bar.
+async function fetchUserEvents(user, onProgress) {
+    const token = user.token;
+    const listUrl = 'https://api.bandai-tcg-plus.com/api/user/my/event'
+        + '?favorite=0&game_title_id=&limit=1000&offset=0&past_event_display_flg=1&selected_tab=3';
+
+    const listResp = await fetch(listUrl, { headers: { 'X-Authentication': token } });
+    if (!listResp.ok) throw new Error(`Event list failed for ${user.name} (HTTP ${listResp.status})`);
+    const events = (await listResp.json()).success.events;
+
+    const cache       = loadCache(user.bandaiId);
+    const newEvents   = events.filter(ev => !cache[String(ev.id)]);
+    const cachedCount = events.length - newEvents.length;
+
+    // Patch metadata on cached entries
+    for (const ev of events) {
+        if (cache[String(ev.id)]) {
+            const entry = cache[String(ev.id)];
+            entry._start_datetime  = ev.start_datetime;
+            entry._event_name      = ev.name ?? ev.event_name ?? ev.title
+                ?? entry.event?.series_title ?? null;
+            entry._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+                ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+                ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name ?? null;
+            entry._applicant_count = ev.joinedCount ?? ev.joined_count
+                ?? ev.aplicantes ?? ev.aplicants
+                ?? ev.entry_count ?? ev.applicant_count
+                ?? ev.participant_count ?? ev.entries ?? null;
+            entry._capacity        = ev.capacity ?? ev.max_capacity ?? ev.max_entry_count ?? null;
+            if (entry._rank == null && entry.user?.rank != null)
+                entry._rank = entry.user.rank;
+            if (entry._match_points == null && entry.user?.match_point != null)
+                entry._match_points = Number(entry.user.match_point);
+        }
+    }
+
+    if (newEvents.length > 0) {
+        for (let i = 0; i < newEvents.length; i++) {
+            const ev = newEvents[i];
+            onProgress(
+                `${user.name}: fetching ${i + 1}/${newEvents.length} new events (${cachedCount} cached)…`,
+                Math.round((i / newEvents.length) * 100)
+            );
+            const evResp = await fetch(
+                `https://api.bandai-tcg-plus.com/api/user/event/${ev.id}/history`,
+                { headers: { 'X-Authentication': token } }
+            );
+            if (evResp.ok) {
+                const evData = (await evResp.json()).success;
+                evData._start_datetime  = ev.start_datetime;
+                evData._event_name      = ev.name ?? ev.event_name ?? ev.title
+                    ?? evData.event?.name ?? evData.event?.event_name
+                    ?? evData.event?.series_title ?? null;
+                evData._rank            = evData.user?.rank ?? null;
+                evData._match_points    = evData.user?.match_point != null
+                    ? Number(evData.user.match_point) : null;
+                evData._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+                    ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+                    ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
+                    ?? evData.event?.organizer_name ?? evData.event?.organizer
+                    ?? evData.event?.organization_name ?? evData.event?.hosted_by
+                    ?? evData.event?.store_name ?? evData.event?.shop_name
+                    ?? evData.event?.venue_name ?? evData.event?.store?.name
+                    ?? evData.event?.organizer?.name ?? null;
+                evData._applicant_count = ev.joinedCount ?? ev.joined_count
+                    ?? ev.aplicantes ?? ev.aplicants
+                    ?? ev.entry_count ?? ev.applicant_count
+                    ?? ev.participant_count ?? ev.entries
+                    ?? evData.event?.joinedCount ?? evData.event?.joined_count
+                    ?? evData.event?.aplicantes ?? evData.event?.aplicants
+                    ?? evData.event?.entry_count ?? evData.event?.applicant_count
+                    ?? evData.event?.participant_count ?? null;
+                evData._capacity        = ev.capacity ?? ev.max_capacity
+                    ?? ev.max_entry_count
+                    ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
+                cache[String(ev.id)] = evData;
+            }
+            await sleep(300);
+        }
+        saveCache(user.bandaiId, cache);
+    }
+
+    return { newCount: newEvents.length, totalCount: events.length };
+}
+
+// Sync new events for every user with a token, then re-render the currently selected user.
+async function syncAllUsers() {
+    if (_usersWithToken.length === 0) return;
+
+    clearError();
+    document.getElementById('progress').style.display = 'block';
+    document.getElementById('fetchBtn').disabled  = true;
+    document.getElementById('syncAllBtn').disabled = true;
+
+    const results = []; // { name, newCount, totalCount, error }
+
+    try {
+        for (let u = 0; u < _usersWithToken.length; u++) {
+            const user = _usersWithToken[u];
+            const pctBase = Math.round((u / _usersWithToken.length) * 90);
+            const pctNext = Math.round(((u + 1) / _usersWithToken.length) * 90);
+            setProgress(`Syncing ${u + 1}/${_usersWithToken.length}: ${user.name}…`, pctBase);
+            try {
+                const { newCount, totalCount } = await fetchUserEvents(user, (text, pct) => {
+                    const scaled = pctBase + Math.round(pct / 100 * (pctNext - pctBase));
+                    setProgress(text, scaled);
+                });
+                results.push({ name: user.name, newCount, totalCount, error: null });
+            } catch (err) {
+                results.push({ name: user.name, newCount: 0, totalCount: 0, error: err.message });
+            }
+            updateCacheBar(_usersWithToken[parseInt(document.getElementById('userSelect').value || '0')]?.bandaiId);
+        }
+
+        setProgress('All users synced!', 100);
+        setTimeout(() => { document.getElementById('progress').style.display = 'none'; }, 800);
+
+        // Show a brief summary
+        const lines = results.map(r =>
+            r.error
+                ? `${r.name}: ❌ ${r.error}`
+                : `${r.name}: +${r.newCount} new (${r.totalCount} total)`
+        ).join('\n');
+        console.log('[Sync All]\n' + lines);
+
+        // Re-render the currently selected user if one is active
+        const selIdx = document.getElementById('userSelect').value;
+        if (selIdx !== '') {
+            const user = _usersWithToken[parseInt(selIdx)];
+            const cache = loadCache(user.bandaiId);
+            const allEventData = Object.values(cache).sort((a, b) =>
+                new Date(b._start_datetime) - new Date(a._start_datetime));
+            _allEventData = allEventData;
+            updateCacheBar(user.bandaiId);
+
+            let totalW = 0, totalL = 0;
+            for (const ev of allEventData) {
+                if (!ev?.rounds) continue;
+                for (const r of ev.rounds) { if (r.is_win) totalW++; else totalL++; }
+            }
+            const periodMap = {};
+            for (const p of SET_PERIODS) periodMap[p.name] = { w: 0, l: 0 };
+            for (const ev of allEventData) {
+                if (!ev?.rounds) continue;
+                const period = ev._start_datetime
+                    ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+                for (const r of ev.rounds) {
+                    if (r.is_win) periodMap[period].w++; else periodMap[period].l++;
+                }
+            }
+            const playerMap = {};
+            for (const ev of allEventData) {
+                if (!ev?.rounds) continue;
+                for (const r of ev.rounds) {
+                    const pid = r.opponent_users?.[0]?.membership_number;
+                    if (!pid) continue;
+                    if (!playerMap[pid]) playerMap[pid] = [0, 0];
+                    if (r.is_win) playerMap[pid][0]++; else playerMap[pid][1]++;
+                }
+            }
+            _playerResults = playerMap;
+
+            buildFilterChips(allEventData);
+            buildStoreFilter(allEventData);
+            buildCompareCard();
+            displayResults(user.name, totalW, totalL, periodMap, playerMap, allEventData);
+        }
+
+        // Show the tab nav and refresh rankings if visible
+        document.getElementById('tabNav').style.display = 'flex';
+        if (document.getElementById('rankingsTab').style.display !== 'none') buildGlobalRankings();
+
+        // Show summary in a status line under the buttons
+        const summaryEl = document.getElementById('syncAllSummary');
+        if (summaryEl) {
+            const newTotal = results.reduce((s, r) => s + r.newCount, 0);
+            const errCount = results.filter(r => r.error).length;
+            summaryEl.textContent = errCount
+                ? `Sync complete — ${newTotal} new events across ${results.length} users (${errCount} error${errCount>1?'s':''})`
+                : `Sync complete — ${newTotal} new event${newTotal !== 1 ? 's' : ''} across ${results.length} users`;
+            summaryEl.style.display = '';
+        }
+
+    } catch (err) {
+        showError(err.message);
+    } finally {
+        document.getElementById('fetchBtn').disabled  = false;
+        document.getElementById('syncAllBtn').disabled = _usersWithToken.length < 2;
+    }
+}
+
 async function fetchAndAnalyze() {
     const idx = document.getElementById('userSelect').value;
     if (idx === '') { showError('Please select a user.'); return; }
@@ -1303,102 +1503,17 @@ async function fetchAndAnalyze() {
     document.getElementById('progress').style.display = 'block';
     document.getElementById('results').style.display  = 'none';
     document.getElementById('fetchBtn').disabled = true;
+    document.getElementById('syncAllBtn').disabled = true;
 
     try {
-        // 1. Event list
+        // 1 & 2. Fetch + cache new events via shared helper
         setProgress(`Fetching event list for ${user.name}…`, 5);
-        const listUrl = 'https://api.bandai-tcg-plus.com/api/user/my/event'
-            + '?favorite=0&game_title_id=&limit=1000&offset=0&past_event_display_flg=1&selected_tab=3';
+        await fetchUserEvents(user, (text, pct) => setProgress(text, 5 + Math.round(pct / 100 * 90)));
 
-        const listResp = await fetch(listUrl, { headers: { 'X-Authentication': token } });
-        if (!listResp.ok) throw new Error(`Event list request failed (HTTP ${listResp.status})`);
-        const events = (await listResp.json()).success.events;
-
-        // 2. Load cache and figure out what needs fetching
-        const cache      = loadCache(user.bandaiId);
-        const newEvents  = events.filter(ev => !cache[String(ev.id)]);
-        const cachedCount = events.length - newEvents.length;
-
-        // Patch metadata from fresh event list into cached entries (safe update)
-        for (const ev of events) {
-            if (cache[String(ev.id)]) {
-                const entry = cache[String(ev.id)];
-                entry._start_datetime  = ev.start_datetime;
-                entry._event_name      = ev.name ?? ev.event_name ?? ev.title
-                    ?? entry.event?.series_title ?? null;
-                entry._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
-                    ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
-                    ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name ?? null;
-                // Try several possible field names the API might use for participant count
-                entry._applicant_count = ev.joinedCount ?? ev.joined_count
-                    ?? ev.aplicantes ?? ev.aplicants
-                    ?? ev.entry_count ?? ev.applicant_count
-                    ?? ev.participant_count ?? ev.entries ?? null;
-                entry._capacity        = ev.capacity ?? ev.max_capacity
-                    ?? ev.max_entry_count ?? null;
-                // Backfill rank/points for cached entries that predate this feature
-                if (entry._rank == null && entry.user?.rank != null)
-                    entry._rank = entry.user.rank;
-                if (entry._match_points == null && entry.user?.match_point != null)
-                    entry._match_points = Number(entry.user.match_point);
-            }
-        }
-
-        // 3. Fetch only new events
-        if (newEvents.length === 0) {
-            setProgress(`All ${cachedCount} events loaded from cache.`, 95);
-        } else {
-            for (let i = 0; i < newEvents.length; i++) {
-                const ev = newEvents[i];
-                setProgress(
-                    `Fetching ${i + 1} of ${newEvents.length} new events (${cachedCount} from cache)…`,
-                    5 + Math.round((i / newEvents.length) * 88)
-                );
-                const evResp = await fetch(
-                    `https://api.bandai-tcg-plus.com/api/user/event/${ev.id}/history`,
-                    { headers: { 'X-Authentication': token } }
-                );
-                if (evResp.ok) {
-                    const evData = (await evResp.json()).success;
-                    evData._start_datetime  = ev.start_datetime;
-                    evData._event_name      = ev.name ?? ev.event_name ?? ev.title
-                        ?? evData.event?.name ?? evData.event?.event_name
-                        ?? evData.event?.series_title ?? null;
-                    evData._rank            = evData.user?.rank ?? null;
-                    evData._match_points    = evData.user?.match_point != null
-                        ? Number(evData.user.match_point) : null;
-                    evData._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
-                        ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
-                        ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
-                        ?? evData.event?.organizer_name ?? evData.event?.organizer
-                        ?? evData.event?.organization_name ?? evData.event?.hosted_by
-                        ?? evData.event?.store_name ?? evData.event?.shop_name
-                        ?? evData.event?.venue_name ?? evData.event?.store?.name
-                        ?? evData.event?.organizer?.name ?? null;
-                    // Log the first new event's raw data to help identify field names
-                    if (i === 0) console.log('[Bandai] raw event list entry:', ev);
-                    if (i === 0) console.log('[Bandai] raw event history data:', evData);
-                    // Participant count: try event list fields first, then the nested event object
-                    evData._applicant_count = ev.joinedCount ?? ev.joined_count
-                        ?? ev.aplicantes ?? ev.aplicants
-                        ?? ev.entry_count ?? ev.applicant_count
-                        ?? ev.participant_count ?? ev.entries
-                        ?? evData.event?.joinedCount ?? evData.event?.joined_count
-                        ?? evData.event?.aplicantes ?? evData.event?.aplicants
-                        ?? evData.event?.entry_count ?? evData.event?.applicant_count
-                        ?? evData.event?.participant_count ?? null;
-                    evData._capacity        = ev.capacity ?? ev.max_capacity
-                        ?? ev.max_entry_count
-                        ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
-                    cache[String(ev.id)] = evData;
-                }
-                await sleep(300);
-            }
-            saveCache(user.bandaiId, cache);
-        }
-
-        // 4. Build full dataset from cache in event-list order
-        const allEventData = events.map(ev => cache[String(ev.id)]).filter(Boolean);
+        // 3. Build full dataset from cache in event-list order
+        const cache = loadCache(user.bandaiId);
+        const allEventData = Object.values(cache).sort(
+            (a, b) => new Date(b._start_datetime) - new Date(a._start_datetime));
         _allEventData     = allEventData;
         _selectedPlayerId = null;
         _selectedStore    = null;
@@ -1469,6 +1584,7 @@ Then open <code>analyzer.html</code> in that window.`;
         showError(msg);
     } finally {
         document.getElementById('fetchBtn').disabled = false;
+        document.getElementById('syncAllBtn').disabled = _usersWithToken.length < 2;
     }
 }
 
