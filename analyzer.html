@@ -399,13 +399,65 @@
         /* PDF toolbar */
         .pdf-toolbar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
 
+        /* ── Tab Navigation ─────────────────────────────────────────────── */
+        .tab-nav {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--border);
+        }
+        .tab-btn {
+            padding: 0.65rem 1.6rem;
+            border: none;
+            background: none;
+            font-family: 'Cinzel', serif;
+            font-size: 0.8rem;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: color 0.2s, border-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 700; }
+        .tab-btn:hover:not(.active) { color: var(--text); border-bottom-color: var(--border); }
+
+        /* ── Global Rankings ─────────────────────────────────────────────── */
+        .rank-medal { font-size: 1.1rem; }
+        .h2h-table { border-collapse: collapse; font-size: 0.82rem; width: 100%; }
+        .h2h-table th { background: linear-gradient(135deg, var(--primary), #3d5472); color: white;
+            padding: 0.5rem 0.75rem; text-align: center; font-family: 'Cinzel', serif;
+            font-size: 0.72rem; letter-spacing: 0.04em; white-space: nowrap; }
+        .h2h-table td { padding: 0.45rem 0.75rem; border: 1px solid var(--border); text-align: center; }
+        .h2h-table td.h2h-self { background: var(--border); color: var(--muted); }
+        .h2h-table td.h2h-win { background: rgba(40,167,69,0.12); color: var(--win); font-weight: 700; }
+        .h2h-table td.h2h-loss { background: rgba(220,53,69,0.1); color: var(--loss); font-weight: 700; }
+        .h2h-table td.h2h-label { text-align: left; font-weight: 600; padding-left: 0.9rem; white-space: nowrap; }
+        [data-theme="dark"] .h2h-table td.h2h-win  { background: rgba(76,187,110,0.15); }
+        [data-theme="dark"] .h2h-table td.h2h-loss { background: rgba(240,84,106,0.15); }
+        .standings-details { margin-bottom: 0.85rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .standings-details summary {
+            padding: 0.7rem 1rem; cursor: pointer; font-weight: 600;
+            font-size: 0.85rem; list-style: none; display: flex;
+            justify-content: space-between; align-items: center;
+            background: var(--bg); color: var(--text);
+        }
+        .standings-details summary::-webkit-details-marker { display: none; }
+        .standings-details[open] summary { border-bottom: 1px solid var(--border); }
+        .standings-details .standings-inner { padding: 0.75rem; }
+        .prog-toggle { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .prog-toggle .tab-btn { font-family: 'Inter', sans-serif; font-size: 0.8rem; letter-spacing: 0; padding: 0.4rem 1rem; }
+
         /* ── Print / PDF styles ─────────────────────────────────────────── */
         @media print {
             /* Hide UI chrome */
             header, #configCard, #progress, #errorBox, #filterCard,
             #inspectorCard, .pdf-toolbar, .cache-bar, .modal-overlay,
             .toggle-icon, .btn, #vsBanner, .player-search-wrap > input,
-            #playerAutocomplete { display: none !important; }
+            #playerAutocomplete, .tab-nav, #rankingsTab { display: none !important; }
 
             /* Show all card bodies, even collapsed ones */
             .card-body, .card-body.collapsed {
@@ -536,6 +588,12 @@
 
     <!-- Error -->
     <div id="errorBox" style="display:none;"></div>
+
+    <!-- Tab navigation (shown after first fetch) -->
+    <div class="tab-nav" id="tabNav" style="display:none">
+        <button class="tab-btn active" id="tabMyStats" onclick="switchTab('my-stats')">&#128202; My Stats</button>
+        <button class="tab-btn" id="tabRankings" onclick="switchTab('rankings')">&#127942; Global Rankings</button>
+    </div>
 
     <!-- Results -->
     <div id="results">
@@ -904,6 +962,80 @@
         </div>
 
     </div>
+
+    <!-- Global Rankings Tab -->
+    <div id="rankingsTab" style="display:none">
+
+        <!-- A: Overall Leaderboard -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('rankBoard')">
+                <h2><span class="section-icon">&#127942;</span> Overall Leaderboard</h2>
+                <span class="toggle-icon" id="rankBoard-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="rankBoard-body" style="max-height:9999px;">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Aggregated across all cached events for each tracked player.</p>
+                <div class="table-wrap">
+                    <table id="leaderboardTable">
+                        <thead><tr>
+                            <th onclick="sortTable('leaderboardTable',0)">#</th>
+                            <th onclick="sortTable('leaderboardTable',1)">Player</th>
+                            <th onclick="sortTable('leaderboardTable',2)">W</th>
+                            <th onclick="sortTable('leaderboardTable',3)">L</th>
+                            <th onclick="sortTable('leaderboardTable',4)">Win%</th>
+                            <th onclick="sortTable('leaderboardTable',5)">Tournaments</th>
+                            <th onclick="sortTable('leaderboardTable',6)">Avg Rank</th>
+                            <th onclick="sortTable('leaderboardTable',7)">Best Rank</th>
+                            <th onclick="sortTable('leaderboardTable',8)">Match Pts</th>
+                        </tr></thead>
+                        <tbody id="leaderboardBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- B: Per-Tournament Standings -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('rankStandings')">
+                <h2><span class="section-icon">&#128197;</span> Per-Tournament Standings</h2>
+                <span class="toggle-icon" id="rankStandings-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="rankStandings-body" style="max-height:9999px;">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Events where 2 or more tracked players participated. Click to expand.</p>
+                <div id="rankTournaments"></div>
+            </div>
+        </div>
+
+        <!-- C: Head-to-Head Matrix -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('rankH2H')">
+                <h2><span class="section-icon">&#9876;&#65039;</span> Head-to-Head Matrix</h2>
+                <span class="toggle-icon" id="rankH2H-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="rankH2H-body" style="max-height:9999px;">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Win / Loss record between each pair of tracked players. Read row vs column.</p>
+                <div class="table-wrap" id="rankH2H"></div>
+            </div>
+        </div>
+
+        <!-- D: Progression Over Time -->
+        <div class="card">
+            <div class="card-header" onclick="toggleCard('rankProg')">
+                <h2><span class="section-icon">&#128200;</span> Progression Over Time</h2>
+                <span class="toggle-icon" id="rankProg-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="rankProg-body" style="max-height:9999px;">
+                <div class="prog-toggle" id="progToggle">
+                    <button class="tab-btn active" id="progBtnPts" onclick="setProgMode('pts')">Match Points</button>
+                    <button class="tab-btn" id="progBtnRank" onclick="setProgMode('rank')">Final Rank</button>
+                </div>
+                <div class="chart-canvas-wrap tall">
+                    <canvas id="chartProgression"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
 </div>
 
 <!-- Opponent profile modal -->
@@ -1319,6 +1451,10 @@ async function fetchAndAnalyze() {
         buildStoreFilter(allEventData);
         buildCompareCard();
         displayResults(user.name, totalW, totalL, periodMap, playerMap, allEventData);
+
+        // Show tab nav; if user is already on the rankings tab, refresh it
+        document.getElementById('tabNav').style.display = 'flex';
+        if (document.getElementById('rankingsTab').style.display !== 'none') buildGlobalRankings();
 
     } catch (err) {
         document.getElementById('progress').style.display = 'none';
@@ -2896,6 +3032,8 @@ function applyTheme(dark) {
         const sel = document.getElementById('userSelect');
         if (sel && sel.value !== '') applyFilter();
     }
+    // Redraw rankings progression chart if visible
+    if (document.getElementById('rankingsTab')?.style.display !== 'none') buildGlobalRankings();
 }
 
 function toggleTheme() {
@@ -2911,6 +3049,302 @@ function toggleTheme() {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     applyTheme(saved ? saved === 'dark' : prefersDark);
 })();
+
+// ── Global Rankings ────────────────────────────────────────────────────────
+
+const PALETTE = [
+    '#048A81','#c9a84c','#e05252','#5b8dee','#9b59b6',
+    '#e67e22','#1abc9c','#e91e63','#3498db','#f39c12'
+];
+
+let _progMode = 'pts'; // 'pts' or 'rank'
+
+function switchTab(tab) {
+    document.getElementById('results').style.display     = tab === 'my-stats' ? '' : 'none';
+    document.getElementById('rankingsTab').style.display = tab === 'rankings' ? '' : 'none';
+    document.getElementById('tabMyStats').classList.toggle('active',  tab === 'my-stats');
+    document.getElementById('tabRankings').classList.toggle('active', tab === 'rankings');
+    if (tab === 'rankings') buildGlobalRankings();
+}
+
+function setProgMode(mode) {
+    _progMode = mode;
+    document.getElementById('progBtnPts').classList.toggle('active',  mode === 'pts');
+    document.getElementById('progBtnRank').classList.toggle('active', mode === 'rank');
+    const allUsers = _usersWithToken.map(u => ({
+        ...u, events: Object.values(loadCache(u.bandaiId) || {})
+    })).filter(u => u.events.length > 0);
+    if (allUsers.length > 0) renderProgression(allUsers);
+}
+
+function buildGlobalRankings() {
+    const allUsers = _usersWithToken.map(u => ({
+        ...u,
+        events: Object.values(loadCache(u.bandaiId) || {})
+    })).filter(u => u.events.length > 0);
+
+    if (allUsers.length === 0) {
+        ['leaderboardBody','rankTournaments','rankH2H'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<p style="color:var(--muted);padding:1rem 0;">No cached data found. Fetch at least one user first.</p>';
+        });
+        return;
+    }
+
+    renderLeaderboard(allUsers);
+    renderTournamentStandings(allUsers);
+    renderH2HMatrix(allUsers);
+    renderProgression(allUsers);
+}
+
+// ── A: Overall Leaderboard ──────────────────────────────────────────────────
+function renderLeaderboard(allUsers) {
+    const tbody = document.getElementById('leaderboardBody');
+    if (!tbody) return;
+
+    const rows = allUsers.map(u => {
+        let w = 0, l = 0, pts = 0, ranks = [];
+        for (const ev of u.events) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
+            if (ev._match_points != null) pts += ev._match_points;
+            if (ev._rank != null) ranks.push(ev._rank);
+        }
+        const total = w + l;
+        const pct   = total ? (w / total * 100) : 0;
+        const avgRank = ranks.length ? (ranks.reduce((a,b)=>a+b,0) / ranks.length) : null;
+        const bestRank = ranks.length ? Math.min(...ranks) : null;
+        return { name: u.name, w, l, total, pct, tournaments: u.events.length, avgRank, bestRank, pts };
+    }).sort((a, b) => b.pct - a.pct || b.total - a.total);
+
+    const medals = ['🥇','🥈','🥉'];
+    tbody.innerHTML = rows.map((r, i) => `
+        <tr>
+            <td class="td-num">${medals[i] ?? (i+1)}</td>
+            <td><strong>${r.name}</strong></td>
+            <td class="td-num" style="color:var(--win)">${r.w}</td>
+            <td class="td-num" style="color:var(--loss)">${r.l}</td>
+            <td class="td-pct" style="color:var(--accent)">${r.pct.toFixed(1)}%</td>
+            <td class="td-num">${r.tournaments}</td>
+            <td class="td-num">${r.avgRank != null ? r.avgRank.toFixed(1) : '—'}</td>
+            <td class="td-num">${r.bestRank != null ? '#' + r.bestRank : '—'}</td>
+            <td class="td-num">${r.pts}</td>
+        </tr>`).join('');
+}
+
+// ── B: Per-Tournament Standings ─────────────────────────────────────────────
+function renderTournamentStandings(allUsers) {
+    const container = document.getElementById('rankTournaments');
+    if (!container) return;
+
+    // Build map: eventId → entry
+    const evMap = {};
+    for (const u of allUsers) {
+        for (const ev of u.events) {
+            const id = ev.event?.id ?? ev.id ?? ev._event_id;
+            if (!id) continue;
+            if (!evMap[id]) {
+                evMap[id] = {
+                    name: ev._event_name ?? ev.event?.name ?? 'Unknown Event',
+                    date: ev._start_datetime ? ev._start_datetime.slice(0,10) : '',
+                    store: ev._store_name ?? '',
+                    players: []
+                };
+            }
+            let w = 0, l = 0;
+            if (ev.rounds) for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
+            evMap[id].players.push({
+                name: u.name,
+                rank: ev._rank,
+                pts:  ev._match_points ?? 0,
+                w, l
+            });
+        }
+    }
+
+    // Filter events with 2+ tracked players, sort by date desc
+    const sharedEvents = Object.values(evMap)
+        .filter(e => e.players.length >= 2)
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+    if (sharedEvents.length === 0) {
+        container.innerHTML = '<p style="color:var(--muted);padding:0.5rem 0;">No shared events found among tracked players yet.</p>';
+        return;
+    }
+
+    container.innerHTML = sharedEvents.map(ev => {
+        const sorted = [...ev.players].sort((a,b) => {
+            if (a.rank != null && b.rank != null) return a.rank - b.rank;
+            if (a.rank != null) return -1;
+            if (b.rank != null) return 1;
+            return b.pts - a.pts;
+        });
+        const rows = sorted.map((p, i) => `
+            <tr>
+                <td class="td-num">${p.rank != null ? '#'+p.rank : (i+1)}</td>
+                <td><strong>${p.name}</strong></td>
+                <td class="td-num" style="color:var(--win)">${p.w}</td>
+                <td class="td-num" style="color:var(--loss)">${p.l}</td>
+                <td class="td-num" style="color:var(--accent)">${p.pts}</td>
+            </tr>`).join('');
+        const label = [ev.date, ev.name, ev.store].filter(Boolean).join(' · ');
+        return `<details class="standings-details">
+            <summary>${label} <span style="color:var(--muted);font-weight:400;font-size:0.78rem;">${ev.players.length} players ▾</span></summary>
+            <div class="standings-inner">
+                <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+                    <thead><tr>
+                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">#</th>
+                        <th style="text-align:left;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">Player</th>
+                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">W</th>
+                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">L</th>
+                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">Pts</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </details>`;
+    }).join('');
+}
+
+// ── C: Head-to-Head Matrix ──────────────────────────────────────────────────
+function renderH2HMatrix(allUsers) {
+    const container = document.getElementById('rankH2H');
+    if (!container) return;
+    if (allUsers.length < 2) {
+        container.innerHTML = '<p style="color:var(--muted);">Need at least 2 players with cached data.</p>';
+        return;
+    }
+
+    // Build bandaiId → index map
+    const idxMap = {};
+    allUsers.forEach((u, i) => { idxMap[u.bandaiId] = i; });
+
+    // matrix[i][j] = { w: wins by i against j, l: losses by i against j }
+    const n = allUsers.length;
+    const matrix = Array.from({length: n}, () => Array.from({length: n}, () => ({w:0,l:0})));
+
+    for (let i = 0; i < n; i++) {
+        const u = allUsers[i];
+        for (const ev of u.events) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) {
+                const oppId = r.opponent_users?.[0]?.membership_number;
+                if (!oppId || !(oppId in idxMap)) continue;
+                const j = idxMap[oppId];
+                if (i === j) continue;
+                if (r.is_win) matrix[i][j].w++; else matrix[i][j].l++;
+            }
+        }
+    }
+
+    // Render table
+    const headerCells = allUsers.map(u =>
+        `<th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;white-space:nowrap;">${u.name}</th>`
+    ).join('');
+
+    const bodyRows = allUsers.map((u, i) => {
+        const cells = allUsers.map((_, j) => {
+            if (i === j) return `<td class="h2h-self">—</td>`;
+            const {w, l} = matrix[i][j];
+            if (w === 0 && l === 0) return `<td style="color:var(--muted);text-align:center;">-</td>`;
+            const cls = w > l ? 'h2h-win' : (l > w ? 'h2h-loss' : '');
+            return `<td class="${cls}">${w}–${l}</td>`;
+        }).join('');
+        return `<tr><td class="h2h-label">${u.name}</td>${cells}</tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <table class="h2h-table">
+            <thead><tr>
+                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;">vs ↓</th>
+                ${headerCells}
+            </tr></thead>
+            <tbody>${bodyRows}</tbody>
+        </table>`;
+}
+
+// ── D: Progression Over Time ────────────────────────────────────────────────
+function renderProgression(allUsers) {
+    destroyChart('progression');
+    const canvas = document.getElementById('chartProgression');
+    if (!canvas) return;
+
+    // Collect all unique dates across all users, sorted
+    const allDates = [...new Set(
+        allUsers.flatMap(u => u.events
+            .filter(ev => ev._start_datetime)
+            .map(ev => ev._start_datetime.slice(0,10))
+        )
+    )].sort();
+
+    if (allDates.length === 0) return;
+
+    const mode = _progMode; // 'pts' or 'rank'
+
+    const datasets = allUsers.map((u, i) => {
+        // For each date in allDates, find this user's value (or null)
+        const byDate = {};
+        for (const ev of u.events) {
+            if (!ev._start_datetime) continue;
+            const d = ev._start_datetime.slice(0,10);
+            const val = mode === 'pts' ? ev._match_points : ev._rank;
+            if (val != null) {
+                // If same date has multiple events, keep the one with higher pts / better rank
+                if (!(d in byDate)) byDate[d] = val;
+                else byDate[d] = mode === 'pts' ? Math.max(byDate[d], val) : Math.min(byDate[d], val);
+            }
+        }
+        const data = allDates.map(d => byDate[d] ?? null);
+        const color = PALETTE[i % PALETTE.length];
+        return {
+            label: u.name,
+            data,
+            borderColor: color,
+            backgroundColor: color + '22',
+            pointBackgroundColor: color,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            tension: 0.3,
+            spanGaps: true,
+        };
+    });
+
+    const yLabel = mode === 'pts' ? 'Match Points' : 'Final Rank';
+    const yReverse = mode === 'rank'; // rank 1 is best so invert axis
+
+    _charts['progression'] = new Chart(canvas, {
+        type: 'line',
+        data: { labels: allDates, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(), maxRotation: 45 },
+                    grid:  { color: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() }
+                },
+                y: {
+                    reverse: yReverse,
+                    title: { display: true, text: yLabel, color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() },
+                    ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() },
+                    grid:  { color: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(), font: { size: 12 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const v = ctx.parsed.y;
+                            if (v == null) return null;
+                            return `${ctx.dataset.label}: ${mode === 'rank' ? '#'+v : v+' pts'}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
 
 // ── PDF export ─────────────────────────────────────────────────────────────
 
