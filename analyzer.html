@@ -449,6 +449,33 @@
         .standings-details[open] summary { border-bottom: 1px solid var(--border); }
         .standings-details .standings-inner { padding: 0.75rem; }
 
+        /* ── Podium sort bar ────────────────────────────────────────────── */
+        .podium-sort-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+        .podium-sort-btn {
+            padding: 0.3rem 0.85rem;
+            border: 1.5px solid var(--border);
+            border-radius: 999px;
+            background: none;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.18s;
+            letter-spacing: 0.02em;
+        }
+        .podium-sort-btn:hover { border-color: var(--gold); color: var(--text); }
+        .podium-sort-btn.active {
+            background: linear-gradient(135deg, var(--gold), var(--gold-lt));
+            border-color: var(--gold);
+            color: #1a1a2e;
+        }
+
         /* ── Podium ─────────────────────────────────────────────────────── */
         .podium-stage {
             display: flex;
@@ -1123,7 +1150,14 @@
                 <span class="toggle-icon" id="rankBoard-icon">&#9660;</span>
             </div>
             <div class="card-body" id="rankBoard-body" style="max-height:9999px;">
-                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1.25rem;">Aggregated across all cached events for each tracked player.</p>
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Aggregated across all cached events for each tracked player.</p>
+                <div class="podium-sort-bar" id="podiumSortBar">
+                    <span style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-right:0.4rem;">Rank by:</span>
+                    <button class="podium-sort-btn active" data-sort="pct"     onclick="setPodiumSort('pct')">Win %</button>
+                    <button class="podium-sort-btn"         data-sort="wins"   onclick="setPodiumSort('wins')">Wins</button>
+                    <button class="podium-sort-btn"         data-sort="pts"    onclick="setPodiumSort('pts')">Match Pts</button>
+                    <button class="podium-sort-btn"         data-sort="avgRank" onclick="setPodiumSort('avgRank')">Avg Rank</button>
+                </div>
                 <div id="podium" style="margin-bottom:2rem;"></div>
                 <div class="table-wrap">
                     <table id="leaderboardTable">
@@ -3475,7 +3509,19 @@ function buildGlobalRankings() {
 }
 
 // ── A: Overall Leaderboard ──────────────────────────────────────────────────
+let _podiumSort = 'pct'; // 'pct' | 'wins' | 'pts' | 'avgRank'
+let _lastLeaderboardUsers = null; // cached so sort buttons can re-render without re-aggregating
+
+function setPodiumSort(mode) {
+    _podiumSort = mode;
+    document.querySelectorAll('.podium-sort-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.sort === mode);
+    });
+    if (_lastLeaderboardUsers) renderLeaderboard(_lastLeaderboardUsers);
+}
+
 function renderLeaderboard(allUsers) {
+    _lastLeaderboardUsers = allUsers;
     const tbody  = document.getElementById('leaderboardBody');
     const podium = document.getElementById('podium');
     if (!tbody) return;
@@ -3499,7 +3545,22 @@ function renderLeaderboard(allUsers) {
         const avgRank  = ranks.length ? (ranks.reduce((a,b)=>a+b,0) / ranks.length) : null;
         const bestRank = ranks.length ? Math.min(...ranks) : null;
         return { name: u.name, w, l, total, pct, tournaments: u.events.length, avgRank, bestRank, pts };
-    }).sort((a, b) => b.pct - a.pct || b.total - a.total);
+    });
+
+    // Sort by the active criterion
+    const sorters = {
+        pct:     (a, b) => b.pct - a.pct || b.total - a.total,
+        wins:    (a, b) => b.w - a.w || b.pct - a.pct,
+        pts:     (a, b) => b.pts - a.pts || b.pct - a.pct,
+        avgRank: (a, b) => {
+            // lower avg rank number = better; nulls go last
+            if (a.avgRank == null && b.avgRank == null) return 0;
+            if (a.avgRank == null) return 1;
+            if (b.avgRank == null) return -1;
+            return a.avgRank - b.avgRank;
+        },
+    };
+    rows.sort(sorters[_podiumSort] ?? sorters.pct);
 
     // ── Podium graphic (top 5) ──────────────────────────────────────────────
     if (podium) {
@@ -3514,6 +3575,16 @@ function renderLeaderboard(allUsers) {
 
             const initials = name => name.trim().split(/\s+/).map(w => w[0].toUpperCase()).slice(0,2).join('');
 
+            // Primary stat shown in large text — matches the active sort
+            const primaryStat = p => {
+                switch (_podiumSort) {
+                    case 'wins':    return `${p.w}W`;
+                    case 'pts':     return `${p.pts} pts`;
+                    case 'avgRank': return p.avgRank != null ? `#${p.avgRank.toFixed(1)}` : '—';
+                    default:        return `${p.pct.toFixed(1)}%`;
+                }
+            };
+
             const slots = displayOrder.map(i => {
                 const p   = top[i];
                 const pos = i + 1; // 1-based rank
@@ -3524,8 +3595,8 @@ function renderLeaderboard(allUsers) {
                         ${medals[i] ? `<span class="podium-medal">${medals[i]}</span>` : ''}
                     </div>
                     <div class="podium-name" title="${p.name}">${p.name}</div>
-                    <div class="podium-pct">${p.pct.toFixed(1)}%</div>
-                    <div class="podium-sub">${p.w}W · ${p.l}L<br>${p.tournaments} event${p.tournaments !== 1 ? 's' : ''}</div>
+                    <div class="podium-pct">${primaryStat(p)}</div>
+                    <div class="podium-sub">${p.w}W · ${p.l}L · ${p.pct.toFixed(1)}%<br>${p.tournaments} event${p.tournaments !== 1 ? 's' : ''}</div>
                     <div class="podium-bar">#${pos}</div>
                 </div>`;
             }).join('');
