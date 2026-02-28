@@ -1176,17 +1176,6 @@
             </div>
         </div>
 
-        <!-- B: Per-Tournament Standings -->
-        <div class="card">
-            <div class="card-header" onclick="toggleCard('rankStandings')">
-                <h2><span class="section-icon">&#128197;</span> Per-Tournament Standings</h2>
-                <span class="toggle-icon" id="rankStandings-icon">&#9660;</span>
-            </div>
-            <div class="card-body" id="rankStandings-body" style="max-height:9999px;">
-                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Events where 2 or more tracked players participated. Click to expand.</p>
-                <div id="rankTournaments"></div>
-            </div>
-        </div>
 
         <!-- C: Head-to-Head Matrix -->
         <div class="card">
@@ -3471,7 +3460,6 @@ function applyRankingsFilter() {
 
     _updateRankFilterSummary(allUsers, filteredUsers);
     renderLeaderboard(filteredUsers);
-    renderTournamentStandings(filteredUsers);
     renderH2HMatrix(filteredUsers);
 }
 
@@ -3482,7 +3470,7 @@ function buildGlobalRankings() {
     })).filter(u => u.events.length > 0);
 
     if (allUsers.length === 0) {
-        ['leaderboardBody','rankTournaments','rankH2H'].forEach(id => {
+        ['leaderboardBody','rankH2H'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<p style="color:var(--muted);padding:1rem 0;">No cached data found. Fetch at least one user first.</p>';
         });
@@ -3613,81 +3601,7 @@ function renderLeaderboard(allUsers) {
         </tr>`).join('');
 }
 
-// ── B: Per-Tournament Standings ─────────────────────────────────────────────
-function renderTournamentStandings(allUsers) {
-    const container = document.getElementById('rankTournaments');
-    if (!container) return;
-
-    // Build map: eventId → entry
-    const evMap = {};
-    for (const u of allUsers) {
-        for (const ev of u.events) {
-            const id = ev.event?.id ?? ev.id ?? ev._event_id;
-            if (!id) continue;
-            if (!evMap[id]) {
-                evMap[id] = {
-                    name: ev._event_name ?? ev.event?.name ?? 'Unknown Event',
-                    date: ev._start_datetime ? ev._start_datetime.slice(0,10) : '',
-                    store: ev._store_name ?? '',
-                    players: []
-                };
-            }
-            let w = 0, l = 0;
-            if (ev.rounds) for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
-            evMap[id].players.push({
-                name: u.name,
-                rank: ev._rank ?? ev.user?.rank ?? null,
-                pts:  ev._match_points ?? (ev.user?.match_point != null ? Number(ev.user.match_point) : 0),
-                w, l
-            });
-        }
-    }
-
-    // Filter events with 2+ tracked players, sort by date desc
-    const sharedEvents = Object.values(evMap)
-        .filter(e => e.players.length >= 2)
-        .sort((a, b) => b.date.localeCompare(a.date));
-
-    if (sharedEvents.length === 0) {
-        container.innerHTML = '<p style="color:var(--muted);padding:0.5rem 0;">No shared events found among tracked players yet.</p>';
-        return;
-    }
-
-    container.innerHTML = sharedEvents.map(ev => {
-        const sorted = [...ev.players].sort((a,b) => {
-            if (a.rank != null && b.rank != null) return a.rank - b.rank;
-            if (a.rank != null) return -1;
-            if (b.rank != null) return 1;
-            return b.pts - a.pts;
-        });
-        const rows = sorted.map((p, i) => `
-            <tr>
-                <td class="td-num">${p.rank != null ? '#'+p.rank : (i+1)}</td>
-                <td><strong>${p.name}</strong></td>
-                <td class="td-num" style="color:var(--win)">${p.w}</td>
-                <td class="td-num" style="color:var(--loss)">${p.l}</td>
-                <td class="td-num" style="color:var(--accent)">${p.pts}</td>
-            </tr>`).join('');
-        const label = [ev.date, ev.name, ev.store].filter(Boolean).join(' · ');
-        return `<details class="standings-details">
-            <summary>${label} <span style="color:var(--muted);font-weight:400;font-size:0.78rem;">${ev.players.length} players ▾</span></summary>
-            <div class="standings-inner">
-                <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
-                    <thead><tr>
-                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">#</th>
-                        <th style="text-align:left;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">Player</th>
-                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">W</th>
-                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">L</th>
-                        <th style="text-align:center;padding:0.4rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.72rem;">Pts</th>
-                    </tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-        </details>`;
-    }).join('');
-}
-
-// ── C: Head-to-Head Matrix ──────────────────────────────────────────────────
+// ── B: Head-to-Head Matrix ──────────────────────────────────────────────────
 function renderH2HMatrix(allUsers) {
     const container = document.getElementById('rankH2H');
     if (!container) return;
