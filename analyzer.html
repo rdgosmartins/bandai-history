@@ -650,13 +650,6 @@
         .heatmap-dot.none { background: var(--border); opacity: 0.4; }
         .heatmap-pct-row td { font-weight: 700; font-size: 0.72rem; background: var(--bg); border-top: 2px solid var(--border); }
 
-        /* Rivalry lead badge */
-        .rivalry-lead-badge {
-            display: inline-block; font-size: 0.72rem; font-weight: 700;
-            border-radius: 999px; padding: 0.15rem 0.6rem;
-            background: var(--win); color: white; margin-left: 0.5rem;
-        }
-        .rivalry-lead-badge.tied { background: var(--muted); }
 
     </style>
 </head>
@@ -1319,17 +1312,6 @@
             </div>
         </div>
 
-        <!-- E: Top Rivalries -->
-        <div class="card" id="rivalriesCard" style="display:none">
-            <div class="card-header" onclick="toggleCard('rivalries')">
-                <h2><span class="section-icon">&#9876;&#65039;</span> Top Rivalries</h2>
-                <span class="toggle-icon" id="rivalries-icon">&#9660;</span>
-            </div>
-            <div class="card-body" id="rivalries-body" style="max-height:9999px;">
-                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Pairs of tracked players with the most matches against each other.</p>
-                <div id="rivalriesList"></div>
-            </div>
-        </div>
 
     </div>
 
@@ -3914,7 +3896,6 @@ function applyRankingsFilter() {
     renderLeaderboard(filteredUsers);
     renderH2HMatrix(filteredUsers);
     renderCommunityOpponents(filteredUsers);
-    renderRivalries(filteredUsers);
 }
 
 function buildGlobalRankings() {
@@ -4150,63 +4131,6 @@ function renderCommunityOpponents(allUsers) {
             <td class="td-num">${data.players.size}</td>`;
         tbody.appendChild(tr);
     }
-}
-
-// ── E: Rivalries ────────────────────────────────────────────────────────────
-function renderRivalries(allUsers) {
-    const card = document.getElementById('rivalriesCard');
-    if (!card || allUsers.length < 2) { if (card) card.style.display = 'none'; return; }
-
-    const idSet = new Set(allUsers.map(u => u.bandaiId));
-    const pairs = {};
-
-    for (const u of allUsers) {
-        for (const ev of u.events) {
-            if (!ev?.rounds) continue;
-            for (const r of ev.rounds) {
-                const oppId = r.opponent_users?.[0]?.membership_number;
-                if (!oppId || !idSet.has(oppId) || oppId === u.bandaiId) continue;
-                const [idA, idB] = [u.bandaiId, oppId].sort();
-                const key = `${idA}:${idB}`;
-                if (!pairs[key]) {
-                    pairs[key] = {
-                        idA, idB,
-                        nameA: _usernameMap[idA] || allUsers.find(x => x.bandaiId === idA)?.name || idA,
-                        nameB: _usernameMap[idB] || allUsers.find(x => x.bandaiId === idB)?.name || idB,
-                        wA: 0, wB: 0
-                    };
-                }
-                if (u.bandaiId === idA) { if (r.is_win) pairs[key].wA++; else pairs[key].wB++; }
-                else                    { if (r.is_win) pairs[key].wB++; else pairs[key].wA++; }
-            }
-        }
-    }
-
-    const rivals = Object.values(pairs)
-        .filter(p => p.wA + p.wB >= 1)
-        .sort((a, b) => (b.wA + b.wB) - (a.wA + a.wB))
-        .slice(0, 10);
-
-    if (rivals.length === 0) { card.style.display = 'none'; return; }
-    card.style.display = 'block';
-
-    document.getElementById('rivalriesList').innerHTML = rivals.map(p => {
-        const total = p.wA + p.wB;
-        let leadLabel, leadClass;
-        if      (p.wA > p.wB) { leadLabel = `${p.nameA} leads`; leadClass = ''; }
-        else if (p.wB > p.wA) { leadLabel = `${p.nameB} leads`; leadClass = ''; }
-        else                   { leadLabel = 'Tied';             leadClass = 'tied'; }
-        return `<div style="margin-bottom:0.75rem;">
-            <div class="rivalry-card" style="border-left:4px solid var(--gold);cursor:default;">
-                <div class="rivalry-label" style="color:var(--gold)">Rivalry &middot; ${total} match${total !== 1 ? 'es' : ''}</div>
-                <div class="rivalry-name">${p.nameA} <span style="color:var(--muted);font-size:0.85rem;">vs</span> ${p.nameB}</div>
-                <div class="rivalry-record">
-                    <strong>${p.wA}W</strong> &ndash; <strong>${p.wB}W</strong>
-                    <span class="rivalry-lead-badge ${leadClass}">${leadLabel}</span>
-                </div>
-            </div>
-        </div>`;
-    }).join('');
 }
 
 // ── PDF export ─────────────────────────────────────────────────────────────
