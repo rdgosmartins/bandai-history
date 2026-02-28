@@ -2217,6 +2217,8 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
                 ?? ev.event?.countApplicants ?? ev.event?.numberOfPeople
                 ?? ev.event?.entry_count ?? ev.event?.applicant_count
                 ?? ev.event?.participant_count ?? null;
+            // Debug: log full event object when applicant count is still missing
+            if (appCount == null) console.log('[Bandai] applicant count missing — full event cache object:', JSON.parse(JSON.stringify(ev)));
             const capCount  = ev._capacity ?? ev.event?.capacity ?? null;
             const appStr    = appCount !== null
                 ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
