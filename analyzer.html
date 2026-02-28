@@ -639,6 +639,20 @@
             /* Placement tier bars — disable transition so bars render at full width */
             .tier-bar { transition: none !important; }
             .tier-bar-wrap { overflow: visible !important; }
+
+            /* Heatmap — remove scroll container so all rows print */
+            #heatmapGrid {
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            /* Force background colors on heatmap dots */
+            .heatmap-dot {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .heatmap-dot.win  { background: #28a745 !important; }
+            .heatmap-dot.loss { background: #dc3545 !important; }
+            .heatmap-dot.none { background: #dee2e6 !important; opacity: 0.4 !important; }
         }
 
         /* Elite Four */
