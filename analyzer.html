@@ -938,7 +938,6 @@
                             <th onclick="sortTable('tourneyTable',4)">Games</th>
                             <th onclick="sortTable('tourneyTable',5)">Points</th>
                             <th onclick="sortTable('tourneyTable',6)">Rank</th>
-                            <th onclick="sortTable('tourneyTable',7)">Applicants</th>
                         </tr></thead>
                         <tbody id="tourneyBody"></tbody>
                     </table>
@@ -1019,7 +1018,6 @@
                             <th onclick="sortTable('regionalsTable',0)">Date</th>
                             <th onclick="sortTable('regionalsTable',1)">Event</th>
                             <th onclick="sortTable('regionalsTable',2)">Result</th>
-                            <th onclick="sortTable('regionalsTable',3)">Applicants</th>
                         </tr></thead>
                         <tbody id="regionalsBody"></tbody>
                     </table>
@@ -2212,17 +2210,6 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
                 ?? ev.event?.store_name ?? ev.event?.shop_name ?? null;
             const storeStr  = storeName ?? '—';
             const evName    = ev._event_name ?? ev.event?.series_title ?? ev.event?.name ?? '—';
-            const appCount  = ev._applicant_count
-                ?? ev.event?.joinedCount ?? ev.event?.joined_count
-                ?? ev.event?.countApplicants ?? ev.event?.numberOfPeople
-                ?? ev.event?.entry_count ?? ev.event?.applicant_count
-                ?? ev.event?.participant_count ?? null;
-            // Debug: log full event object when applicant count is still missing
-            if (appCount == null) console.log('[Bandai] applicant count missing — full event cache object:', JSON.parse(JSON.stringify(ev)));
-            const capCount  = ev._capacity ?? ev.event?.capacity ?? null;
-            const appStr    = appCount !== null
-                ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
-                : '—';
             const rankStr   = ev._rank   != null ? `#${ev._rank}`   : '—';
             const ptsStr    = ev._match_points != null ? ev._match_points : '—';
             const resultColor = evW > evL ? 'var(--win)' : evW < evL ? 'var(--loss)' : 'var(--muted)';
@@ -2234,8 +2221,7 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
                 <td class="td-num" style="color:${resultColor};font-weight:600">${evW}-${evL}</td>
                 <td class="td-num">${evGW}-${evGL}</td>
                 <td class="td-num">${ptsStr}</td>
-                <td class="td-num">${rankStr}</td>
-                <td class="td-num">${appStr}</td>`;
+                <td class="td-num">${rankStr}</td>`;
             tourneyBody.appendChild(tr);
         }
 
@@ -3066,25 +3052,18 @@ function displayRegionals(eventData) {
     for (const reg of REGIONALS) {
         const ev = byDate[reg.date];
         let resultStr = '—';
-        let appStr    = '—';
 
         if (ev?.rounds) {
             let evW = 0, evL = 0;
             for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
             resultStr = `${evW}-${evL}`;
-            const appCount = ev._applicant_count ?? null;
-            const capCount = ev._capacity ?? null;
-            appStr = appCount !== null
-                ? (capCount !== null ? `${appCount} / ${capCount}` : String(appCount))
-                : '—';
         }
 
         const tr = document.createElement('tr');
         if (!ev?.rounds) tr.style.opacity = '0.5'; // not yet attended
         tr.innerHTML = `<td>${fmtDate(reg.date)}</td>
             <td>${reg.name}</td>
-            <td class="td-num">${resultStr}</td>
-            <td class="td-num">${appStr}</td>`;
+            <td class="td-num">${resultStr}</td>`;
         body.appendChild(tr);
     }
 
