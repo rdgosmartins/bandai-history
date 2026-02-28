@@ -448,8 +448,6 @@
         .standings-details summary::-webkit-details-marker { display: none; }
         .standings-details[open] summary { border-bottom: 1px solid var(--border); }
         .standings-details .standings-inner { padding: 0.75rem; }
-        .prog-toggle { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-        .prog-toggle .tab-btn { font-family: 'Inter', sans-serif; font-size: 0.8rem; letter-spacing: 0; padding: 0.4rem 1rem; }
 
         /* ── Podium ─────────────────────────────────────────────────────── */
         .podium-stage {
@@ -1167,23 +1165,6 @@
             <div class="card-body" id="rankH2H-body" style="max-height:9999px;">
                 <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Win / Loss record between each pair of tracked players. Read row vs column.</p>
                 <div class="table-wrap" id="rankH2H"></div>
-            </div>
-        </div>
-
-        <!-- D: Progression Over Time -->
-        <div class="card">
-            <div class="card-header" onclick="toggleCard('rankProg')">
-                <h2><span class="section-icon">&#128200;</span> Progression Over Time</h2>
-                <span class="toggle-icon" id="rankProg-icon">&#9660;</span>
-            </div>
-            <div class="card-body" id="rankProg-body" style="max-height:9999px;">
-                <div class="prog-toggle" id="progToggle">
-                    <button class="tab-btn active" id="progBtnPts" onclick="setProgMode('pts')">Match Points</button>
-                    <button class="tab-btn" id="progBtnRank" onclick="setProgMode('rank')">Final Rank</button>
-                </div>
-                <div class="chart-canvas-wrap tall">
-                    <canvas id="chartProgression"></canvas>
-                </div>
             </div>
         </div>
 
@@ -3320,7 +3301,6 @@ const PALETTE = [
     '#e67e22','#1abc9c','#e91e63','#3498db','#f39c12'
 ];
 
-let _progMode = 'pts'; // 'pts' or 'rank'
 
 function switchTab(tab) {
     document.getElementById('results').style.display     = tab === 'my-stats' ? '' : 'none';
@@ -3330,15 +3310,6 @@ function switchTab(tab) {
     if (tab === 'rankings') buildGlobalRankings();
 }
 
-function setProgMode(mode) {
-    _progMode = mode;
-    document.getElementById('progBtnPts').classList.toggle('active',  mode === 'pts');
-    document.getElementById('progBtnRank').classList.toggle('active', mode === 'rank');
-    const allUsers = _usersWithToken.map(u => ({
-        ...u, events: Object.values(loadCache(u.bandaiId) || {})
-    })).filter(u => u.events.length > 0);
-    if (allUsers.length > 0) renderProgression(allUsers);
-}
 
 // ── Rankings filter state ───────────────────────────────────────────────────
 let _rankStore = null; // selected store name or null
@@ -3478,7 +3449,6 @@ function applyRankingsFilter() {
     renderLeaderboard(filteredUsers);
     renderTournamentStandings(filteredUsers);
     renderH2HMatrix(filteredUsers);
-    renderProgression(filteredUsers);
 }
 
 function buildGlobalRankings() {
@@ -3711,91 +3681,6 @@ function renderH2HMatrix(allUsers) {
             </tr></thead>
             <tbody>${bodyRows}</tbody>
         </table>`;
-}
-
-// ── D: Progression Over Time ────────────────────────────────────────────────
-function renderProgression(allUsers) {
-    destroyChart('progression');
-    const canvas = document.getElementById('chartProgression');
-    if (!canvas) return;
-
-    // Collect all unique dates across all users, sorted
-    const allDates = [...new Set(
-        allUsers.flatMap(u => u.events
-            .filter(ev => ev._start_datetime)
-            .map(ev => ev._start_datetime.slice(0,10))
-        )
-    )].sort();
-
-    if (allDates.length === 0) return;
-
-    const mode = _progMode; // 'pts' or 'rank'
-
-    const datasets = allUsers.map((u, i) => {
-        // For each date in allDates, find this user's value (or null)
-        const byDate = {};
-        for (const ev of u.events) {
-            if (!ev._start_datetime) continue;
-            const d = ev._start_datetime.slice(0,10);
-            const val = mode === 'pts'
-                ? (ev._match_points ?? (ev.user?.match_point != null ? Number(ev.user.match_point) : null))
-                : (ev._rank ?? ev.user?.rank ?? null);
-            if (val != null) {
-                // If same date has multiple events, keep the one with higher pts / better rank
-                if (!(d in byDate)) byDate[d] = val;
-                else byDate[d] = mode === 'pts' ? Math.max(byDate[d], val) : Math.min(byDate[d], val);
-            }
-        }
-        const data = allDates.map(d => byDate[d] ?? null);
-        const color = PALETTE[i % PALETTE.length];
-        return {
-            label: u.name,
-            data,
-            borderColor: color,
-            backgroundColor: color + '22',
-            pointBackgroundColor: color,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            tension: 0.3,
-            spanGaps: true,
-        };
-    });
-
-    const yLabel = mode === 'pts' ? 'Match Points' : 'Final Rank';
-    const yReverse = mode === 'rank'; // rank 1 is best so invert axis
-
-    _charts['progression'] = new Chart(canvas, {
-        type: 'line',
-        data: { labels: allDates, datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(), maxRotation: 45 },
-                    grid:  { color: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() }
-                },
-                y: {
-                    reverse: yReverse,
-                    title: { display: true, text: yLabel, color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() },
-                    ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() },
-                    grid:  { color: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() }
-                }
-            },
-            plugins: {
-                legend: { labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(), font: { size: 12 } } },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            const v = ctx.parsed.y;
-                            if (v == null) return null;
-                            return `${ctx.dataset.label}: ${mode === 'rank' ? '#'+v : v+' pts'}`;
-                        }
-                    }
-                }
-            }
-        }
-    });
 }
 
 // ── PDF export ─────────────────────────────────────────────────────────────
