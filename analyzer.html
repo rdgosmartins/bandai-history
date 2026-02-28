@@ -636,6 +636,28 @@
             .tier-bar-wrap { overflow: visible !important; }
         }
 
+        /* Round-by-round heatmap */
+        .heatmap-table { border-collapse: collapse; font-size: 0.75rem; }
+        .heatmap-table th {
+            background: linear-gradient(135deg, var(--primary), #3d5472);
+            color: white; padding: 0.3rem 0.5rem;
+            font-family: 'Cinzel', serif; font-size: 0.68rem; text-align: center;
+        }
+        .heatmap-table td { padding: 0.25rem 0.35rem; border: 1px solid var(--border); text-align: center; }
+        .heatmap-dot { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+        .heatmap-dot.win  { background: var(--win); }
+        .heatmap-dot.loss { background: var(--loss); }
+        .heatmap-dot.none { background: var(--border); opacity: 0.4; }
+        .heatmap-pct-row td { font-weight: 700; font-size: 0.72rem; background: var(--bg); border-top: 2px solid var(--border); }
+
+        /* Rivalry lead badge */
+        .rivalry-lead-badge {
+            display: inline-block; font-size: 0.72rem; font-weight: 700;
+            border-radius: 999px; padding: 0.15rem 0.6rem;
+            background: var(--win); color: white; margin-left: 0.5rem;
+        }
+        .rivalry-lead-badge.tied { background: var(--muted); }
+
     </style>
 </head>
 <body>
@@ -740,6 +762,7 @@
 
         <div class="pdf-toolbar">
             <button class="btn btn-outline" onclick="exportPDF()">&#128438; Export PDF</button>
+            <button class="btn btn-outline" onclick="exportCSV()" style="margin-left:0.5rem;">&#128196; Export CSV</button>
             <button class="btn btn-outline" onclick="toggleInspector()" id="inspectorBtn" style="margin-left:0.5rem;">&#128269; Inspect API Fields</button>
         </div>
 
@@ -818,6 +841,8 @@
             </div>
             <div class="card-body" id="overall-body" style="max-height: 9999px;">
                 <div class="stat-grid" id="overallStats"></div>
+                <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:1.1rem 0 0.4rem;">Game &amp; Clutch Stats</div>
+                <div class="stat-grid" id="gameStats"></div>
                 <div id="streakStats"></div>
                 <div id="bogeymanStats"></div>
                 <div id="placementsInline" style="display:none; margin-top:1.5rem;">
@@ -996,6 +1021,90 @@
                     <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:600;margin-bottom:0.75rem;">Most Faced Opponent per Round</h3>
                     <div id="roundOppGrid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Round-by-Round Heatmap -->
+        <div class="card" id="heatmapCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('heatmap')">
+                <h2><span class="section-icon">&#128200;</span> Round-by-Round Heatmap</h2>
+                <span class="toggle-icon" id="heatmap-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="heatmap-body" style="max-height:9999px;">
+                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">Each row is one event. Each cell is one round. Green = win, red = loss, gray = not played. Win % per round shown at the bottom.</p>
+                <div id="heatmapGrid" style="max-height:400px;overflow-y:auto;overflow-x:auto;"></div>
+            </div>
+        </div>
+
+        <!-- Recurring Opponents -->
+        <div class="card" id="recurringCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('recurring')">
+                <h2><span class="section-icon">&#128257;</span> Recurring Opponents</h2>
+                <span class="toggle-icon" id="recurring-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="recurring-body" style="max-height:9999px;">
+                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">Opponents faced in more than one distinct event.</p>
+                <div class="table-wrap">
+                    <table id="recurringTable">
+                        <thead><tr>
+                            <th onclick="sortTable('recurringTable',0)">Player</th>
+                            <th onclick="sortTable('recurringTable',1)">Events Faced</th>
+                            <th onclick="sortTable('recurringTable',2)">W</th>
+                            <th onclick="sortTable('recurringTable',3)">L</th>
+                            <th onclick="sortTable('recurringTable',4)">Win%</th>
+                            <th onclick="sortTable('recurringTable',5)">First Met</th>
+                            <th onclick="sortTable('recurringTable',6)">Last Met</th>
+                        </tr></thead>
+                        <tbody id="recurringBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Store Performance -->
+        <div class="card" id="storeBreakCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('storeBreak')">
+                <h2><span class="section-icon">&#127981;</span> Store Performance</h2>
+                <span class="toggle-icon" id="storeBreak-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="storeBreak-body" style="max-height:9999px;">
+                <div class="table-wrap">
+                    <table id="storeBreakTable">
+                        <thead><tr>
+                            <th onclick="sortTable('storeBreakTable',0)">Store</th>
+                            <th onclick="sortTable('storeBreakTable',1)">Events</th>
+                            <th onclick="sortTable('storeBreakTable',2)">W</th>
+                            <th onclick="sortTable('storeBreakTable',3)">L</th>
+                            <th onclick="sortTable('storeBreakTable',4)">Win%</th>
+                        </tr></thead>
+                        <tbody id="storeBreakBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seasonality Polar Chart -->
+        <div class="card" id="seasonalityCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('seasonality')">
+                <h2><span class="section-icon">&#127758;</span> Win Rate by Month of Year</h2>
+                <span class="toggle-icon" id="seasonality-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="seasonality-body" style="max-height:9999px;">
+                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">Average win % for each calendar month across all years.</p>
+                <div class="chart-canvas-wrap" style="max-width:400px;margin:0 auto;">
+                    <canvas id="chartSeasonality"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Personal Bests -->
+        <div class="card" id="personalBestsCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('personalBests')">
+                <h2><span class="section-icon">&#127942;</span> Personal Bests</h2>
+                <span class="toggle-icon" id="personalBests-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="personalBests-body" style="max-height:9999px;">
+                <div class="stat-grid" id="personalBestsGrid"></div>
             </div>
         </div>
 
@@ -1186,6 +1295,39 @@
             <div class="card-body" id="rankH2H-body" style="max-height:9999px;">
                 <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Win / Loss record between each pair of tracked players. Read row vs column.</p>
                 <div class="table-wrap" id="rankH2H"></div>
+            </div>
+        </div>
+
+        <!-- D: Most Faced Opponents (Community) -->
+        <div class="card" id="communityOppCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('communityOpp')">
+                <h2><span class="section-icon">&#127758;</span> Most Faced Opponents</h2>
+                <span class="toggle-icon" id="communityOpp-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="communityOpp-body" style="max-height:9999px;">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Opponents who appear most across all tracked players' histories combined (excluding tracked players).</p>
+                <div class="table-wrap">
+                    <table id="communityOppTable">
+                        <thead><tr>
+                            <th onclick="sortTable('communityOppTable',0)">Opponent</th>
+                            <th onclick="sortTable('communityOppTable',1)">Total Matches</th>
+                            <th onclick="sortTable('communityOppTable',2)">Faced by N Players</th>
+                        </tr></thead>
+                        <tbody id="communityOppBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- E: Top Rivalries -->
+        <div class="card" id="rivalriesCard" style="display:none">
+            <div class="card-header" onclick="toggleCard('rivalries')">
+                <h2><span class="section-icon">&#9876;&#65039;</span> Top Rivalries</h2>
+                <span class="toggle-icon" id="rivalries-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="rivalries-body" style="max-height:9999px;">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Pairs of tracked players with the most matches against each other.</p>
+                <div id="rivalriesList"></div>
             </div>
         </div>
 
@@ -2066,7 +2208,41 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
         <div class="stat-box"><div class="val t-val">${total}</div><div class="lbl">Total</div></div>
         <div class="stat-box"><div class="val pct-val">${winPct}%</div><div class="lbl">Win Rate</div></div>`;
 
-    displayStreaks(computeStreaks(eventData));
+    // Rolling form badges appended to the stat grid
+    const form = computeRollingForm(eventData);
+    const overallFloat = parseFloat(winPct);
+    function formBadge(pct, label) {
+        if (pct === null) return '';
+        const color = pct > overallFloat ? 'var(--win)' : pct < overallFloat ? 'var(--loss)' : 'var(--muted)';
+        return `<span style="display:inline-block;font-size:0.7rem;font-weight:700;
+            background:${color}22;color:${color};border-radius:999px;
+            padding:0.15rem 0.5rem;margin:0.15rem 0.1rem;">L${label}: ${pct.toFixed(1)}%</span>`;
+    }
+    document.getElementById('overallStats').insertAdjacentHTML('beforeend', `
+        <div class="stat-box" style="grid-column:span 2;">
+            <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.4rem;">Recent Form</div>
+            <div>${formBadge(form.last5, '5')}${formBadge(form.last10, '10')}</div>
+        </div>`);
+
+    // Game & Clutch stats grid
+    const allRounds = (eventData || []).flatMap(ev => ev?.rounds || []);
+    const gs = computeGameStats(allRounds);
+    const gameTotal = gs.gameWins + gs.gameLosses;
+    const gamePct   = gameTotal > 0 ? (gs.gameWins / gameTotal * 100).toFixed(1) : null;
+    const twoZeroR  = totalW > 0 ? (gs.twoZeroWins / totalW * 100).toFixed(1) : null;
+    const clutchR   = gs.allTwoOne > 0 ? (gs.clutchWins / gs.allTwoOne * 100).toFixed(1) : null;
+    const chokeR    = gs.allTwoOne > 0 ? (gs.chokes / gs.allTwoOne * 100).toFixed(1) : null;
+    const gameStatsEl = document.getElementById('gameStats');
+    if (gameStatsEl) {
+        gameStatsEl.innerHTML = `
+            <div class="stat-box"><div class="val pct-val">${gamePct !== null ? gamePct + '%' : '—'}</div><div class="lbl">Game Win %</div></div>
+            <div class="stat-box"><div class="val pct-val">${twoZeroR !== null ? twoZeroR + '%' : '—'}</div><div class="lbl">2-0 Rate</div></div>
+            <div class="stat-box"><div class="val w-val">${clutchR !== null ? clutchR + '%' : '—'}</div><div class="lbl">Clutch Rate</div></div>
+            <div class="stat-box"><div class="val l-val">${chokeR !== null ? chokeR + '%' : '—'}</div><div class="lbl">Choke Rate</div></div>`;
+    }
+
+    const streaks = computeStreaks(eventData);
+    displayStreaks(streaks);
 
     const periodBody = document.getElementById('periodBody');
     periodBody.innerHTML = '';
@@ -2220,8 +2396,13 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
     displayPlacements(eventData);
     displayEventSize(eventData);
     displayRoundByRound(eventData);
+    displayRoundHeatmap(eventData);
     displayRegionals(eventData);
     displayCharts(totalW, totalL, periodMap, eventData);
+    displayRecurringOpponents(eventData);
+    displayStoreBreakdown(eventData);
+    displaySeasonality(eventData);
+    displayPersonalBests(eventData, streaks);
 
     document.getElementById('results').style.display = 'block';
 }
@@ -2233,6 +2414,35 @@ const _charts = {};
 
 function destroyChart(id) {
     if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+}
+
+// ── Shared stat helpers ─────────────────────────────────────────────────────
+
+function computeGameStats(rounds) {
+    let gameWins = 0, gameLosses = 0, twoZeroWins = 0, clutchWins = 0, chokes = 0, allTwoOne = 0;
+    for (const r of (rounds || [])) {
+        const gw = r.win_count  != null ? r.win_count  : (r.is_win ? 1 : 0);
+        const gl = r.lose_count != null ? r.lose_count : (r.is_win ? 0 : 1);
+        gameWins   += gw;
+        gameLosses += gl;
+        if (r.is_win  && gl === 0) twoZeroWins++;
+        if (r.is_win  && gl >= 1) { clutchWins++; allTwoOne++; }
+        if (!r.is_win && gw >= 1) { chokes++;     allTwoOne++; }
+    }
+    return { gameWins, gameLosses, twoZeroWins, clutchWins, chokes, allTwoOne };
+}
+
+function computeRollingForm(eventData) {
+    const evs = [...(eventData || [])]
+        .filter(ev => ev?.rounds && ev._start_datetime)
+        .sort((a, b) => new Date(a._start_datetime) - new Date(b._start_datetime));
+    function pct(slice) {
+        let w = 0, l = 0;
+        for (const ev of slice) for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
+        const t = w + l;
+        return t > 0 ? w / t * 100 : null;
+    }
+    return { last5: pct(evs.slice(-5)), last10: pct(evs.slice(-10)) };
 }
 
 function displayCharts(totalW, totalL, periodMap, eventData) {
@@ -3021,6 +3231,248 @@ function renderCompare(a, b) {
         `<div class="compare-cols">${userBox(a, pctA, aLeads)}${userBox(b, pctB, bLeads)}</div>`;
 }
 
+// ── Feature 1: Round-by-Round Heatmap ──────────────────────────────────────
+function displayRoundHeatmap(eventData) {
+    const card = document.getElementById('heatmapCard');
+    const evs  = (eventData || [])
+        .filter(ev => ev?.rounds?.length && ev._start_datetime)
+        .sort((a, b) => new Date(a._start_datetime) - new Date(b._start_datetime));
+    if (evs.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const maxR = Math.max(...evs.map(ev => ev.rounds.length));
+    const colW = Array(maxR).fill(0), colL = Array(maxR).fill(0);
+
+    let html = '<table class="heatmap-table"><thead><tr><th>Event</th>';
+    for (let r = 0; r < maxR; r++) html += `<th>R${r + 1}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const ev of evs) {
+        const dateStr = ev._start_datetime.slice(0, 10);
+        html += `<tr><td style="font-size:0.72rem;color:var(--muted);white-space:nowrap;padding-right:0.5rem;">${dateStr}</td>`;
+        for (let r = 0; r < maxR; r++) {
+            const round = ev.rounds[r];
+            if (!round) {
+                html += '<td><span class="heatmap-dot none" title="Not played"></span></td>';
+            } else if (round.is_win) {
+                html += '<td><span class="heatmap-dot win" title="Win"></span></td>';
+                colW[r]++;
+            } else {
+                html += '<td><span class="heatmap-dot loss" title="Loss"></span></td>';
+                colL[r]++;
+            }
+        }
+        html += '</tr>';
+    }
+
+    html += '<tr class="heatmap-pct-row"><td style="font-size:0.72rem;font-weight:700;color:var(--muted);">Win %</td>';
+    for (let r = 0; r < maxR; r++) {
+        const t = colW[r] + colL[r];
+        const pct = t > 0 ? (colW[r] / t * 100).toFixed(0) : '—';
+        const color = t > 0 ? ((colW[r] / t) >= 0.5 ? 'var(--win)' : 'var(--loss)') : 'var(--muted)';
+        html += `<td style="color:${color}">${pct}${t > 0 ? '%' : ''}</td>`;
+    }
+    html += '</tr></tbody></table>';
+    document.getElementById('heatmapGrid').innerHTML = html;
+}
+
+// ── Feature 2: Recurring Opponents ─────────────────────────────────────────
+function displayRecurringOpponents(eventData) {
+    const card = document.getElementById('recurringCard');
+    const evOppDates = {}, evOppWL = {};
+
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds) continue;
+        const dateStr = ev._start_datetime ? ev._start_datetime.slice(0, 10) : null;
+        const seenInEv = new Set();
+        for (const r of ev.rounds) {
+            const pid = r.opponent_users?.[0]?.membership_number;
+            if (!pid) continue;
+            if (!seenInEv.has(pid)) {
+                seenInEv.add(pid);
+                if (!evOppDates[pid]) evOppDates[pid] = [];
+                if (dateStr) evOppDates[pid].push(dateStr);
+            }
+            if (!evOppWL[pid]) evOppWL[pid] = { w: 0, l: 0 };
+            if (r.is_win) evOppWL[pid].w++; else evOppWL[pid].l++;
+        }
+    }
+
+    const recurring = Object.entries(evOppDates)
+        .filter(([, dates]) => dates.length >= 2)
+        .sort((a, b) => b[1].length - a[1].length);
+
+    if (recurring.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const tbody = document.getElementById('recurringBody');
+    tbody.innerHTML = '';
+    for (const [pid, dates] of recurring) {
+        const sorted = [...dates].sort();
+        const name   = _usernameMap[pid] || pid;
+        const { w, l } = evOppWL[pid] || { w: 0, l: 0 };
+        const t   = w + l;
+        const pct = t > 0 ? (w / t * 100).toFixed(1) : '0.0';
+        const tr  = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.title = 'Click to view match history';
+        tr.onclick = () => openOpponentModal(pid);
+        tr.innerHTML = `<td>${name}</td>
+            <td class="td-num">${dates.length}</td>
+            <td class="td-num" style="color:var(--win)">${w}</td>
+            <td class="td-num" style="color:var(--loss)">${l}</td>
+            <td class="td-pct">${pct}%</td>
+            <td class="td-num">${sorted[0] ?? '—'}</td>
+            <td class="td-num">${sorted[sorted.length - 1] ?? '—'}</td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+// ── Feature 6: Store Performance Breakdown ──────────────────────────────────
+function displayStoreBreakdown(eventData) {
+    const card = document.getElementById('storeBreakCard');
+    const storeMap = {};
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds) continue;
+        const name = ev._store_name ?? null;
+        if (!name) continue;
+        if (!storeMap[name]) storeMap[name] = { events: 0, w: 0, l: 0 };
+        storeMap[name].events++;
+        for (const r of ev.rounds) { if (r.is_win) storeMap[name].w++; else storeMap[name].l++; }
+    }
+    const entries = Object.entries(storeMap)
+        .sort((a, b) => {
+            const ta = a[1].w + a[1].l, tb = b[1].w + b[1].l;
+            const pa = ta ? a[1].w / ta : 0, pb = tb ? b[1].w / tb : 0;
+            return pb - pa;
+        });
+    if (entries.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const tbody = document.getElementById('storeBreakBody');
+    tbody.innerHTML = '';
+    for (const [name, s] of entries) {
+        const t   = s.w + s.l;
+        const pct = t > 0 ? (s.w / t * 100).toFixed(1) : '0.0';
+        const color = parseFloat(pct) >= 50 ? 'var(--win)' : 'var(--loss)';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${name}</td>
+            <td class="td-num">${s.events}</td>
+            <td class="td-num" style="color:var(--win)">${s.w}</td>
+            <td class="td-num" style="color:var(--loss)">${s.l}</td>
+            <td class="td-pct" style="color:${color}">${pct}%</td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+// ── Feature 7: Seasonality Polar Chart ─────────────────────────────────────
+function displaySeasonality(eventData) {
+    const card = document.getElementById('seasonalityCard');
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const ms = Array.from({ length: 12 }, () => ({ w: 0, l: 0 }));
+    for (const ev of (eventData || [])) {
+        if (!ev?.rounds || !ev._start_datetime) continue;
+        const m = new Date(ev._start_datetime).getMonth();
+        for (const r of ev.rounds) { if (r.is_win) ms[m].w++; else ms[m].l++; }
+    }
+    if (!ms.some(s => s.w + s.l > 0)) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#6c757d';
+    const pcts  = ms.map(s => { const t = s.w + s.l; return t > 0 ? parseFloat((s.w / t * 100).toFixed(1)) : null; });
+
+    destroyChart('seasonality');
+    _charts['seasonality'] = new Chart(document.getElementById('chartSeasonality'), {
+        type: 'polarArea',
+        data: {
+            labels: MONTHS,
+            datasets: [{
+                data: pcts.map(p => p ?? 0),
+                backgroundColor: pcts.map(p =>
+                    p === null ? 'rgba(0,0,0,0.04)' :
+                    p >= 60 ? '#28a74555' : p >= 50 ? '#048A8155' : '#dc354555'),
+                borderColor: pcts.map(p =>
+                    p === null ? 'var(--border)' :
+                    p >= 60 ? 'var(--win)' : p >= 50 ? 'var(--accent)' : 'var(--loss)'),
+                borderWidth: 1.5
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { r: {
+                min: 0, max: 100,
+                ticks: { stepSize: 25, callback: v => v + '%', font: { size: 9 }, color: muted },
+                grid: { color: 'rgba(0,0,0,0.07)' }
+            }},
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => {
+                    const s = ms[ctx.dataIndex];
+                    const t = s.w + s.l;
+                    return t > 0 ? ` ${ctx.parsed.r}% (${s.w}W / ${s.l}L, ${t} matches)` : ' No data';
+                }}}
+            }
+        }
+    });
+}
+
+// ── Feature 8: Personal Bests ───────────────────────────────────────────────
+function displayPersonalBests(eventData, streaks) {
+    const card = document.getElementById('personalBestsCard');
+    if (!eventData || eventData.length === 0) { card.style.display = 'none'; return; }
+
+    let bestEvPct = null, bestEvDate = '—';
+    let bestRank  = null;
+    let mostRounds = 0, mostRoundsDate = '—';
+    const monthCount = {};
+
+    for (const ev of eventData) {
+        if (!ev?.rounds) continue;
+        const dateStr = ev._start_datetime ? ev._start_datetime.slice(0, 10) : null;
+
+        let evW = 0, evL = 0;
+        for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
+        const evT = evW + evL;
+        if (evT > 0) {
+            const evPct = evW / evT * 100;
+            if (bestEvPct === null || evPct > bestEvPct) { bestEvPct = evPct; bestEvDate = dateStr ?? '—'; }
+        }
+
+        const rank = ev._rank ?? null;
+        if (rank !== null && (bestRank === null || rank < bestRank)) bestRank = rank;
+
+        if (ev.rounds.length > mostRounds) { mostRounds = ev.rounds.length; mostRoundsDate = dateStr ?? '—'; }
+
+        if (dateStr) {
+            const mk = dateStr.slice(0, 7);
+            monthCount[mk] = (monthCount[mk] || 0) + 1;
+        }
+    }
+
+    const bestMonth = Object.entries(monthCount).sort((a, b) => b[1] - a[1])[0];
+
+    card.style.display = 'block';
+    document.getElementById('personalBestsGrid').innerHTML = `
+        <div class="stat-box"><div class="val w-val">${streaks?.bestWin ?? 0}</div><div class="lbl">Best Win Streak</div></div>
+        <div class="stat-box">
+            <div class="val pct-val">${bestEvPct !== null ? bestEvPct.toFixed(1) + '%' : '—'}</div>
+            <div class="lbl">Best Event Win%<br><span style="font-size:0.65rem;color:var(--muted)">${bestEvDate}</span></div>
+        </div>
+        <div class="stat-box">
+            <div class="val" style="color:var(--gold)">${bestRank !== null ? '#' + bestRank : '—'}</div>
+            <div class="lbl">Highest Rank</div>
+        </div>
+        <div class="stat-box">
+            <div class="val t-val">${mostRounds}</div>
+            <div class="lbl">Most Rounds in Event<br><span style="font-size:0.65rem;color:var(--muted)">${mostRoundsDate}</span></div>
+        </div>
+        <div class="stat-box">
+            <div class="val t-val">${bestMonth ? bestMonth[1] : '—'}</div>
+            <div class="lbl">Most Events in Month<br><span style="font-size:0.65rem;color:var(--muted)">${bestMonth ? bestMonth[0] : ''}</span></div>
+        </div>`;
+}
+
+// ── Regionals ──────────────────────────────────────────────────────────────
 function displayRegionals(eventData) {
     // Build a map of date → event data for quick lookup
     const byDate = {};
@@ -3461,6 +3913,8 @@ function applyRankingsFilter() {
     _updateRankFilterSummary(allUsers, filteredUsers);
     renderLeaderboard(filteredUsers);
     renderH2HMatrix(filteredUsers);
+    renderCommunityOpponents(filteredUsers);
+    renderRivalries(filteredUsers);
 }
 
 function buildGlobalRankings() {
@@ -3658,6 +4112,103 @@ function renderH2HMatrix(allUsers) {
         </table>`;
 }
 
+// ── D: Community Opponents ──────────────────────────────────────────────────
+function renderCommunityOpponents(allUsers) {
+    const card = document.getElementById('communityOppCard');
+    if (!card) return;
+    const trackedIds = new Set(allUsers.map(u => u.bandaiId));
+    const oppCount   = {};
+
+    for (const u of allUsers) {
+        for (const ev of u.events) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) {
+                const pid   = r.opponent_users?.[0]?.membership_number;
+                const pName = r.opponent_users?.[0]?.player_name?.trim();
+                if (!pid || trackedIds.has(pid)) continue;
+                if (pName && !_usernameMap[pid]) _usernameMap[pid] = pName;
+                if (!oppCount[pid]) oppCount[pid] = { matches: 0, players: new Set() };
+                oppCount[pid].matches++;
+                oppCount[pid].players.add(u.bandaiId);
+            }
+        }
+    }
+
+    const top = Object.entries(oppCount)
+        .sort((a, b) => b[1].matches - a[1].matches)
+        .slice(0, 20);
+
+    if (top.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const tbody = document.getElementById('communityOppBody');
+    tbody.innerHTML = '';
+    for (const [pid, data] of top) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${_usernameMap[pid] || pid}</td>
+            <td class="td-num">${data.matches}</td>
+            <td class="td-num">${data.players.size}</td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+// ── E: Rivalries ────────────────────────────────────────────────────────────
+function renderRivalries(allUsers) {
+    const card = document.getElementById('rivalriesCard');
+    if (!card || allUsers.length < 2) { if (card) card.style.display = 'none'; return; }
+
+    const idSet = new Set(allUsers.map(u => u.bandaiId));
+    const pairs = {};
+
+    for (const u of allUsers) {
+        for (const ev of u.events) {
+            if (!ev?.rounds) continue;
+            for (const r of ev.rounds) {
+                const oppId = r.opponent_users?.[0]?.membership_number;
+                if (!oppId || !idSet.has(oppId) || oppId === u.bandaiId) continue;
+                const [idA, idB] = [u.bandaiId, oppId].sort();
+                const key = `${idA}:${idB}`;
+                if (!pairs[key]) {
+                    pairs[key] = {
+                        idA, idB,
+                        nameA: _usernameMap[idA] || allUsers.find(x => x.bandaiId === idA)?.name || idA,
+                        nameB: _usernameMap[idB] || allUsers.find(x => x.bandaiId === idB)?.name || idB,
+                        wA: 0, wB: 0
+                    };
+                }
+                if (u.bandaiId === idA) { if (r.is_win) pairs[key].wA++; else pairs[key].wB++; }
+                else                    { if (r.is_win) pairs[key].wB++; else pairs[key].wA++; }
+            }
+        }
+    }
+
+    const rivals = Object.values(pairs)
+        .filter(p => p.wA + p.wB >= 1)
+        .sort((a, b) => (b.wA + b.wB) - (a.wA + a.wB))
+        .slice(0, 10);
+
+    if (rivals.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    document.getElementById('rivalriesList').innerHTML = rivals.map(p => {
+        const total = p.wA + p.wB;
+        let leadLabel, leadClass;
+        if      (p.wA > p.wB) { leadLabel = `${p.nameA} leads`; leadClass = ''; }
+        else if (p.wB > p.wA) { leadLabel = `${p.nameB} leads`; leadClass = ''; }
+        else                   { leadLabel = 'Tied';             leadClass = 'tied'; }
+        return `<div style="margin-bottom:0.75rem;">
+            <div class="rivalry-card" style="border-left:4px solid var(--gold);cursor:default;">
+                <div class="rivalry-label" style="color:var(--gold)">Rivalry &middot; ${total} match${total !== 1 ? 'es' : ''}</div>
+                <div class="rivalry-name">${p.nameA} <span style="color:var(--muted);font-size:0.85rem;">vs</span> ${p.nameB}</div>
+                <div class="rivalry-record">
+                    <strong>${p.wA}W</strong> &ndash; <strong>${p.wB}W</strong>
+                    <span class="rivalry-lead-badge ${leadClass}">${leadLabel}</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
 // ── PDF export ─────────────────────────────────────────────────────────────
 
 function exportPDF() {
@@ -3698,6 +4249,82 @@ function exportExcel() {
     ws['!cols'] = [{ wch: 24 }, { wch: 6 }, { wch: 6 }, { wch: 8 }, { wch: 8 }];
     XLSX.utils.book_append_sheet(wb, ws, "Results");
     XLSX.writeFile(wb, "bandai_results.xlsx");
+}
+
+function exportCSV() {
+    if (!_allEventData || _allEventData.length === 0) return;
+
+    function dl(filename, rows) {
+        const csv = rows.map(r =>
+            r.map(v => {
+                const s = String(v ?? '');
+                return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+            }).join(',')
+        ).join('\r\n');
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    const evs = [..._allEventData]
+        .filter(ev => ev?.rounds)
+        .sort((a, b) => (a._start_datetime || '').localeCompare(b._start_datetime || ''));
+
+    // 1. Tournament history
+    const tourRows = [['Date', 'Event', 'Store', 'W', 'L', 'Game W', 'Game L', 'Win%', 'Rank', 'Points']];
+    for (const ev of evs) {
+        let evW = 0, evL = 0, evGW = 0, evGL = 0;
+        for (const r of ev.rounds) {
+            if (r.is_win) evW++; else evL++;
+            evGW += r.win_count  != null ? r.win_count  : (r.is_win ? 1 : 0);
+            evGL += r.lose_count != null ? r.lose_count : (r.is_win ? 0 : 1);
+        }
+        const t = evW + evL;
+        tourRows.push([
+            ev._start_datetime ? ev._start_datetime.slice(0, 10) : '',
+            ev._event_name ?? '',
+            ev._store_name ?? '',
+            evW, evL, evGW, evGL,
+            t > 0 ? (evW / t * 100).toFixed(1) + '%' : '—',
+            ev._rank != null ? ev._rank : '',
+            ev._match_points != null ? ev._match_points : ''
+        ]);
+    }
+    dl('bandai_tournament_history.csv', tourRows);
+
+    // 2. Opponent history (from _playerResults)
+    setTimeout(() => {
+        if (!_playerResults) return;
+        const oppRows = [['Player', 'W', 'L', 'Total', 'Win%']];
+        const sorted = Object.entries(_playerResults).sort((a, b) => (b[1][0]+b[1][1]) - (a[1][0]+a[1][1]));
+        for (const [pid, res] of sorted) {
+            const [w, l] = res;
+            const t = w + l;
+            oppRows.push([_usernameMap[pid] || pid, w, l, t, t > 0 ? (w/t*100).toFixed(1)+'%' : '—']);
+        }
+        dl('bandai_opponent_history.csv', oppRows);
+    }, 300);
+
+    // 3. Round-by-round detail
+    setTimeout(() => {
+        const rndRows = [['Date', 'Event', 'Round', 'Opponent', 'Result', 'Score']];
+        for (const ev of evs) {
+            const date  = ev._start_datetime ? ev._start_datetime.slice(0, 10) : '';
+            const name  = ev._event_name ?? '';
+            for (const r of ev.rounds) {
+                const opp    = r.opponent_users?.[0]?.player_name ?? r.opponent_users?.[0]?.membership_number ?? '—';
+                const result = r.is_win ? 'Win' : 'Loss';
+                const gw = r.win_count  != null ? r.win_count  : (r.is_win ? 1 : 0);
+                const gl = r.lose_count != null ? r.lose_count : (r.is_win ? 0 : 1);
+                rndRows.push([date, name, r.round_no ?? '—', opp, result, `${gw}-${gl}`]);
+            }
+        }
+        dl('bandai_rounds.csv', rndRows);
+    }, 600);
 }
 </script>
 </body>
