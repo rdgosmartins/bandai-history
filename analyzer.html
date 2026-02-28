@@ -1077,6 +1077,43 @@
     <!-- Global Rankings Tab -->
     <div id="rankingsTab" style="display:none">
 
+        <!-- Rankings Filters -->
+        <div class="card" id="rankFilterCard">
+            <div class="card-header" onclick="toggleCard('rankFilters')">
+                <h2><span class="section-icon">&#9874;&#65039;</span> Filters</h2>
+                <span class="toggle-icon" id="rankFilters-icon">&#9660;</span>
+            </div>
+            <div class="card-body" id="rankFilters-body" style="max-height:9999px;">
+                <!-- Collection chips -->
+                <div class="chip-row" id="rankPeriodChips"></div>
+
+                <!-- Year chips -->
+                <div class="filter-row" style="margin-top:1rem;">
+                    <div class="chip-row" id="rankYearChips">
+                        <button class="chip active" data-year="2024" onclick="onRankYearChip(this)">2024</button>
+                        <button class="chip active" data-year="2025" onclick="onRankYearChip(this)">2025</button>
+                        <button class="chip active" data-year="2026" onclick="onRankYearChip(this)">2026</button>
+                    </div>
+                </div>
+
+                <!-- Store filter -->
+                <div class="filter-row" style="margin-top:0.75rem;">
+                    <div class="filter-group" style="flex:1;min-width:200px;">
+                        <label for="rankStoreSelect">Store</label>
+                        <select id="rankStoreSelect" onchange="onRankStoreChange()">
+                            <option value="">— all stores —</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline btn-sm" onclick="clearRankStoreFilter()" style="align-self:flex-end">&#10005; Clear store</button>
+                </div>
+
+                <div style="margin-top:0.75rem;">
+                    <button class="btn btn-outline btn-sm" onclick="clearRankFilters()">&#10005; Clear all filters</button>
+                    <span id="rankFilterSummary" style="margin-left:0.75rem;font-size:0.8rem;color:var(--muted);"></span>
+                </div>
+            </div>
+        </div>
+
         <!-- A: Overall Leaderboard -->
         <div class="card">
             <div class="card-header" onclick="toggleCard('rankBoard')">
@@ -3299,6 +3336,147 @@ function setProgMode(mode) {
     if (allUsers.length > 0) renderProgression(allUsers);
 }
 
+// ── Rankings filter state ───────────────────────────────────────────────────
+let _rankStore = null; // selected store name or null
+
+function _getRankSelectedPeriods() {
+    const chips = document.querySelectorAll('#rankPeriodChips .chip:not(.chip-all)');
+    return new Set([...chips].filter(c => c.classList.contains('active')).map(c => c.dataset.period));
+}
+
+function _getRankSelectedYears() {
+    const chips = document.querySelectorAll('#rankYearChips .chip');
+    return new Set([...chips].filter(c => c.classList.contains('active')).map(c => c.dataset.year));
+}
+
+// Filter a single user's event array using the rankings filter state
+function _applyRankFilter(events) {
+    const periods = _getRankSelectedPeriods();
+    const years   = _getRankSelectedYears();
+    return events.filter(ev => {
+        if (!ev?.rounds) return false;
+        if (ev._start_datetime) {
+            const dateStr = ev._start_datetime.slice(0, 10);
+            const year    = dateStr.slice(0, 4);
+            if (years.size > 0 && !years.has(year)) return false;
+            if (periods.size > 0) {
+                const period = getPeriodForDate(ev._start_datetime);
+                if (!periods.has(period)) return false;
+            }
+        }
+        if (_rankStore && ev._store_name !== _rankStore) return false;
+        return true;
+    });
+}
+
+function onRankYearChip(btn) {
+    btn.classList.toggle('active');
+    applyRankingsFilter();
+}
+
+function onRankStoreChange() {
+    _rankStore = document.getElementById('rankStoreSelect').value || null;
+    applyRankingsFilter();
+}
+
+function clearRankStoreFilter() {
+    _rankStore = null;
+    document.getElementById('rankStoreSelect').value = '';
+    applyRankingsFilter();
+}
+
+function clearRankFilters() {
+    _rankStore = null;
+    document.getElementById('rankStoreSelect').value = '';
+    // Activate all year chips
+    document.querySelectorAll('#rankYearChips .chip').forEach(c => c.classList.add('active'));
+    // Activate all period chips
+    document.querySelectorAll('#rankPeriodChips .chip').forEach(c => c.classList.add('active'));
+    applyRankingsFilter();
+}
+
+function _buildRankFilterChips(allEvents) {
+    const periodsWithData = new Set();
+    for (const ev of allEvents) {
+        if (!ev?._start_datetime) continue;
+        periodsWithData.add(getPeriodForDate(ev._start_datetime));
+    }
+
+    const container = document.getElementById('rankPeriodChips');
+    container.innerHTML = '';
+
+    const allChip = document.createElement('button');
+    allChip.className = 'chip chip-all active';
+    allChip.textContent = 'All Collections';
+    allChip.dataset.period = 'all';
+    allChip.onclick = () => {
+        const indiv = [...container.querySelectorAll('.chip:not(.chip-all)')];
+        const allOn = indiv.every(c => c.classList.contains('active'));
+        indiv.forEach(c => c.classList.toggle('active', !allOn));
+        allChip.classList.toggle('active', !allOn);
+        applyRankingsFilter();
+    };
+    container.appendChild(allChip);
+
+    for (const p of SET_PERIODS) {
+        if (!periodsWithData.has(p.name)) continue;
+        const chip = document.createElement('button');
+        chip.className = 'chip active';
+        chip.textContent = p.name.split(' · ')[0];
+        chip.title = p.name;
+        chip.dataset.period = p.name;
+        chip.onclick = () => {
+            chip.classList.toggle('active');
+            const indiv = [...container.querySelectorAll('.chip:not(.chip-all)')];
+            allChip.classList.toggle('active', indiv.every(c => c.classList.contains('active')));
+            applyRankingsFilter();
+        };
+        container.appendChild(chip);
+    }
+}
+
+function _buildRankStoreDropdown(allEvents) {
+    const stores = new Set(allEvents.map(ev => ev._store_name).filter(Boolean));
+    const sel = document.getElementById('rankStoreSelect');
+    sel.innerHTML = '<option value="">— all stores —</option>';
+    [...stores].sort((a, b) => a.localeCompare(b)).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    });
+    if (_rankStore && stores.has(_rankStore)) sel.value = _rankStore;
+    else _rankStore = null;
+}
+
+function _updateRankFilterSummary(allUsers, filteredUsers) {
+    const totalEvs    = allUsers.reduce((s, u) => s + u.events.length, 0);
+    const filteredEvs = filteredUsers.reduce((s, u) => s + u.events.length, 0);
+    const el = document.getElementById('rankFilterSummary');
+    if (!el) return;
+    el.textContent = filteredEvs < totalEvs
+        ? `Showing ${filteredEvs} of ${totalEvs} events`
+        : `All ${totalEvs} events`;
+}
+
+function applyRankingsFilter() {
+    const allUsers = _usersWithToken.map(u => ({
+        ...u,
+        events: Object.values(loadCache(u.bandaiId) || {})
+    })).filter(u => u.events.length > 0);
+
+    const filteredUsers = allUsers.map(u => ({
+        ...u,
+        events: _applyRankFilter(u.events)
+    }));
+
+    _updateRankFilterSummary(allUsers, filteredUsers);
+    renderLeaderboard(filteredUsers);
+    renderTournamentStandings(filteredUsers);
+    renderH2HMatrix(filteredUsers);
+    renderProgression(filteredUsers);
+}
+
 function buildGlobalRankings() {
     const allUsers = _usersWithToken.map(u => ({
         ...u,
@@ -3313,10 +3491,13 @@ function buildGlobalRankings() {
         return;
     }
 
-    renderLeaderboard(allUsers);
-    renderTournamentStandings(allUsers);
-    renderH2HMatrix(allUsers);
-    renderProgression(allUsers);
+    // Build filter controls from the full (unfiltered) event pool
+    const allEvents = allUsers.flatMap(u => u.events);
+    _buildRankFilterChips(allEvents);
+    _buildRankStoreDropdown(allEvents);
+
+    // Apply any active filters, then render
+    applyRankingsFilter();
 }
 
 // ── A: Overall Leaderboard ──────────────────────────────────────────────────
