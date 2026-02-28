@@ -3513,10 +3513,16 @@ function renderLeaderboard(allUsers) {
     const rows = allUsers.map(u => {
         let w = 0, l = 0, pts = 0, ranks = [];
         for (const ev of u.events) {
-            if (!ev?.rounds) continue;
-            for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
-            if (ev._match_points != null) pts += ev._match_points;
-            if (ev._rank != null) ranks.push(ev._rank);
+            // Rounds — win/loss counting
+            if (ev?.rounds) {
+                for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
+            }
+            // Rank — use preprocessed field, fall back to raw API field for older cached events
+            const rank = ev._rank ?? ev.user?.rank ?? null;
+            if (rank != null) ranks.push(Number(rank));
+            // Match points — same fallback pattern
+            const mp = ev._match_points ?? (ev.user?.match_point != null ? Number(ev.user.match_point) : null);
+            if (mp != null) pts += mp;
         }
         const total = w + l;
         const pct   = total ? (w / total * 100) : 0;
@@ -3599,8 +3605,8 @@ function renderTournamentStandings(allUsers) {
             if (ev.rounds) for (const r of ev.rounds) { if (r.is_win) w++; else l++; }
             evMap[id].players.push({
                 name: u.name,
-                rank: ev._rank,
-                pts:  ev._match_points ?? 0,
+                rank: ev._rank ?? ev.user?.rank ?? null,
+                pts:  ev._match_points ?? (ev.user?.match_point != null ? Number(ev.user.match_point) : 0),
                 w, l
             });
         }
@@ -3731,7 +3737,9 @@ function renderProgression(allUsers) {
         for (const ev of u.events) {
             if (!ev._start_datetime) continue;
             const d = ev._start_datetime.slice(0,10);
-            const val = mode === 'pts' ? ev._match_points : ev._rank;
+            const val = mode === 'pts'
+                ? (ev._match_points ?? (ev.user?.match_point != null ? Number(ev.user.match_point) : null))
+                : (ev._rank ?? ev.user?.rank ?? null);
             if (val != null) {
                 // If same date has multiple events, keep the one with higher pts / better rank
                 if (!(d in byDate)) byDate[d] = val;
