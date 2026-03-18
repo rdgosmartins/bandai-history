@@ -12,7 +12,7 @@ function corsHeaders(env, origin) {
     const o = (origin && origin === allowed) ? allowed : allowed;
     return {
         'Access-Control-Allow-Origin': o,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Credentials': 'true',
     };
@@ -334,35 +334,7 @@ async function handleMe(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
     const { id, email, displayName, avatarUrl, role, status } = user;
-    const profileRaw = await env.AUTH_KV.get(`profile:${id}`);
-    const profile = profileRaw ? JSON.parse(profileRaw) : {};
-    return json({ id, email, displayName, avatarUrl, role, status, profile }, 200, cors);
-}
-
-async function handleGetProfile(request, env, cors) {
-    const user = await authenticate(request, env);
-    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
-    const raw = await env.AUTH_KV.get(`profile:${user.id}`);
-    return json(raw ? JSON.parse(raw) : {}, 200, cors);
-}
-
-async function handlePutProfile(request, env, cors) {
-    const user = await authenticate(request, env);
-    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
-
-    let body;
-    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
-
-    const ALLOWED = ['bandaiName','age','city','bio','favoriteDeck','playstyle','yearsPlaying',
-                     'favoriteLeader','biggestAchievement','deckColor','availableForTraining','favoriteCharacter',
-                     'instagram','twitter','discord','whatsapp','youtube','twitch'];
-    const raw = await env.AUTH_KV.get(`profile:${user.id}`);
-    const existing = raw ? JSON.parse(raw) : {};
-    for (const key of ALLOWED) {
-        if (key in body) existing[key] = body[key];
-    }
-    await env.AUTH_KV.put(`profile:${user.id}`, JSON.stringify(existing));
-    return json({ ok: true, profile: existing }, 200, cors);
+    return json({ id, email, displayName, avatarUrl, role, status }, 200, cors);
 }
 
 async function handleLogout(request, env, cors) {
@@ -448,8 +420,6 @@ export default {
             if (path === '/auth/login'           && method === 'POST') return handleLogin(request, env, cors);
             if (path === '/auth/me'              && method === 'GET')  return handleMe(request, env, cors);
             if (path === '/auth/logout'          && method === 'POST') return handleLogout(request, env, cors);
-            if (path === '/profile'              && method === 'GET')  return handleGetProfile(request, env, cors);
-            if (path === '/profile'              && method === 'PUT')  return handlePutProfile(request, env, cors);
             if (path === '/admin/users'          && method === 'GET')  return handleAdminUsers(request, env, cors);
 
             const approveMatch = path.match(/^\/admin\/approve\/(.+)$/);

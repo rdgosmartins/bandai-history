@@ -16,13 +16,10 @@
     <link rel="stylesheet" href="css/yoko.css">
     <script src="js/auth.js"></script>
     <script>
-        let __authUser = null;
         (async () => {
             const user = await requireAuth();
             if (!user) return;
-            __authUser = user;
             document.getElementById('signOutBtn').style.display = '';
-            document.getElementById('profileBtn').style.display = '';
             if (user.role === 'admin') {
                 document.getElementById('adminPanelBtn').style.display = '';
             }
@@ -34,8 +31,7 @@
 <header>
     <button class="theme-toggle" onclick="toggleTheme()" id="themeToggleBtn">&#127775; Light</button>
     <button class="theme-toggle" id="signOutBtn" onclick="logout()" style="display:none;right:8rem;">&#9171; Sign Out</button>
-    <button class="theme-toggle" id="profileBtn" onclick="window.location.href='/profile.html'" style="display:none;right:15.5rem;">&#128100; Profile</button>
-    <button class="theme-toggle" id="adminPanelBtn" onclick="window.location.href='/admin.html'" style="display:none;right:23rem;">&#9881; Admin</button>
+    <button class="theme-toggle" id="adminPanelBtn" onclick="window.location.href='/admin.html'" style="display:none;right:16rem;">&#9881; Admin</button>
     <div class="header-inner">
         <div class="header-skull">&#9760;&#65039;</div>
         <div class="header-text">
@@ -56,8 +52,8 @@
     <div class="card" id="configCard">
         <h2><span class="section-icon">&#9875;</span> Configuration</h2>
 
-        <!-- Step 1: load file (hidden when player map is auto-loaded) -->
-        <div class="step" id="mapFileStep" style="display:none">
+        <!-- Step 1: load file -->
+        <div class="step">
             <label>1 · Username Map File</label>
             <div class="file-row">
                 <input type="file" id="mapFile" accept=".txt" style="display:none" onchange="loadMapFile(event)">
@@ -74,7 +70,7 @@
 
         <!-- Step 2: pick user -->
         <div class="step">
-            <label for="userSelect">Select User <span id="fileStatusInline" style="font-size:0.78rem;font-weight:400;color:var(--text-muted,#aaa);margin-left:0.5rem;"></span></label>
+            <label for="userSelect">2 · Select User</label>
             <select id="userSelect" disabled onchange="onUserChange()">
                 <option value="">— load the username map first —</option>
             </select>
@@ -1036,47 +1032,5 @@
 <script src="js/yoko.js"></script>
 <script src="js/player-profile.js"></script>
 <script src="js/theme.js"></script>
-<script>
-// Auto-load hardcoded player map and pre-select the logged-in user's Bandai name
-(function autoLoadPlayers() {
-    if (typeof PLAYERS_MAP === 'undefined' || typeof parseMapText !== 'function') {
-        // Fallback: show the manual upload step
-        const s = document.getElementById('mapFileStep');
-        if (s) s.style.display = '';
-        return;
-    }
-
-    const parsed = parseMapText(PLAYERS_MAP);
-    if (!parsed.users.length && !Object.keys(parsed.nameMap).length) {
-        const s = document.getElementById('mapFileStep');
-        if (s) s.style.display = '';
-        return;
-    }
-
-    applyParsed(parsed);
-
-    // Show player count inline next to the label
-    const total = Object.keys(parsed.nameMap).length;
-    const withToken = parsed.users.length;
-    const inline = document.getElementById('fileStatusInline');
-    if (inline) inline.textContent = `(${total} players, ${withToken} with token)`;
-
-    // Try to auto-select based on profile.bandaiName (available once auth resolves)
-    function tryAutoSelect() {
-        if (!__authUser) { setTimeout(tryAutoSelect, 100); return; }
-        const bandaiName = __authUser.profile && __authUser.profile.bandaiName;
-        if (!bandaiName) return;
-        const select = document.getElementById('userSelect');
-        const idx = (App.usersWithToken || []).findIndex(
-            u => u.name.toLowerCase() === bandaiName.toLowerCase()
-        );
-        if (idx !== -1) {
-            select.value = idx;
-            onUserChange();
-        }
-    }
-    tryAutoSelect();
-})();
-</script>
 </body>
 </html>
