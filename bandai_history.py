@@ -3,7 +3,7 @@ import logging
 import os
 from api_requests import fetch_data
 from dotenv import load_dotenv
-from tournament_data import tabulate_results, results_vs_player, tabulate_all_winrates, print_player_results
+from tournament_data import tabulate_results, results_vs_player, tabulate_all_winrates, print_player_results, export_player_results_xlsx
 
 EVENTS_DIR_PATH="events"
 
@@ -20,6 +20,7 @@ if __name__ == "__main__":
     cli_arg_parser.add_argument("-g", "--group-winrates", action="store_true", help="group your results by opponents bandai id")
     cli_arg_parser.add_argument("-t", "--target", type=str, help="instead of listing results, calculate wins vs losses against a single bandai id")
     cli_arg_parser.add_argument("-v", "--verbose", action="store_true", help="show verbose logging")
+    cli_arg_parser.add_argument("-e", "--export", type=str, metavar="FILE", help="export grouped results to an Excel file (e.g. results.xlsx)")
 
     args = cli_arg_parser.parse_args()
     
@@ -49,6 +50,8 @@ if __name__ == "__main__":
 
     if args.group_winrates:
         print_player_results(tabulate_all_winrates(event_data))
+    elif args.export:
+        export_player_results_xlsx(tabulate_all_winrates(event_data), args.export)
     elif args.target is None:
         tabulate_results(event_data)
     else:

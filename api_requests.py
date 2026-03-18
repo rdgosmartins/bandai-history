@@ -29,7 +29,7 @@ def fetch_event_ids(bearer_token: str) -> List[str]:
         'X-Authentication': bearer_token
     }
     
-    response = requests.get(url, headers=req_headers)
+    response = requests.get(url, headers=req_headers, verify=False)
     logging.debug(f"Fetch event ids status Code: {response.status_code}")
 
     if response.status_code == 200:
@@ -60,7 +60,7 @@ def fetch_single_event_data(bearer_token: str, events_path: str, event_id: str):
             return json.load(json_file)
 
     url = f"https://api.bandai-tcg-plus.com/api/user/event/{event_id}/history"
-    response = requests.get(url, headers=req_headers)
+    response = requests.get(url, headers=req_headers, verify=False)
     time.sleep(1)
     # print(f"Fetching event {event_id} status Code: {response.status_code}")
 

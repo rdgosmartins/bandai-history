@@ -1,5 +1,7 @@
 from collections import defaultdict
 from typing import Dict, Tuple
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
 
 """
 Returns (wins, losses) for the tournament
@@ -68,10 +70,16 @@ def tabulate_all_winrates(events_data):
 def load_bandai_username_id() -> Dict[str,str]:
     username_map = dict()
 
-    with open("bandai_username_map.txt") as f:
-        for line in f:
-            username, banda_id = line.strip().split(":")
-            username_map[banda_id] = username
+    try:
+        with open("bandai_username_map.txt") as f:
+            for line in f:
+                parts = line.strip().split(":")
+                if len(parts) < 2:
+                    continue
+                username, banda_id = parts[0], parts[1]
+                username_map[banda_id] = username
+    except FileNotFoundError:
+        pass
 
     return username_map
 
@@ -80,13 +88,22 @@ To be used with the result of `tabulate_all_winrates`
 """
 def print_player_results(player_results) -> None:
     username_map = load_bandai_username_id()
-    
-    sorted_results = dict(sorted(player_results.items(), key=lambda x: x[1][0], reverse=True))
+
+    sorted_results = dict(sorted(player_results.items(), key=lambda x: x[1][0] + x[1][1], reverse=True))
+
+    col_name = max((len(username_map.get(pid, pid)) for pid in sorted_results), default=10)
+    col_name = max(col_name, len("Player"))
+
+    header = f"{'Player':<{col_name}}  {'W':>4}  {'L':>4}  {'Total':>5}  {'Win%':>6}"
+    print(header)
+    print("-" * len(header))
+
     for player_id, res in sorted_results.items():
-        tag = player_id
-        if player_id in username_map:
-            tag = username_map[player_id]
-        print(f"{tag}: {res[0]}-{res[1]}")
+        tag = username_map.get(player_id, player_id)
+        wins, losses = res
+        total = wins + losses
+        winrate = (wins / total * 100) if total > 0 else 0
+        print(f"{tag:<{col_name}}  {wins:>4}  {losses:>4}  {total:>5}  {winrate:>5.1f}%")
 
 """
 Count results against single player
@@ -104,3 +121,48 @@ def results_vs_player(player_bandai_id: str, events_data) -> Tuple[int, int]:
                 losses += 1
 
     return (wins, losses)
+
+
+"""
+Export player results to an Excel file
+"""
+def export_player_results_xlsx(player_results, output_path: str = "results.xlsx") -> None:
+    username_map = load_bandai_username_id()
+    sorted_results = dict(sorted(player_results.items(), key=lambda x: x[1][0] + x[1][1], reverse=True))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Results"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="2E4057", end_color="2E4057", fill_type="solid")
+    center = Alignment(horizontal="center")
+
+    headers = ["Player", "W", "L", "Total", "Win%"]
+    col_widths = [24, 6, 6, 8, 8]
+    for col, (h, w) in enumerate(zip(headers, col_widths), start=1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = w
+
+    alt_fill = PatternFill(start_color="EAF0FB", end_color="EAF0FB", fill_type="solid")
+
+    for row_idx, (player_id, res) in enumerate(sorted_results.items(), start=2):
+        tag = username_map.get(player_id, player_id)
+        wins, losses = res
+        total = wins + losses
+        winrate = round(wins / total * 100, 1) if total > 0 else 0.0
+
+        row_fill = alt_fill if row_idx % 2 == 0 else None
+        values = [tag, wins, losses, total, winrate]
+        for col, val in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col, value=val)
+            if col > 1:
+                cell.alignment = center
+            if row_fill:
+                cell.fill = row_fill
+
+    wb.save(output_path)
+    print(f"Exported to {output_path}")

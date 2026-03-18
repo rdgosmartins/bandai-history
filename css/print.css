@@ -1,0 +1,73 @@
+        /* ── Print / PDF styles ─────────────────────────────────────────── */
+        @media print {
+            /* Hide UI chrome */
+            header, #configCard, #progress, #errorBox, #filterCard,
+            #inspectorCard, .pdf-toolbar, .cache-bar, .modal-overlay,
+            .toggle-icon, .btn, #vsBanner, .player-search-wrap > input,
+            #playerAutocomplete, .tab-nav { display: none !important; }
+            /* Hide whichever tab is NOT being printed (controlled by JS body class) */
+            body.print-rankings #results    { display: none !important; }
+            body.print-my-stats #rankingsTab { display: none !important; }
+            /* Default (no class): hide rankings tab */
+            body:not(.print-rankings):not(.print-my-stats) #rankingsTab { display: none !important; }
+
+            /* Show all card bodies, even collapsed ones */
+            .card-body, .card-body.collapsed {
+                display: block !important;
+                max-height: none !important;
+                opacity: 1 !important;
+                overflow: visible !important;
+                pointer-events: auto !important;
+            }
+
+            /* Layout — always print light */
+            :root, [data-theme="dark"] {
+                --bg: #ffffff; --card: #ffffff; --text: #1a1a2e;
+                --muted: #6c757d; --border: #dee2e6; --primary: #2E4057;
+            }
+            body { background: white; }
+            .container { max-width: 100%; margin: 0; padding: 0.25rem 0.5rem; }
+            .card { box-shadow: none !important; border: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-bottom: 0.75rem; padding: 1rem; }
+            .card:hover { box-shadow: none !important; transform: none; }
+            header::before, header .header-divider { display: none; }
+            .stat-box:hover, .rivalry-card:hover, .btn:hover { transform: none; box-shadow: none; }
+            .card h2 { margin-bottom: 0.75rem; }
+
+            /* Avoid breaking inside small cards; allow breaks between big ones */
+            .card { break-inside: avoid; }
+            #tourneyCard, #playerCard, #chartsCard { break-inside: auto; }
+            .rivalry-grid { grid-template-columns: 1fr 1fr; }
+            .rivalry-card { cursor: default; }
+            thead { display: table-header-group; }
+            tr { break-inside: avoid; }
+
+            /* Charts */
+            .charts-grid { grid-template-columns: 1fr 2fr; }
+            canvas { max-width: 100% !important; }
+            .chart-canvas-wrap, .chart-canvas-wrap.tall, .chart-canvas-wrap.short { height: auto !important; }
+
+            /* Stat boxes */
+            .stat-grid { grid-template-columns: repeat(4, 1fr); }
+            .streak-grid { grid-template-columns: repeat(3, 1fr); }
+
+            /* Comparison columns */
+            .compare-cols { grid-template-columns: 1fr 1fr; }
+
+            /* Placement tier bars — disable transition so bars render at full width */
+            .tier-bar { transition: none !important; }
+            .tier-bar-wrap { overflow: visible !important; }
+
+            /* Heatmap — remove scroll container so all rows print */
+            #heatmapGrid {
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            /* Force background colors on heatmap dots */
+            .heatmap-dot {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .heatmap-dot.win  { background: #28a745 !important; }
+            .heatmap-dot.loss { background: #dc3545 !important; }
+            .heatmap-dot.none { background: #dee2e6 !important; opacity: 0.4 !important; }
+        }

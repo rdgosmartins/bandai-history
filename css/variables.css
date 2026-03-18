@@ -1,0 +1,52 @@
+        :root {
+            --primary: #2E4057;
+            --accent:  #048A81;
+            --gold:    #c9a84c;
+            --gold-lt: #e8c96a;
+            --bg:      #f0f4f8;
+            --card:    #ffffff;
+            --text:    #1a1a2e;
+            --muted:   #6c757d;
+            --border:  #dee2e6;
+            --win:     #28a745;
+            --loss:    #dc3545;
+            --wave-fill: #f0f4f8;
+        }
+        [data-theme="dark"] {
+            --primary: #7eb8d4;
+            --accent:  #2ecfc5;
+            --gold:    #e8c96a;
+            --gold-lt: #f5df9a;
+            --bg:      #0f1923;
+            --card:    #1a2535;
+            --text:    #e8edf2;
+            --muted:   #8a9bb0;
+            --border:  #2a3a50;
+            --win:     #4cbb6e;
+            --loss:    #f0546a;
+            --wave-fill: #0f1923;
+        }
+        /* Dark mode element overrides */
+        [data-theme="dark"] body {
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(46,207,197,0.05) 0%, transparent 50%),
+                radial-gradient(circle at 85% 20%, rgba(126,184,212,0.04) 0%, transparent 50%);
+        }
+        [data-theme="dark"] tbody tr:nth-child(even) td { background: #1f2f42; }
+        [data-theme="dark"] tbody tr:hover td { background: #253647; }
+        [data-theme="dark"] .stat-box { background: linear-gradient(160deg, #1a2535, #1f3045); }
+        [data-theme="dark"] .rivalry-card { background: linear-gradient(160deg, #1a2535, #1f3045); }
+        [data-theme="dark"] select,
+        [data-theme="dark"] textarea,
+        [data-theme="dark"] input[type="text"],
+        [data-theme="dark"] input[type="date"] { background: #1a2535; color: var(--text); border-color: var(--border); }
+        [data-theme="dark"] .player-autocomplete { background: #1a2535; border-color: var(--border); }
+        [data-theme="dark"] .player-autocomplete li:hover,
+        [data-theme="dark"] .player-autocomplete li.highlighted { background: #253647; }
+        [data-theme="dark"] .vs-banner { background: #1a3040; border-color: var(--accent); }
+        [data-theme="dark"] .inspector-block { background: #0d1117; }
+        [data-theme="dark"] .cache-bar { background: var(--card); border-color: var(--border); }
+        [data-theme="dark"] .cache-bar.has-cache { background: #1a3040; border-color: var(--accent); }
+        [data-theme="dark"] .tier-bar-wrap { background: #2a3a50; }
+        [data-theme="dark"] .round-opp-card { background: #1a2535; border-color: var(--border); }
+        [data-theme="dark"] thead th { background: linear-gradient(135deg, #1a2d42, #253d56); }
