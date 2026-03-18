@@ -22,7 +22,7 @@ async function loadYokoTab() {
     }
 
     // Fetch live events for all Yoko users in parallel
-    const BASE = 'https://api.bandai-tcg-plus.com/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0';
+    const BASE = `${BANDAI_API_BASE}/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0`;
     const LIVE_TABS = [
         `${BASE}&past_event_display_flg=0&selected_tab=1`,
         `${BASE}&past_event_display_flg=0&selected_tab=2`,
@@ -84,7 +84,7 @@ async function loadYokoTab() {
                     'Referer': 'https://www.bandai-tcg-plus.com/'
                 };
                 const r = await fetch(
-                    `https://api.bandai-tcg-plus.com/api/user/my/event/${ev.id}`,
+                    `${BANDAI_API_BASE}/api/user/my/event/${ev.id}`,
                     { headers: baseHeaders }
                 );
                 if (!r.ok) return null;

@@ -1,3 +1,9 @@
+// Base URL for all Bandai API calls.
+// When hosted online, this points to the Cloudflare CORS proxy.
+// For local use with --disable-web-security, change to:
+//   'https://api.bandai-tcg-plus.com'
+const BANDAI_API_BASE = 'https://bandai-proxy.rdgosmartins.workers.dev';
+
 const SET_PERIODS = [
     { name: "Pre OP-01",                              date: null },
     { name: "OP-01 · Romance Dawn",                   date: new Date("2022-12-02") },

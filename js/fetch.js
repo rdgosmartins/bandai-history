@@ -6,7 +6,7 @@ async function fetchUserEvents(user, onProgress) {
     const token = user.token;
     // Fetch multiple tab/flag combinations to capture both open and completed events,
     // then deduplicate by event ID so each event is processed only once.
-    const BASE = 'https://api.bandai-tcg-plus.com/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0';
+    const BASE = `${BANDAI_API_BASE}/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0`;
     const tabCombos = [
         `${BASE}&past_event_display_flg=1&selected_tab=3`, // past/completed (original)
         `${BASE}&past_event_display_flg=0&selected_tab=1`, // upcoming / registered
@@ -67,7 +67,7 @@ async function fetchUserEvents(user, onProgress) {
     async function fetchEventDetail(eventId) {
         try {
             const r = await fetch(
-                `https://api.bandai-tcg-plus.com/api/user/my/event/${eventId}`,
+                `${BANDAI_API_BASE}/api/user/my/event/${eventId}`,
                 { headers: baseHeaders }
             );
             if (!r.ok) return null;
@@ -91,7 +91,7 @@ async function fetchUserEvents(user, onProgress) {
                 Math.round((i / newEvents.length) * 100)
             );
             const evResp = await fetch(
-                `https://api.bandai-tcg-plus.com/api/user/event/${ev.id}/history`,
+                `${BANDAI_API_BASE}/api/user/event/${ev.id}/history`,
                 { headers: baseHeaders }
             );
             if (evResp.ok) {
