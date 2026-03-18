@@ -49,8 +49,6 @@
 </div>
 
 <script>
-const AUTH_BASE = 'https://bandai-auth.rdgosmartins.workers.dev';
-
 async function loadUsers() {
     try {
         const res = await fetch(`${AUTH_BASE}/admin/users`, { credentials: 'include' });

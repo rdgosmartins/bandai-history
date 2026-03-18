@@ -19,12 +19,10 @@
         (async () => {
             const user = await requireAuth();
             if (!user) return;
-            document.addEventListener('DOMContentLoaded', () => {
-                document.getElementById('signOutBtn').style.display = '';
-                if (user.role === 'admin') {
-                    document.getElementById('adminPanelBtn').style.display = '';
-                }
-            });
+            document.getElementById('signOutBtn').style.display = '';
+            if (user.role === 'admin') {
+                document.getElementById('adminPanelBtn').style.display = '';
+            }
         })();
     </script>
 </head>
