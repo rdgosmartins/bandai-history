@@ -1,5 +1,3 @@
-const AUTH_BASE = 'https://bandai-auth.rdgosmartins.workers.dev';
-
 // Hardcoded player map (Name:BandaiID or Name:BandaiID:Token).
 // Parsed at startup via parseMapText() so file upload is no longer required.
 const PLAYERS_MAP = `Rodrigo:0000416920:eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJTZWthcHB5IEluYy4iLCJhdWQiOjkzMTcxOSwiaWF0IjoxNzcwMDU5ODk1LCJibmlkIjp7ImFjY2Vzc1Rva2VuIjoiTGpPVnNlQzZTVXFSQzRVMEZUdHREUXRiMEtOZDRYUTFLX1FORzlBS3BPeEEiLCJyZWZyZXNoVG9rZW4iOiJLTHlNQ2R5RFN6LTZYT1cydFRiWmp3eG52RzNsOFZROC1jZEdtU0ZFR1ZOdyIsInVzZXJJRCI6IlYzbTY1VzR6STRRMW0xeGhmWEx0a1MtQSJ9fQ.QaCOAaSOAGfBULaifgUVOBua-KIItr0t0XQdrmKlRn0
