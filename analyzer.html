@@ -14,6 +14,29 @@
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/print.css">
     <link rel="stylesheet" href="css/yoko.css">
+    <script src="js/auth.js"></script>
+    <script>
+        (async () => {
+            const user = await requireAuth();
+            if (!user) return;
+            document.addEventListener('DOMContentLoaded', () => {
+                const logoutBtn = document.createElement('button');
+                logoutBtn.className = 'theme-toggle';
+                logoutBtn.style.cssText = 'right:130px;top:1rem;position:absolute;';
+                logoutBtn.textContent = '⎋ Sign Out';
+                logoutBtn.onclick = logout;
+                document.querySelector('header').appendChild(logoutBtn);
+                if (user.role === 'admin') {
+                    const adminBtn = document.createElement('button');
+                    adminBtn.className = 'theme-toggle';
+                    adminBtn.style.cssText = 'right:260px;top:1rem;position:absolute;';
+                    adminBtn.textContent = '⚙ Admin';
+                    adminBtn.onclick = () => window.location.href = '/admin.html';
+                    document.querySelector('header').appendChild(adminBtn);
+                }
+            });
+        })();
+    </script>
 </head>
 <body>
 

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — One Piece TCG History</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/auth.css">
+    <script src="js/auth.js"></script>
+    <script>
+        let currentAdmin;
+        (async () => {
+            currentAdmin = await requireAuth({ requireAdmin: true });
+            if (!currentAdmin) return;
+            document.getElementById('adminName').textContent = currentAdmin.displayName || currentAdmin.email;
+            loadUsers();
+        })();
+    </script>
+</head>
+<body class="admin-body">
+<div class="admin-container">
+
+    <div class="admin-header">
+        <h1>&#9881; Admin Panel</h1>
+        <div style="display:flex; align-items:center; gap:1rem;">
+            <span style="font-size:0.85rem; color:var(--text-muted,#888)">
+                Signed in as <strong id="adminName">…</strong>
+            </span>
+            <button class="btn-logout" onclick="logout()">Sign Out</button>
+        </div>
+    </div>
+
+    <!-- Pending approvals -->
+    <div class="admin-card">
+        <h2>⏳ Pending Approvals</h2>
+        <div id="pendingList"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- All users -->
+    <div class="admin-card">
+        <h2>&#128101; All Users</h2>
+        <div id="allUsersList"><div class="empty-state">Loading…</div></div>
+    </div>
+
+</div>
+
+<script>
+const AUTH_BASE = 'https://bandai-auth.rdgosmartins.workers.dev';
+
+async function loadUsers() {
+    try {
+        const res = await fetch(`${AUTH_BASE}/admin/users`, { credentials: 'include' });
+        if (!res.ok) throw new Error();
+        const { pending, all } = await res.json();
+        renderPending(pending);
+        renderAll(all);
+    } catch {
+        document.getElementById('pendingList').innerHTML = '<div class="empty-state">Failed to load users.</div>';
+    }
+}
+
+function avatarEl(user) {
+    if (user.avatarUrl) return `<div class="user-avatar"><img src="${user.avatarUrl}" alt=""></div>`;
+    const initials = (user.displayName || user.email).slice(0,2).toUpperCase();
+    return `<div class="user-avatar">${initials}</div>`;
+}
+
+function methodBadge(m) {
+    const map = { google: 'badge-google', email: 'badge-email', both: 'badge-both' };
+    return `<span class="badge ${map[m] || 'badge-email'}">${m}</span>`;
+}
+
+function statusBadge(s) {
+    const map = { pending: 'badge-pending', approved: 'badge-approved', rejected: 'badge-rejected' };
+    return `<span class="badge ${map[s] || ''}">${s}</span>`;
+}
+
+function renderPending(users) {
+    const el = document.getElementById('pendingList');
+    if (!users.length) { el.innerHTML = '<div class="empty-state">No pending approvals.</div>'; return; }
+    el.innerHTML = users.map(u => `
+        <div class="user-row" id="row-${u.id}">
+            ${avatarEl(u)}
+            <div class="user-info">
+                <strong>${u.displayName || '—'}</strong>
+                <span>${u.email}</span>
+            </div>
+            <div class="user-meta">
+                ${methodBadge(u.method)}
+                <span style="font-size:0.75rem;color:var(--text-muted,#aaa)">${new Date(u.createdAt).toLocaleDateString()}</span>
+            </div>
+            <div class="user-actions">
+                <button class="btn-approve" onclick="approve('${u.id}')">Approve</button>
+                <button class="btn-reject"  onclick="reject('${u.id}')">Reject</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderAll(users) {
+    const el = document.getElementById('allUsersList');
+    if (!users.length) { el.innerHTML = '<div class="empty-state">No users yet.</div>'; return; }
+    el.innerHTML = users.map(u => `
+        <div class="user-row">
+            ${avatarEl(u)}
+            <div class="user-info">
+                <strong>${u.displayName || '—'}</strong>
+                <span>${u.email}</span>
+            </div>
+            <div class="user-meta">
+                ${methodBadge(u.method)}
+                ${statusBadge(u.status)}
+                ${u.role === 'admin' ? '<span class="badge badge-admin">admin</span>' : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function approve(id) {
+    const btn = document.querySelector(`#row-${id} .btn-approve`);
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const res = await fetch(`${AUTH_BASE}/admin/approve/${id}`, { method: 'POST', credentials: 'include' });
+    if (res.ok) loadUsers();
+    else if (btn) { btn.disabled = false; btn.textContent = 'Approve'; }
+}
+
+async function reject(id) {
+    if (!confirm('Reject this user? They will not be able to sign in.')) return;
+    const btn = document.querySelector(`#row-${id} .btn-reject`);
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const res = await fetch(`${AUTH_BASE}/admin/reject/${id}`, { method: 'POST', credentials: 'include' });
+    if (res.ok) loadUsers();
+    else if (btn) { btn.disabled = false; btn.textContent = 'Reject'; }
+}
+</script>
+</body>
+</html>

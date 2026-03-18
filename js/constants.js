@@ -1,3 +1,5 @@
+const AUTH_BASE = 'https://bandai-auth.rdgosmartins.workers.dev';
+
 // Base URL for all Bandai API calls.
 // When hosted online, this points to the Cloudflare CORS proxy.
 // For local use with --disable-web-security, change to:

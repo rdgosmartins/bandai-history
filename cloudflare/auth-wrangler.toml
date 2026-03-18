@@ -1,0 +1,16 @@
+name = "bandai-auth"
+main = "auth-worker.js"
+compatibility_date = "2024-01-01"
+account_id = "8ce3435caa96905dbb3a0f9bcdc04f3a"
+
+[[kv_namespaces]]
+binding = "AUTH_KV"
+id = "93fce07b901a4e58a349d381537fe18d"
+
+[vars]
+ALLOWED_ORIGIN = "https://bandai-history.rdgosmartins.workers.dev"
+
+# Secrets (set via wrangler secret put):
+#   JWT_SECRET
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
