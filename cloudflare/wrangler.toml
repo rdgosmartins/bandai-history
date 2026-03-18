@@ -1,6 +1,7 @@
 name = "bandai-proxy"
 main = "worker.js"
 compatibility_date = "2024-01-01"
+account_id = "8ce3435caa96905dbb3a0f9bcdc04f3a"
 
 # Workers free tier is sufficient (100k req/day)
 # Deploy with: npx wrangler deploy  (from this cloudflare/ directory)
