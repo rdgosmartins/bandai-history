@@ -56,8 +56,8 @@
     <div class="card" id="configCard">
         <h2><span class="section-icon">&#9875;</span> Configuration</h2>
 
-        <!-- Step 1: load file -->
-        <div class="step">
+        <!-- Step 1: load file (hidden when player map is auto-loaded) -->
+        <div class="step" id="mapFileStep" style="display:none">
             <label>1 · Username Map File</label>
             <div class="file-row">
                 <input type="file" id="mapFile" accept=".txt" style="display:none" onchange="loadMapFile(event)">
@@ -74,7 +74,7 @@
 
         <!-- Step 2: pick user -->
         <div class="step">
-            <label for="userSelect">2 · Select User</label>
+            <label for="userSelect">Select User <span id="fileStatusInline" style="font-size:0.78rem;font-weight:400;color:var(--text-muted,#aaa);margin-left:0.5rem;"></span></label>
             <select id="userSelect" disabled onchange="onUserChange()">
                 <option value="">— load the username map first —</option>
             </select>
@@ -1039,9 +1039,27 @@
 <script>
 // Auto-load hardcoded player map and pre-select the logged-in user's Bandai name
 (function autoLoadPlayers() {
-    if (typeof PLAYERS_MAP === 'undefined' || typeof parseMapText !== 'function') return;
-    applyParsed(parseMapText(PLAYERS_MAP));
-    document.getElementById('fileStatus').textContent = 'Players loaded automatically';
+    if (typeof PLAYERS_MAP === 'undefined' || typeof parseMapText !== 'function') {
+        // Fallback: show the manual upload step
+        const s = document.getElementById('mapFileStep');
+        if (s) s.style.display = '';
+        return;
+    }
+
+    const parsed = parseMapText(PLAYERS_MAP);
+    if (!parsed.users.length && !Object.keys(parsed.nameMap).length) {
+        const s = document.getElementById('mapFileStep');
+        if (s) s.style.display = '';
+        return;
+    }
+
+    applyParsed(parsed);
+
+    // Show player count inline next to the label
+    const total = Object.keys(parsed.nameMap).length;
+    const withToken = parsed.users.length;
+    const inline = document.getElementById('fileStatusInline');
+    if (inline) inline.textContent = `(${total} players, ${withToken} with token)`;
 
     // Try to auto-select based on profile.bandaiName (available once auth resolves)
     function tryAutoSelect() {
