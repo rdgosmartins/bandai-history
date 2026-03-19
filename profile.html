@@ -55,6 +55,11 @@
             max-width: 980px;
             margin: 2rem auto;
             padding: 0 1.25rem 3rem;
+            align-items: start;
+        }
+        .profile-tabs-wrap {
+            grid-column: 1 / -1;
+            margin-bottom: -.25rem;
         }
         @media (max-width: 720px) {
             .pg-main { grid-template-columns: 1fr; }
@@ -303,10 +308,11 @@
 
         /* ── Profile tabs ──────────────────────────────────────── */
         .profile-tabs {
-            display: flex; gap: 0; margin-bottom: 1.25rem;
+            display: flex; gap: 0;
             background: var(--card,#fff); border-radius: 12px;
             border: 1px solid var(--border,#dee2e6);
             overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+            max-width: 700px;
         }
         .profile-tab {
             flex: 1; padding: .65rem 1rem; background: none; border: none;
@@ -605,14 +611,16 @@
 
     </aside>
 
-    <!-- ── Sections ───────────────────────────── -->
-    <div class="sections">
-
-        <!-- Tab switcher -->
+    <!-- ── Tab switcher (spans full width) ───────── -->
+    <div class="profile-tabs-wrap">
         <div class="profile-tabs">
             <button class="profile-tab active" onclick="switchProfileTab('profile')">&#128100; Profile</button>
             <button class="profile-tab" onclick="switchProfileTab('decks')">&#127183; Decks</button>
         </div>
+    </div>
+
+    <!-- ── Sections ───────────────────────────── -->
+    <div class="sections">
 
         <!-- Profile tab content -->
         <div id="tabProfile" class="tab-panel active">
