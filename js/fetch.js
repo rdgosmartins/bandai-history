@@ -371,7 +371,10 @@ Then open <code>analyzer.html</code> in that window.`;
         }
         showError(msg);
     } finally {
-        document.getElementById('fetchBtn').disabled = false;
-        document.getElementById('syncAllBtn').disabled = App.usersWithToken.length < 2;
+        document.getElementById('fetchBtn').disabled     = false;
+        document.getElementById('syncAllBtn').disabled   = App.usersWithToken.length < 2;
+        const _selIdx2 = document.getElementById('userSelect').value;
+        document.getElementById('loadCacheBtn').disabled = _selIdx2 === ''
+            || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx2)]?.bandaiId || '')).length === 0;
     }
 }

@@ -1203,6 +1203,7 @@ function loadFromCache() {
         showError('No cached data for ' + user.name + '. Use Fetch & Analyze first.');
         return;
     }
+    clearError();
 
     const allEventData = events.sort((a, b) => new Date(b._start_datetime) - new Date(a._start_datetime));
     App.allEventData     = allEventData;
@@ -1246,7 +1247,7 @@ function loadFromCache() {
     buildCompareCard();
     displayResults(user.name, totalW, totalL, periodMap, playerMap, allEventData);
     document.getElementById('tabNav').style.display = 'flex';
-    if (document.getElementById('rankingsTab').style.display !== 'none') buildGlobalRankings();
+    switchTab('my-stats');
 }
 </script>
 
