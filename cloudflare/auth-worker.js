@@ -491,6 +491,92 @@ async function handleProfileByName(request, env, cors, bandaiName) {
     return json({ ...publicProfile(target), badges: badgesMap[target.bandaiId] || [] }, 200, cors);
 }
 
+// ── Decks ─────────────────────────────────────────────────────────────────────
+
+function newDeckId() { return 'deck_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12); }
+
+async function getDecks(env, userId) {
+    const raw = await env.AUTH_KV.get('decks:' + userId);
+    return raw ? JSON.parse(raw) : [];
+}
+async function putDecks(env, userId, decks) {
+    await env.AUTH_KV.put('decks:' + userId, JSON.stringify(decks));
+}
+
+async function handleDecksGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const decks = await getDecks(env, user.id);
+    return json(decks, 200, cors);
+}
+
+async function handleDecksPost(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const body = await request.json();
+    const { name, leader, cards, article, isPublic } = body;
+    if (!name || !leader) return json({ error: 'name and leader are required' }, 400, cors);
+    const decks = await getDecks(env, user.id);
+    const deck = {
+        id:        newDeckId(),
+        name:      String(name).slice(0, 64),
+        leader:    leader,   // { id, name, colors, image }
+        cards:     Array.isArray(cards) ? cards : [],   // [{ id, name, image, qty, color, type }]
+        article:   String(article || '').slice(0, 20000),
+        isPublic:  !!isPublic,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+    decks.push(deck);
+    await putDecks(env, user.id, decks);
+    return json(deck, 201, cors);
+}
+
+async function handleDeckPut(request, env, cors, deckId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const body = await request.json();
+    const decks = await getDecks(env, user.id);
+    const idx = decks.findIndex(d => d.id === deckId);
+    if (idx === -1) return json({ error: 'Deck not found' }, 404, cors);
+    const d = decks[idx];
+    if (body.name    !== undefined) d.name    = String(body.name).slice(0, 64);
+    if (body.leader  !== undefined) d.leader  = body.leader;
+    if (body.cards   !== undefined) d.cards   = Array.isArray(body.cards) ? body.cards : d.cards;
+    if (body.article !== undefined) d.article = String(body.article).slice(0, 20000);
+    if (body.isPublic !== undefined) d.isPublic = !!body.isPublic;
+    d.updatedAt = new Date().toISOString();
+    decks[idx] = d;
+    await putDecks(env, user.id, decks);
+    return json(d, 200, cors);
+}
+
+async function handleDeckDelete(request, env, cors, deckId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const decks = await getDecks(env, user.id);
+    const filtered = decks.filter(d => d.id !== deckId);
+    if (filtered.length === decks.length) return json({ error: 'Deck not found' }, 404, cors);
+    await putDecks(env, user.id, filtered);
+    return json({ ok: true }, 200, cors);
+}
+
+// Public decks for a given bandaiName (used in view mode)
+async function handlePublicDecks(request, env, cors, bandaiName) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw = await env.AUTH_KV.get('user_index');
+    if (!raw) return json([], 200, cors);
+    const ids = JSON.parse(raw);
+    const users = await Promise.all(ids.map(id => getUser(env, id)));
+    const target = users.find(u =>
+        u?.profile?.bandaiName?.toLowerCase() === bandaiName.toLowerCase()
+    );
+    if (!target) return json([], 200, cors);
+    const decks = await getDecks(env, target.id);
+    return json(decks.filter(d => d.isPublic), 200, cors);
+}
+
 async function handlePlayerBadgesPut(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
@@ -588,6 +674,15 @@ export default {
             if (path === '/bandai-map'           && method === 'PUT')  return handleBandaiMapPut(request, env, cors);
             if (path === '/player-badges'        && method === 'PUT')  return handlePlayerBadgesPut(request, env, cors);
             if (path === '/admin/associate'      && method === 'POST') return handleAdminAssociate(request, env, cors);
+            if (path === '/decks'                && method === 'GET')  return handleDecksGet(request, env, cors);
+            if (path === '/decks'                && method === 'POST') return handleDecksPost(request, env, cors);
+
+            const deckMatch = path.match(/^\/decks\/([^/]+)$/);
+            if (deckMatch && method === 'PUT')    return handleDeckPut(request, env, cors, deckMatch[1]);
+            if (deckMatch && method === 'DELETE') return handleDeckDelete(request, env, cors, deckMatch[1]);
+
+            const publicDecksMatch = path.match(/^\/decks\/public\/(.+)$/);
+            if (publicDecksMatch && method === 'GET') return handlePublicDecks(request, env, cors, decodeURIComponent(publicDecksMatch[1]));
 
             const approveMatch = path.match(/^\/admin\/approve\/(.+)$/);
             if (approveMatch && method === 'POST') return handleApprove(request, env, cors, approveMatch[1]);

@@ -96,7 +96,7 @@
         /* In view mode, don't show edit overlay */
         .view-mode .avatar-ring { cursor: default; }
         .view-mode .avatar-edit-overlay { display: none; }
-        .view-mode .save-bar { display: none; }
+        .view-mode .save-bar, .view-mode #profileSaveBar { display: none; }
         .view-mode .field input,
         .view-mode .field textarea,
         .view-mode .field select,
@@ -300,6 +300,266 @@
         [data-theme="dark"] .pill-purple { background: #1e0d35; color: #c39bd3; }
         [data-theme="dark"] .pill-black  { background: #252525; color: #aaa; }
         [data-theme="dark"] .pill-yellow { background: #2e2800; color: #f5d060; }
+
+        /* ── Profile tabs ──────────────────────────────────────── */
+        .profile-tabs {
+            display: flex; gap: 0; margin-bottom: 1.25rem;
+            background: var(--card,#fff); border-radius: 12px;
+            border: 1px solid var(--border,#dee2e6);
+            overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+        }
+        .profile-tab {
+            flex: 1; padding: .65rem 1rem; background: none; border: none;
+            font-weight: 600; font-size: .85rem; cursor: pointer; color: var(--muted,#6c757d);
+            transition: background .15s, color .15s; letter-spacing: .02em;
+        }
+        .profile-tab:not(:last-child) { border-right: 1px solid var(--border,#dee2e6); }
+        .profile-tab.active { background: var(--accent,#048A81); color: #fff; }
+        .profile-tab:hover:not(.active) { background: var(--bg,#f0f4f8); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: flex; flex-direction: column; gap: 1.25rem; }
+
+        /* ── Deck Builder ─────────────────────────────────────── */
+        .db-layout {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 1rem;
+            align-items: start;
+        }
+        @media (max-width: 860px) { .db-layout { grid-template-columns: 1fr; } }
+
+        .db-search-panel, .db-deck-panel {
+            background: var(--card,#fff);
+            border-radius: 14px;
+            border: 1px solid var(--border,#dee2e6);
+            box-shadow: 0 2px 10px rgba(0,0,0,.06);
+            overflow: hidden;
+        }
+        .db-panel-header {
+            padding: .8rem 1rem;
+            border-bottom: 1px solid var(--border,#dee2e6);
+            display: flex; align-items: center; gap: .6rem;
+            font-family: 'Cinzel', serif; font-size: .82rem;
+            color: var(--accent,#048A81);
+        }
+        .db-filters {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .5rem;
+            padding: .75rem 1rem;
+            border-bottom: 1px solid var(--border,#dee2e6);
+        }
+        @media (max-width: 600px) { .db-filters { grid-template-columns: 1fr 1fr; } }
+        .db-filters input, .db-filters select {
+            background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
+            border-radius: 8px; padding: .45rem .65rem;
+            font-size: .8rem; color: var(--text,#1a1a2e); font-family: inherit;
+        }
+        .db-filters input:focus, .db-filters select:focus {
+            outline: none; border-color: var(--accent,#048A81);
+        }
+        .db-filters input { grid-column: 1 / -1; }
+        .db-search-btn {
+            background: var(--accent,#048A81); color: #fff; border: none;
+            border-radius: 8px; padding: .45rem .9rem; font-size: .8rem; font-weight: 600;
+            cursor: pointer; transition: opacity .15s;
+        }
+        .db-search-btn:hover { opacity: .85; }
+
+        .db-card-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: .5rem; padding: .75rem 1rem;
+            max-height: 400px; overflow-y: auto;
+        }
+        .db-card {
+            position: relative; cursor: pointer; border-radius: 6px; overflow: hidden;
+            border: 2px solid transparent; transition: border-color .15s, transform .1s;
+        }
+        .db-card:hover { border-color: var(--accent,#048A81); transform: translateY(-2px); }
+        .db-card img { width: 100%; display: block; border-radius: 4px; }
+        .db-card-qty {
+            position: absolute; bottom: 3px; right: 4px;
+            background: rgba(0,0,0,.75); color: #fff;
+            font-size: .65rem; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+        }
+        .db-card.maxed { opacity: .45; pointer-events: none; }
+        .db-card.leader-only { border-color: #c9a84c; }
+        .db-loading-msg, .db-empty-msg {
+            text-align: center; color: var(--muted,#6c757d); font-size: .82rem;
+            padding: 2rem 1rem;
+        }
+
+        /* Deck panel */
+        .db-deck-meta { padding: .75rem 1rem; border-bottom: 1px solid var(--border,#dee2e6); display: flex; flex-direction: column; gap: .5rem; }
+        .db-deck-meta input {
+            background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
+            border-radius: 8px; padding: .45rem .65rem;
+            font-size: .85rem; color: var(--text,#1a1a2e); font-family: inherit; width: 100%;
+        }
+        .db-deck-meta input:focus { outline: none; border-color: var(--accent,#048A81); }
+        .db-deck-stats {
+            display: flex; align-items: center; gap: .5rem; font-size: .75rem; color: var(--muted,#6c757d);
+        }
+        .db-count-badge {
+            font-weight: 700; padding: .15rem .5rem; border-radius: 20px;
+            background: var(--accent,#048A81); color: #fff; font-size: .72rem;
+        }
+        .db-count-badge.over { background: var(--loss,#dc3545); }
+
+        .db-leader-slot {
+            padding: .6rem 1rem; border-bottom: 1px solid var(--border,#dee2e6);
+            display: flex; align-items: center; gap: .75rem;
+        }
+        .db-leader-slot img { width: 42px; border-radius: 4px; }
+        .db-leader-info { flex: 1; min-width: 0; }
+        .db-leader-name { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .db-leader-sub  { font-size: .68rem; color: var(--muted,#6c757d); }
+        .db-leader-clear { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: .5; padding: 2px; }
+        .db-leader-clear:hover { opacity: 1; }
+        .db-leader-empty { padding: .75rem 1rem; font-size: .8rem; color: var(--muted,#6c757d); border-bottom: 1px solid var(--border,#dee2e6); }
+
+        .db-deck-list { max-height: 340px; overflow-y: auto; }
+        .db-deck-row {
+            display: flex; align-items: center; gap: .5rem;
+            padding: .4rem 1rem; border-bottom: 1px solid var(--border,#dee2e6);
+            font-size: .78rem;
+        }
+        .db-deck-row img { width: 32px; border-radius: 3px; flex-shrink: 0; }
+        .db-deck-row-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .db-deck-row-qty { display: flex; align-items: center; gap: .25rem; }
+        .db-qty-btn {
+            width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border,#dee2e6);
+            background: var(--bg,#f0f4f8); font-size: .75rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-weight: 700;
+            color: var(--text,#1a1a2e); transition: background .1s;
+        }
+        .db-qty-btn:hover { background: var(--accent,#048A81); color: #fff; border-color: var(--accent,#048A81); }
+        .db-qty-num { min-width: 14px; text-align: center; font-weight: 700; }
+        .db-deck-empty { text-align: center; color: var(--muted,#6c757d); font-size: .82rem; padding: 1.5rem; }
+
+        .db-deck-actions {
+            padding: .75rem 1rem; display: flex; flex-direction: column; gap: .5rem;
+            border-top: 1px solid var(--border,#dee2e6);
+        }
+        .db-public-row { display: flex; align-items: center; gap: .5rem; font-size: .8rem; }
+        .db-public-row input[type=checkbox] { cursor: pointer; }
+        .db-save-row { display: flex; gap: .5rem; }
+        .db-save-row button {
+            flex: 1; padding: .5rem; border-radius: 8px; border: none;
+            font-size: .82rem; font-weight: 600; cursor: pointer; transition: opacity .15s;
+        }
+        .db-btn-save { background: var(--accent,#048A81); color: #fff; }
+        .db-btn-save:hover { opacity: .85; }
+        .db-btn-save:disabled { opacity: .4; cursor: not-allowed; }
+        .db-btn-new  { background: var(--bg,#f0f4f8); color: var(--text,#1a1a2e); border: 1px solid var(--border,#dee2e6) !important; }
+        .db-btn-new:hover { background: var(--border,#dee2e6); }
+        .db-save-status { font-size: .75rem; text-align: center; min-height: 1.2em; color: var(--muted,#6c757d); }
+        .db-save-status.ok  { color: var(--win,#28a745); }
+        .db-save-status.err { color: var(--loss,#dc3545); }
+
+        /* Saved decks list */
+        .db-saved-list { padding: .5rem 1rem .75rem; }
+        .db-saved-item {
+            display: flex; align-items: center; gap: .6rem;
+            padding: .4rem .6rem; border-radius: 8px; cursor: pointer;
+            transition: background .12s; font-size: .8rem;
+        }
+        .db-saved-item:hover { background: var(--bg,#f0f4f8); }
+        .db-saved-item.active { background: rgba(4,138,129,.1); }
+        .db-saved-item img { width: 28px; border-radius: 3px; flex-shrink: 0; }
+        .db-saved-name { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .db-saved-count { color: var(--muted,#6c757d); font-size: .72rem; white-space: nowrap; }
+        .db-saved-del { background: none; border: none; cursor: pointer; opacity: .35; font-size: .85rem; padding: 2px 4px; }
+        .db-saved-del:hover { opacity: 1; color: var(--loss,#dc3545); }
+
+        /* Article editor */
+        .db-article-wrap { padding: .75rem 1rem; border-top: 1px solid var(--border,#dee2e6); }
+        .db-article-label { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted,#6c757d); margin-bottom: .4rem; }
+        .db-toolbar {
+            display: flex; gap: .25rem; flex-wrap: wrap; margin-bottom: .4rem;
+        }
+        .db-toolbar button {
+            padding: .2rem .5rem; border-radius: 5px; border: 1px solid var(--border,#dee2e6);
+            background: var(--bg,#f0f4f8); font-size: .78rem; cursor: pointer;
+            color: var(--text,#1a1a2e); font-weight: 600; transition: background .1s;
+        }
+        .db-toolbar button:hover { background: var(--accent,#048A81); color: #fff; border-color: var(--accent,#048A81); }
+        .db-article-editor {
+            min-height: 120px; border: 1px solid var(--border,#dee2e6);
+            border-radius: 8px; padding: .6rem .75rem;
+            font-size: .84rem; line-height: 1.6; outline: none;
+            background: var(--bg,#f0f4f8); color: var(--text,#1a1a2e);
+        }
+        .db-article-editor:focus { border-color: var(--accent,#048A81); box-shadow: 0 0 0 3px rgba(4,138,129,.1); }
+
+        /* Deck cards on profile (view mode) */
+        .deck-cards-section { display: flex; flex-direction: column; gap: .75rem; }
+        .deck-card-item {
+            background: var(--card,#fff); border: 1px solid var(--border,#dee2e6);
+            border-radius: 14px; overflow: hidden; cursor: pointer;
+            transition: box-shadow .15s, transform .15s;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+        }
+        .deck-card-item:hover { box-shadow: 0 6px 20px rgba(0,0,0,.12); transform: translateY(-2px); }
+        .deck-card-inner { display: flex; gap: .85rem; padding: .9rem 1rem; align-items: flex-start; }
+        .deck-card-leader img { width: 56px; border-radius: 6px; flex-shrink: 0; }
+        .deck-card-body { flex: 1; min-width: 0; }
+        .deck-card-name { font-weight: 700; font-size: .9rem; margin-bottom: .2rem; }
+        .deck-card-meta { font-size: .72rem; color: var(--muted,#6c757d); display: flex; gap: .5rem; flex-wrap: wrap; }
+        .deck-card-colors { display: flex; gap: .25rem; margin-top: .3rem; }
+        .deck-card-excerpt {
+            font-size: .78rem; color: var(--muted,#6c757d); margin-top: .4rem;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+
+        /* Deck modal (view) */
+        .deck-modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,.55);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000; padding: 1rem;
+        }
+        .deck-modal {
+            background: var(--card,#fff); border-radius: 18px;
+            max-width: 860px; width: 100%; max-height: 90vh;
+            overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+            padding: 1.5rem;
+        }
+        .deck-modal-header {
+            display: flex; align-items: flex-start; gap: 1rem;
+            margin-bottom: 1.25rem; padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border,#dee2e6);
+        }
+        .deck-modal-header img { width: 72px; border-radius: 8px; flex-shrink: 0; }
+        .deck-modal-title { font-family: 'Cinzel', serif; font-size: 1.1rem; color: var(--accent,#048A81); }
+        .deck-modal-sub { font-size: .8rem; color: var(--muted,#6c757d); margin-top: .25rem; }
+        .deck-modal-close {
+            margin-left: auto; background: none; border: none; cursor: pointer;
+            font-size: 1.4rem; color: var(--muted,#6c757d); padding: 0 .25rem;
+        }
+        .deck-modal-close:hover { color: var(--loss,#dc3545); }
+        .deck-modal-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: .5rem;
+            margin-bottom: 1.25rem;
+        }
+        .deck-modal-card { position: relative; }
+        .deck-modal-card img { width: 100%; border-radius: 5px; display: block; }
+        .deck-modal-card-qty {
+            position: absolute; bottom: 3px; right: 4px;
+            background: rgba(0,0,0,.75); color: #fff;
+            font-size: .6rem; font-weight: 700; padding: 1px 4px; border-radius: 4px;
+        }
+        .deck-modal-article {
+            border-top: 1px solid var(--border,#dee2e6); padding-top: 1rem;
+            font-size: .85rem; line-height: 1.7; color: var(--text,#1a1a2e);
+        }
+        .deck-modal-article h2 { font-size: .9rem; margin-bottom: .4rem; color: var(--accent,#048A81); }
+
+        [data-theme="dark"] .db-filters input,
+        [data-theme="dark"] .db-filters select,
+        [data-theme="dark"] .db-deck-meta input,
+        [data-theme="dark"] .db-article-editor { background: #1a2535; border-color: #2a3a50; color: var(--text); }
+        [data-theme="dark"] .db-toolbar button { background: #1a2535; border-color: #2a3a50; color: var(--text); }
+        [data-theme="dark"] .db-qty-btn { background: #1a2535; border-color: #2a3a50; }
+        [data-theme="dark"] .db-saved-item:hover { background: #1a2535; }
+        [data-theme="dark"] .deck-modal { background: #162031; }
     </style>
 </head>
 <body>
@@ -347,6 +607,15 @@
 
     <!-- ── Sections ───────────────────────────── -->
     <div class="sections">
+
+        <!-- Tab switcher -->
+        <div class="profile-tabs">
+            <button class="profile-tab active" onclick="switchProfileTab('profile')">&#128100; Profile</button>
+            <button class="profile-tab" onclick="switchProfileTab('decks')">&#127183; Decks</button>
+        </div>
+
+        <!-- Profile tab content -->
+        <div id="tabProfile" class="tab-panel active">
 
         <!-- Personal Info -->
         <div class="section-card">
@@ -642,14 +911,137 @@
             <div class="badge-grid" id="badgeGrid"></div>
         </div>
 
-        <!-- Save bar -->
-        <div class="save-bar">
+        <!-- Save bar (profile tab) -->
+        <div class="save-bar" id="profileSaveBar">
             <span class="save-status" id="saveStatus"></span>
             <button class="btn-save" id="saveBtn" onclick="saveProfile()">Save Changes</button>
         </div>
 
+        </div><!-- end #tabProfile -->
+
+        <!-- Deck Builder tab -->
+        <div id="tabDecks" class="tab-panel">
+
+            <!-- Saved decks bar -->
+            <div class="section-card" id="dbSavedSection">
+                <div class="section-title">
+                    <span class="section-icon">&#128190;</span>
+                    <span>My Decks</span>
+                    <button class="db-btn-new" style="margin-left:auto;padding:.3rem .8rem;border-radius:8px;border:1px solid var(--border,#dee2e6);background:var(--bg,#f0f4f8);font-size:.78rem;font-weight:600;cursor:pointer;" onclick="dbNewDeck()">+ New Deck</button>
+                </div>
+                <div class="db-saved-list" id="dbSavedList">
+                    <div class="db-empty-msg" id="dbNoDecks">No decks yet — click "New Deck" to start building!</div>
+                </div>
+            </div>
+
+            <!-- Builder -->
+            <div class="db-layout" id="dbBuilder" style="display:none;">
+
+                <!-- Left: Card search -->
+                <div class="db-search-panel">
+                    <div class="db-panel-header">&#128269; Card Search</div>
+                    <div class="db-filters">
+                        <input type="text" id="dbSearchName" placeholder="Card name…" oninput="dbSearchDebounce()">
+                        <select id="dbSearchColor" onchange="dbSearch()">
+                            <option value="">All colors</option>
+                            <option value="Red">Red</option>
+                            <option value="Green">Green</option>
+                            <option value="Blue">Blue</option>
+                            <option value="Purple">Purple</option>
+                            <option value="Black">Black</option>
+                            <option value="Yellow">Yellow</option>
+                        </select>
+                        <select id="dbSearchType" onchange="dbSearch()">
+                            <option value="">All types</option>
+                            <option value="Leader">Leader</option>
+                            <option value="Character">Character</option>
+                            <option value="Event">Event</option>
+                            <option value="Stage">Stage</option>
+                        </select>
+                        <select id="dbSearchSet" onchange="dbSearch()">
+                            <option value="">All sets</option>
+                        </select>
+                        <button class="db-search-btn" onclick="dbSearch()">Search</button>
+                    </div>
+                    <div class="db-card-grid" id="dbCardGrid">
+                        <div class="db-empty-msg">Search or select colors to browse cards.</div>
+                    </div>
+                </div>
+
+                <!-- Right: Deck -->
+                <div class="db-deck-panel">
+                    <div class="db-panel-header">&#127183; Deck</div>
+                    <div class="db-deck-meta">
+                        <input type="text" id="dbDeckName" placeholder="Deck name…" maxlength="64">
+                        <div class="db-deck-stats">
+                            <span id="dbDeckCount" class="db-count-badge">0</span>
+                            / 51 cards &nbsp;·&nbsp;
+                            <span id="dbLeaderColors" style="font-size:.72rem;"></span>
+                        </div>
+                    </div>
+                    <div id="dbLeaderSlot" class="db-leader-empty">No leader selected — search for a Leader card and click it.</div>
+                    <div class="db-deck-list" id="dbDeckList">
+                        <div class="db-deck-empty">Your deck is empty.</div>
+                    </div>
+                    <div class="db-article-wrap">
+                        <div class="db-article-label">Deck Article / Description</div>
+                        <div class="db-toolbar">
+                            <button onclick="dbExec('bold')" title="Bold"><b>B</b></button>
+                            <button onclick="dbExec('italic')" title="Italic"><i>I</i></button>
+                            <button onclick="dbExec('underline')" title="Underline"><u>U</u></button>
+                            <button onclick="dbExec('strikeThrough')" title="Strikethrough"><s>S</s></button>
+                            <button onclick="dbExec('insertUnorderedList')" title="Bullet list">&#8226; List</button>
+                            <button onclick="dbExec('insertOrderedList')" title="Numbered list">1. List</button>
+                            <button onclick="dbExec('formatBlock','h2')" title="Heading">H2</button>
+                            <button onclick="dbExec('formatBlock','p')" title="Paragraph">&#182;</button>
+                            <button onclick="dbExec('removeFormat')" title="Clear format">&#10006;</button>
+                        </div>
+                        <div class="db-article-editor" id="dbArticle" contenteditable="true" spellcheck="true"></div>
+                    </div>
+                    <div class="db-deck-actions">
+                        <div class="db-public-row">
+                            <input type="checkbox" id="dbIsPublic">
+                            <label for="dbIsPublic">Make deck public (visible on profile)</label>
+                        </div>
+                        <div class="db-save-row">
+                            <button class="db-save-row button db-btn-save" id="dbSaveBtn" onclick="dbSaveDeck()">&#128190; Save Deck</button>
+                            <button class="db-save-row button db-btn-new" onclick="dbNewDeck()">+ New</button>
+                        </div>
+                        <div class="db-save-status" id="dbSaveStatus"></div>
+                    </div>
+                </div>
+
+            </div><!-- end db-layout -->
+
+            <!-- Public decks in view mode -->
+            <div id="dbPublicSection" style="display:none;">
+                <div class="section-card">
+                    <div class="section-title"><span class="section-icon">&#127183;</span> Decks</div>
+                    <div class="deck-cards-section" id="dbPublicList"></div>
+                </div>
+            </div>
+
+        </div><!-- end #tabDecks -->
+
     </div>
 </main>
+
+<!-- Deck view modal -->
+<div id="deckViewModal" class="deck-modal-backdrop" style="display:none;" onclick="if(event.target===this)closeDeckModal()">
+    <div class="deck-modal">
+        <div class="deck-modal-header">
+            <img id="dmLeaderImg" src="" alt="">
+            <div>
+                <div class="deck-modal-title" id="dmDeckName"></div>
+                <div class="deck-modal-sub" id="dmDeckSub"></div>
+                <div class="color-pills" id="dmColors" style="margin-top:.4rem;justify-content:flex-start;"></div>
+            </div>
+            <button class="deck-modal-close" onclick="closeDeckModal()">&#10005;</button>
+        </div>
+        <div class="deck-modal-grid" id="dmCardGrid"></div>
+        <div class="deck-modal-article" id="dmArticle" style="display:none;"></div>
+    </div>
+</div>
 
 <script>
 // Leaders locked per user email (lowercase). These users cannot change their favorite leader.
@@ -816,8 +1208,443 @@ function onAvatarFile(event) {
                 </div>`).join('');
             section.style.display = 'block';
         }
+
+        // In view mode, hide builder actions
+        if (_isViewMode) {
+            const dbSaved = document.getElementById('dbSavedSection');
+            if (dbSaved) dbSaved.style.display = 'none';
+        }
     } catch(e) {}
 })();
+// ── Profile Tab switcher ─────────────────────────────────────────────────────
+function switchProfileTab(tab) {
+    document.querySelectorAll('.profile-tab').forEach((b, i) => {
+        b.classList.toggle('active', (i === 0 && tab === 'profile') || (i === 1 && tab === 'decks'));
+    });
+    document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
+    document.getElementById('tabDecks').classList.toggle('active', tab === 'decks');
+    if (tab === 'decks' && !_isViewMode && !_dbLoaded) dbInitBuilder();
+    if (tab === 'decks' && _isViewMode && !_dbViewLoaded) dbLoadPublic();
+}
+
+// ── Deck Builder ─────────────────────────────────────────────────────────────
+const OPTCG_API = 'https://optcgapi.com/api/sets/filtered/';
+const OPTCG_SETS_API = 'https://optcgapi.com/api/allSets/';
+const COLOR_ORDER = ['Red','Green','Blue','Purple','Black','Yellow'];
+
+let _dbLoaded     = false;   // init done
+let _dbViewLoaded = false;
+let _dbDecks      = [];      // all user decks from server
+let _dbCurrentId  = null;    // deck being edited
+let _dbLeader     = null;    // { id, name, colors, image }
+let _dbCards      = [];      // [{ id, name, image, qty, color, type }]
+let _dbSearchTimer = null;
+
+// Initialise builder: load sets + user decks
+async function dbInitBuilder() {
+    _dbLoaded = true;
+    // Load sets for the filter dropdown
+    try {
+        const r = await fetch(OPTCG_SETS_API);
+        if (r.ok) {
+            const sets = await r.json();
+            const sel = document.getElementById('dbSearchSet');
+            sets.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.set_id || s.setId || s;
+                opt.textContent = s.set_id || s.setId || s;
+                sel.appendChild(opt);
+            });
+        }
+    } catch {}
+    // Load user decks
+    await dbLoadDecks();
+}
+
+async function dbLoadDecks() {
+    try {
+        const r = await fetch(AUTH_BASE + '/decks', { credentials: 'include' });
+        if (!r.ok) return;
+        _dbDecks = await r.json();
+    } catch { _dbDecks = []; }
+    dbRenderSavedList();
+}
+
+function dbRenderSavedList() {
+    const list = document.getElementById('dbSavedList');
+    const none = document.getElementById('dbNoDecks');
+    if (!_dbDecks.length) {
+        none.style.display = '';
+        list.innerHTML = '';
+        list.appendChild(none);
+        document.getElementById('dbBuilder').style.display = 'none';
+        return;
+    }
+    none.style.display = 'none';
+    list.innerHTML = _dbDecks.map(d => {
+        const leaderId = d.leader?.id || '';
+        const imgSrc = leaderId ? `https://optcgapi.com/media/static/Card_Images/${leaderId}.jpg` : '';
+        const total = (d.cards || []).reduce((s,c) => s + (c.qty||1), 0) + (d.leader ? 1 : 0);
+        return `<div class="db-saved-item ${d.id === _dbCurrentId ? 'active' : ''}" onclick="dbEditDeck('${d.id}')">
+            ${imgSrc ? `<img src="${imgSrc}" alt="" onerror="this.style.display='none'">` : ''}
+            <span class="db-saved-name">${_esc(d.name)}</span>
+            <span class="db-saved-count">${total}/51 · ${d.isPublic ? '🌐' : '🔒'}</span>
+            <button class="db-saved-del" onclick="event.stopPropagation();dbDeleteDeck('${d.id}')" title="Delete">🗑</button>
+        </div>`;
+    }).join('');
+}
+
+function dbNewDeck() {
+    _dbCurrentId = null;
+    _dbLeader = null;
+    _dbCards = [];
+    document.getElementById('dbDeckName').value = '';
+    document.getElementById('dbArticle').innerHTML = '';
+    document.getElementById('dbIsPublic').checked = false;
+    document.getElementById('dbBuilder').style.display = '';
+    dbRenderLeaderSlot();
+    dbRenderDeckList();
+    dbUpdateCount();
+    dbRenderSavedList();
+    // Switch to decks tab if not already
+    switchProfileTab('decks');
+}
+
+function dbEditDeck(id) {
+    const deck = _dbDecks.find(d => d.id === id);
+    if (!deck) return;
+    _dbCurrentId = id;
+    _dbLeader = deck.leader || null;
+    _dbCards = JSON.parse(JSON.stringify(deck.cards || []));
+    document.getElementById('dbDeckName').value = deck.name || '';
+    document.getElementById('dbArticle').innerHTML = deck.article || '';
+    document.getElementById('dbIsPublic').checked = !!deck.isPublic;
+    document.getElementById('dbBuilder').style.display = '';
+    dbRenderLeaderSlot();
+    dbRenderDeckList();
+    dbUpdateCount();
+    dbRenderSavedList();
+}
+
+async function dbDeleteDeck(id) {
+    if (!confirm('Delete this deck?')) return;
+    try {
+        await fetch(AUTH_BASE + '/decks/' + id, { method: 'DELETE', credentials: 'include' });
+    } catch {}
+    if (_dbCurrentId === id) {
+        _dbCurrentId = null; _dbLeader = null; _dbCards = [];
+        document.getElementById('dbBuilder').style.display = 'none';
+    }
+    await dbLoadDecks();
+}
+
+// ── Card search ───────────────────────────────────────────────────────────────
+function dbSearchDebounce() {
+    clearTimeout(_dbSearchTimer);
+    _dbSearchTimer = setTimeout(dbSearch, 450);
+}
+
+async function dbSearch() {
+    const name  = document.getElementById('dbSearchName').value.trim();
+    const color = document.getElementById('dbSearchColor').value;
+    const type  = document.getElementById('dbSearchType').value;
+    const set   = document.getElementById('dbSearchSet').value;
+
+    if (!name && !color && !type && !set) {
+        document.getElementById('dbCardGrid').innerHTML = '<div class="db-empty-msg">Enter a name or select filters to search.</div>';
+        return;
+    }
+
+    const grid = document.getElementById('dbCardGrid');
+    grid.innerHTML = '<div class="db-loading-msg">Loading…</div>';
+
+    const params = new URLSearchParams();
+    if (name)  params.set('cardName', name);
+    if (color) params.set('cardColor', color);
+    if (type)  params.set('cardType', type);
+    if (set)   params.set('setName', set);
+
+    try {
+        const r = await fetch(OPTCG_API + '?' + params);
+        if (!r.ok) throw new Error('API error');
+        const cards = await r.json();
+        if (!Array.isArray(cards) || !cards.length) {
+            grid.innerHTML = '<div class="db-empty-msg">No cards found.</div>';
+            return;
+        }
+        // Deduplicate by card_set_id (keep first, which has freshest price)
+        const seen = new Set();
+        const unique = cards.filter(c => {
+            const baseId = (c.card_image_id || c.card_set_id || '').replace(/_p\d+$/, '');
+            if (seen.has(baseId)) return false;
+            seen.add(baseId); return true;
+        });
+        dbRenderCardGrid(unique);
+    } catch(e) {
+        grid.innerHTML = '<div class="db-empty-msg">Error loading cards. Try again.</div>';
+    }
+}
+
+function dbRenderCardGrid(cards) {
+    const grid = document.getElementById('dbCardGrid');
+    grid.innerHTML = '';
+    cards.forEach(card => {
+        const id    = card.card_image_id || card.card_set_id;
+        const isLeader = (card.card_type || '').toLowerCase() === 'leader';
+        const qty   = isLeader
+            ? (_dbLeader?.id === id ? 1 : 0)
+            : (_dbCards.find(c => c.id === id)?.qty || 0);
+        const maxed = isLeader ? (!!_dbLeader) : (qty >= 4);
+
+        const div = document.createElement('div');
+        div.className = 'db-card' + (maxed ? ' maxed' : '') + (isLeader ? ' leader-only' : '');
+        div.title = card.card_name + (isLeader ? ' (Leader)' : '');
+        div.innerHTML = `<img src="${card.card_image}" alt="${_esc(card.card_name)}" loading="lazy">`
+            + (qty > 0 ? `<span class="db-card-qty">${isLeader ? 'L' : 'x'+qty}</span>` : '');
+        div.onclick = () => dbAddCard(card);
+        grid.appendChild(div);
+    });
+}
+
+function dbAddCard(card) {
+    const id = card.card_image_id || card.card_set_id;
+    const isLeader = (card.card_type || '').toLowerCase() === 'leader';
+
+    if (isLeader) {
+        // Set as leader
+        const colors = (card.card_color || '').split('/').map(c => c.trim()).filter(Boolean);
+        _dbLeader = { id, name: card.card_name, colors, image: card.card_image };
+        dbRenderLeaderSlot();
+        dbUpdateCount();
+        dbSearch(); // refresh grid to show leader selected
+        return;
+    }
+
+    // Enforce color rules if leader is set
+    if (_dbLeader) {
+        const leaderColors = _dbLeader.colors.map(c => c.toLowerCase());
+        const cardColors = (card.card_color || '').split('/').map(c => c.trim().toLowerCase());
+        const allowed = cardColors.some(cc => leaderColors.includes(cc));
+        if (!allowed) {
+            dbSetStatus(`⚠ ${card.card_name} colors (${card.card_color}) don't match leader (${_dbLeader.colors.join('/')})`, 'err');
+            setTimeout(() => dbSetStatus('', ''), 2500);
+            return;
+        }
+    }
+
+    const existing = _dbCards.find(c => c.id === id);
+    if (existing) {
+        if (existing.qty >= 4) return;
+        existing.qty++;
+    } else {
+        _dbCards.push({ id, name: card.card_name, image: card.card_image, qty: 1, color: card.card_color, type: card.card_type });
+    }
+    dbRenderDeckList();
+    dbUpdateCount();
+    dbSearch(); // refresh grid qty badges
+}
+
+function dbChangeQty(id, delta) {
+    const idx = _dbCards.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    _dbCards[idx].qty = Math.max(0, Math.min(4, _dbCards[idx].qty + delta));
+    if (_dbCards[idx].qty === 0) _dbCards.splice(idx, 1);
+    dbRenderDeckList();
+    dbUpdateCount();
+}
+
+function dbRenderLeaderSlot() {
+    const slot = document.getElementById('dbLeaderSlot');
+    if (!_dbLeader) {
+        slot.className = 'db-leader-empty';
+        slot.innerHTML = 'No leader selected — search for a Leader card and click it.';
+        document.getElementById('dbLeaderColors').innerHTML = '';
+        return;
+    }
+    slot.className = 'db-leader-slot';
+    const colorHtml = _dbLeader.colors.map(c =>
+        `<span class="color-pill ${COLOR_MAP[c.toLowerCase()] || ''}">${c}</span>`
+    ).join('');
+    slot.innerHTML = `<img src="${_dbLeader.image}" alt="" onerror="this.style.display='none'">
+        <div class="db-leader-info">
+            <div class="db-leader-name">${_esc(_dbLeader.name)}</div>
+            <div class="db-leader-sub">${_esc(_dbLeader.id)}</div>
+        </div>
+        <button class="db-leader-clear" onclick="dbClearLeader()" title="Remove leader">&#10005;</button>`;
+    document.getElementById('dbLeaderColors').innerHTML = colorHtml;
+}
+
+function dbClearLeader() {
+    _dbLeader = null;
+    dbRenderLeaderSlot();
+    dbUpdateCount();
+}
+
+function dbRenderDeckList() {
+    const list = document.getElementById('dbDeckList');
+    if (!_dbCards.length) {
+        list.innerHTML = '<div class="db-deck-empty">Your deck is empty.</div>';
+        return;
+    }
+    list.innerHTML = _dbCards.map(c => `
+        <div class="db-deck-row">
+            <img src="${c.image}" alt="" onerror="this.style.display='none'">
+            <span class="db-deck-row-name" title="${_esc(c.name)}">${_esc(c.name)}</span>
+            <div class="db-deck-row-qty">
+                <button class="db-qty-btn" onclick="dbChangeQty('${c.id}',-1)">−</button>
+                <span class="db-qty-num">${c.qty}</span>
+                <button class="db-qty-btn" onclick="dbChangeQty('${c.id}',1)" ${c.qty>=4?'disabled':''}>+</button>
+            </div>
+        </div>`).join('');
+}
+
+function dbUpdateCount() {
+    const total = _dbCards.reduce((s,c) => s + c.qty, 0) + (_dbLeader ? 1 : 0);
+    const badge = document.getElementById('dbDeckCount');
+    badge.textContent = total;
+    badge.className = 'db-count-badge' + (total > 51 ? ' over' : '');
+}
+
+function dbSetStatus(msg, cls) {
+    const el = document.getElementById('dbSaveStatus');
+    el.textContent = msg; el.className = 'db-save-status ' + (cls || '');
+}
+
+async function dbSaveDeck() {
+    const name = document.getElementById('dbDeckName').value.trim();
+    if (!name) { dbSetStatus('Please enter a deck name.', 'err'); return; }
+    if (!_dbLeader) { dbSetStatus('Please select a leader first.', 'err'); return; }
+    const total = _dbCards.reduce((s,c) => s+c.qty, 0) + 1;
+    if (total !== 51) { dbSetStatus(`Deck must have exactly 51 cards (1 leader + 50). Currently: ${total}.`, 'err'); return; }
+
+    document.getElementById('dbSaveBtn').disabled = true;
+    dbSetStatus('Saving…', '');
+
+    const payload = {
+        name,
+        leader: _dbLeader,
+        cards: _dbCards,
+        article: document.getElementById('dbArticle').innerHTML,
+        isPublic: document.getElementById('dbIsPublic').checked,
+    };
+
+    try {
+        const url = _dbCurrentId
+            ? AUTH_BASE + '/decks/' + _dbCurrentId
+            : AUTH_BASE + '/decks';
+        const r = await fetch(url, {
+            method: _dbCurrentId ? 'PUT' : 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
+        const saved = await r.json();
+        if (!_dbCurrentId) _dbCurrentId = saved.id;
+        dbSetStatus('Deck saved!', 'ok');
+        await dbLoadDecks();
+    } catch(e) {
+        dbSetStatus('Error: ' + e.message, 'err');
+    } finally {
+        document.getElementById('dbSaveBtn').disabled = false;
+        setTimeout(() => dbSetStatus('', ''), 4000);
+    }
+}
+
+function dbExec(cmd, val) {
+    document.getElementById('dbArticle').focus();
+    document.execCommand(cmd, false, val || null);
+}
+
+function _esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── View mode: public decks ───────────────────────────────────────────────────
+async function dbLoadPublic() {
+    _dbViewLoaded = true;
+    const viewName = new URLSearchParams(window.location.search).get('view');
+    if (!viewName) return;
+    try {
+        const r = await fetch(AUTH_BASE + '/decks/public/' + encodeURIComponent(viewName), { credentials: 'include' });
+        if (!r.ok) return;
+        const decks = await r.json();
+        const section = document.getElementById('dbPublicSection');
+        const list = document.getElementById('dbPublicList');
+        if (!decks.length) {
+            list.innerHTML = '<div class="db-empty-msg">No public decks yet.</div>';
+        } else {
+            list.innerHTML = decks.map(d => {
+                const leaderId = d.leader?.id || '';
+                const colors = (d.leader?.colors || []).map(c =>
+                    `<span class="color-pill ${COLOR_MAP[c.toLowerCase()]||''}">${c}</span>`
+                ).join('');
+                const total = (d.cards||[]).reduce((s,c)=>s+c.qty,0) + (d.leader?1:0);
+                const excerpt = d.article ? d.article.replace(/<[^>]*>/g,'').slice(0,120) : '';
+                return `<div class="deck-card-item" onclick='openDeckModal(${JSON.stringify(d)})'>
+                    <div class="deck-card-inner">
+                        <div class="deck-card-leader">
+                            ${leaderId ? `<img src="https://optcgapi.com/media/static/Card_Images/${leaderId}.jpg" alt="" onerror="this.style.display='none'">` : ''}
+                        </div>
+                        <div class="deck-card-body">
+                            <div class="deck-card-name">${_esc(d.name)}</div>
+                            <div class="deck-card-meta">
+                                <span>${total}/51 cards</span>
+                                <span>${_esc(d.leader?.name || '')}</span>
+                            </div>
+                            <div class="deck-card-colors">${colors}</div>
+                            ${excerpt ? `<div class="deck-card-excerpt">${_esc(excerpt)}</div>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        section.style.display = 'block';
+        document.getElementById('dbSavedSection').style.display = 'none';
+        document.getElementById('dbBuilder').style.display = 'none';
+    } catch {}
+}
+
+function openDeckModal(deck) {
+    const leaderId = deck.leader?.id || '';
+    const colors = (deck.leader?.colors || []).map(c =>
+        `<span class="color-pill ${COLOR_MAP[c.toLowerCase()]||''}">${c}</span>`
+    ).join('');
+    const total = (deck.cards||[]).reduce((s,c)=>s+c.qty,0) + (deck.leader?1:0);
+
+    document.getElementById('dmLeaderImg').src = leaderId
+        ? `https://optcgapi.com/media/static/Card_Images/${leaderId}.jpg` : '';
+    document.getElementById('dmDeckName').textContent = deck.name;
+    document.getElementById('dmDeckSub').textContent = `${total}/51 cards · ${deck.leader?.name||''}`;
+    document.getElementById('dmColors').innerHTML = colors;
+
+    // Card grid: leader first, then rest
+    const allCards = [];
+    if (deck.leader) allCards.push({ id: deck.leader.id, image: deck.leader.image || `https://optcgapi.com/media/static/Card_Images/${deck.leader.id}.jpg`, qty: 1, isLeader: true });
+    (deck.cards||[]).forEach(c => allCards.push(c));
+    document.getElementById('dmCardGrid').innerHTML = allCards.map(c => `
+        <div class="deck-modal-card">
+            <img src="${c.image || `https://optcgapi.com/media/static/Card_Images/${c.id}.jpg`}" alt="" loading="lazy" onerror="this.style.display='none'">
+            <span class="deck-modal-card-qty">${c.isLeader ? 'L' : 'x'+c.qty}</span>
+        </div>`).join('');
+
+    const art = document.getElementById('dmArticle');
+    if (deck.article && deck.article.trim()) {
+        art.style.display = '';
+        art.innerHTML = '<h2>About this deck</h2>' + deck.article;
+    } else {
+        art.style.display = 'none';
+    }
+
+    document.getElementById('deckViewModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDeckModal() {
+    document.getElementById('deckViewModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
 async function saveProfile() {
     const btn = document.getElementById('saveBtn');
     const status = document.getElementById('saveStatus');
