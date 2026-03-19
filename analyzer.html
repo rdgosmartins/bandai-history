@@ -14,6 +14,41 @@
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/print.css">
     <link rel="stylesheet" href="css/yoko.css">
+    <style>
+        /* ── Dashboard control bar ─────────────────────────────────────── */
+        #configCard { padding: 1.1rem 1.4rem; }
+        .dash-bar { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+        .dash-identity { display: flex; align-items: center; gap: .7rem; flex-shrink: 0; }
+        .dash-avatar {
+            width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--accent,#048A81), var(--gold,#c9a84c));
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Cinzel', serif; font-size: .95rem; font-weight: 700; color: #fff;
+            box-shadow: 0 2px 8px rgba(4,138,129,.25); overflow: hidden;
+        }
+        .dash-avatar img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
+        .dash-id-text { display: flex; flex-direction: column; gap: .1rem; }
+        .dash-id-name { font-weight: 700; font-size: .92rem; line-height: 1.2; }
+        .dash-map-status { display: flex; align-items: center; gap: .3rem; font-size: .72rem; color: var(--muted,#6c757d); }
+        .dash-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--muted,#aaa); }
+        .dash-dot.ok   { background: var(--win,#28a745); }
+        .dash-dot.warn { background: #f0ad4e; }
+        .dash-dot.err  { background: var(--loss,#dc3545); }
+        .dash-divider { width: 1px; height: 36px; background: var(--border,#dee2e6); flex-shrink: 0; }
+        @media (max-width:600px) { .dash-divider { display:none; } }
+        .dash-player { display: flex; flex-direction: column; gap: .25rem; flex: 1; min-width: 180px; }
+        .dash-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted,#6c757d); }
+        .dash-player select {
+            padding: .45rem .7rem; border-radius: 8px;
+            border: 1px solid var(--border,#dee2e6);
+            background: var(--bg,#f0f4f8); color: var(--text,#1a1a2e);
+            font-size: .875rem; cursor: pointer; transition: border-color .2s;
+        }
+        .dash-player select:focus { outline: none; border-color: var(--accent,#048A81); }
+        .dash-player select:disabled { opacity: .6; cursor: not-allowed; }
+        .dash-actions { display: flex; gap: .55rem; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
+        .dash-cache { margin-top: .75rem; }
+    </style>
     <script src="js/auth.js"></script>
     <script>
         // Expose auth user to body scripts via a promise
@@ -56,62 +91,56 @@
 
     <!-- Config card -->
     <div class="card" id="configCard">
-        <h2><span class="section-icon">&#9875;</span> Configuration</h2>
+        <div class="dash-bar">
 
-        <!-- Step 1: load file -->
-        <div class="step">
-            <label>1 · Username Map File</label>
-            <div class="file-row">
-                <input type="file" id="mapFile" accept=".txt" style="display:none" onchange="loadMapFile(event)">
-                <button class="btn btn-file" onclick="document.getElementById('mapFile').click()">
-                    &#128194; Load bandai_username_map.txt
-                </button>
-                <span class="file-status" id="fileStatus">No file loaded</span>
+            <!-- Identity -->
+            <div class="dash-identity">
+                <div class="dash-avatar" id="configAvatar">?</div>
+                <div class="dash-id-text">
+                    <span class="dash-id-name" id="configUserName">Loading…</span>
+                    <span class="dash-map-status">
+                        <span class="dash-dot" id="mapDot"></span>
+                        <span id="fileStatus">Loading map…</span>
+                    </span>
+                </div>
             </div>
-            <p class="hint">
-                Add a bearer token as a third field for any user who needs to fetch data:
-                <code>Name:BandaiID:eyJ0eXAiOi...</code>
-            </p>
+
+            <div class="dash-divider"></div>
+
+            <!-- Player selector -->
+            <div class="dash-player">
+                <span class="dash-label">Player</span>
+                <select id="userSelect" disabled onchange="onUserChange()">
+                    <option value="">— loading map —</option>
+                </select>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="dash-actions">
+                <button class="btn btn-primary" id="fetchBtn" onclick="fetchAndAnalyze()" disabled>
+                    &#9654; Fetch &amp; Analyze
+                </button>
+                <button class="btn btn-outline" id="syncAllBtn" onclick="syncAllUsers()" disabled title="Fetch new events for every user with a token">
+                    &#8635; Sync All
+                </button>
+                <span id="syncAllSummary" style="display:none;font-size:0.8rem;color:var(--win);font-weight:600;"></span>
+            </div>
+
         </div>
 
-        <!-- Step 2: pick user -->
-        <div class="step">
-            <label for="userSelect">2 · Select User</label>
-            <select id="userSelect" disabled onchange="onUserChange()">
-                <option value="">— load the username map first —</option>
-            </select>
-            <!-- Cache status, shown after user is selected -->
-            <div id="cacheBar" style="display:none; margin-top:0.6rem;">
-                <div class="cache-bar" id="cacheBarInner">
-                    <span id="cacheBarText"></span>
-                    <div class="cache-actions">
-                        <button class="btn btn-outline btn-sm" onclick="refreshCache()">&#8635; Sync new events only</button>
-                        <button class="btn btn-danger btn-sm" onclick="confirmClearCache()">&#128465; Clear cache</button>
-                    </div>
+        <!-- Cache status (shown after user selected) -->
+        <div id="cacheBar" class="dash-cache" style="display:none;">
+            <div class="cache-bar" id="cacheBarInner">
+                <span id="cacheBarText"></span>
+                <div class="cache-actions">
+                    <button class="btn btn-outline btn-sm" onclick="refreshCache()">&#8635; Sync new events only</button>
+                    <button class="btn btn-danger btn-sm" onclick="confirmClearCache()">&#128465; Clear cache</button>
                 </div>
             </div>
         </div>
 
-        <!-- Fallback: paste manually -->
-        <details id="manualDetails">
-            <summary>Or paste the file contents manually</summary>
-            <div class="details-body">
-                <textarea id="usernameMap" placeholder="Name:BandaiID&#10;OtherName:BandaiID:eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."></textarea>
-                <button class="btn btn-outline btn-sm" style="margin-top:0.6rem" onclick="parsePasted()">Apply</button>
-            </div>
-        </details>
-
-        <hr>
-
-        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-top:0.9rem;">
-            <button class="btn btn-primary" id="fetchBtn" onclick="fetchAndAnalyze()" disabled>
-                &#9654; Fetch &amp; Analyze
-            </button>
-            <button class="btn btn-outline" id="syncAllBtn" onclick="syncAllUsers()" disabled title="Fetch new events for every user with a token">
-                &#8635; Sync All Users
-            </button>
-            <span id="syncAllSummary" style="display:none;font-size:0.8rem;color:var(--win);font-weight:600;"></span>
-        </div>
+        <!-- Hidden: keeps map text for parsePasted() compat -->
+        <textarea id="usernameMap" style="display:none;"></textarea>
     </div>
 
     <!-- Progress -->
@@ -1039,20 +1068,36 @@
 <script src="js/player-profile.js"></script>
 <script src="js/theme.js"></script>
 <script>
-// Auto-load bandai map from KV and auto-select logged-in user
+// Populate config bar identity and auto-load bandai map from KV
 (async () => {
     const user = await window._authUserPromise;
     if (!user) return;
+
+    // Populate avatar + name in control bar
+    const nameEl   = document.getElementById('configUserName');
+    const avatarEl = document.getElementById('configAvatar');
+    const dotEl    = document.getElementById('mapDot');
+    const name     = user.displayName || user.email || 'Player';
+    nameEl.textContent = name;
+    if (user.avatarUrl) {
+        avatarEl.innerHTML = '<img src="' + user.avatarUrl + '" alt="">';
+    } else {
+        avatarEl.textContent = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    }
+
+    // Fetch map from KV
     try {
-        const r = await fetch(`${AUTH_BASE}/bandai-map`, { credentials: 'include' });
-        if (!r.ok) return;
+        dotEl.className = 'dash-dot warn';
+        document.getElementById('fileStatus').textContent = 'Loading map…';
+        const r = await fetch(AUTH_BASE + '/bandai-map', { credentials: 'include' });
+        if (!r.ok) throw new Error('no map');
         const { map } = await r.json();
-        if (!map) return;
+        if (!map) throw new Error('empty map');
         document.getElementById('usernameMap').value = map;
         applyParsed(parseMapText(map));
-        document.getElementById('fileStatus').textContent =
-            document.getElementById('fileStatus').textContent.replace('loaded', 'loaded · from server');
-        // Auto-select the logged-in user by their bandaiName
+        dotEl.className = 'dash-dot ok';
+        const statusEl = document.getElementById('fileStatus');
+        statusEl.textContent = statusEl.textContent.replace(' loaded', ' loaded · server');
         if (user.bandaiName) {
             const idx = App.usersWithToken.findIndex(
                 u => u.name.toLowerCase() === user.bandaiName.toLowerCase()
@@ -1062,7 +1107,11 @@
                 onUserChange();
             }
         }
-    } catch {}
+    } catch {
+        dotEl.className = 'dash-dot err';
+        document.getElementById('fileStatus').textContent = 'No map — ask admin to upload one';
+        document.getElementById('userSelect').innerHTML = '<option value="">— no map loaded —</option>';
+    }
 })();
 </script>
 </body>
