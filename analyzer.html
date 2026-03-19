@@ -16,6 +16,9 @@
     <link rel="stylesheet" href="css/yoko.css">
     <script src="js/auth.js"></script>
     <script>
+        // Expose auth user to body scripts via a promise
+        let _resolveAuthUser;
+        window._authUserPromise = new Promise(r => { _resolveAuthUser = r; });
         (async () => {
             const user = await requireAuth();
             if (!user) return;
@@ -24,6 +27,7 @@
             if (user.role === 'admin') {
                 document.getElementById('adminPanelBtn').style.display = '';
             }
+            _resolveAuthUser(user);
         })();
     </script>
 </head>
@@ -1034,5 +1038,32 @@
 <script src="js/yoko.js"></script>
 <script src="js/player-profile.js"></script>
 <script src="js/theme.js"></script>
+<script>
+// Auto-load bandai map from KV and auto-select logged-in user
+(async () => {
+    const user = await window._authUserPromise;
+    if (!user) return;
+    try {
+        const r = await fetch(`${AUTH_BASE}/bandai-map`, { credentials: 'include' });
+        if (!r.ok) return;
+        const { map } = await r.json();
+        if (!map) return;
+        document.getElementById('usernameMap').value = map;
+        applyParsed(parseMapText(map));
+        document.getElementById('fileStatus').textContent =
+            document.getElementById('fileStatus').textContent.replace('loaded', 'loaded · from server');
+        // Auto-select the logged-in user by their bandaiName
+        if (user.bandaiName) {
+            const idx = App.usersWithToken.findIndex(
+                u => u.name.toLowerCase() === user.bandaiName.toLowerCase()
+            );
+            if (idx !== -1) {
+                document.getElementById('userSelect').value = idx;
+                onUserChange();
+            }
+        }
+    } catch {}
+})();
+</script>
 </body>
 </html>

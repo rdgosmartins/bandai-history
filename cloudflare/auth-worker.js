@@ -334,7 +334,8 @@ async function handleMe(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
     const { id, email, displayName, avatarUrl, role, status } = user;
-    return json({ id, email, displayName, avatarUrl, role, status }, 200, cors);
+    const bandaiName = user.profile?.bandaiName || null;
+    return json({ id, email, displayName, avatarUrl, role, status, bandaiName }, 200, cors);
 }
 
 async function handleLogout(request, env, cors) {
@@ -367,7 +368,7 @@ async function handleAdminUsers(request, env, cors) {
         Promise.all(allIds.map(id => getUser(env, id))),
     ]);
 
-    const sanitize = u => u ? { id: u.id, email: u.email, displayName: u.displayName, avatarUrl: u.avatarUrl, method: u.method, status: u.status, role: u.role, createdAt: u.createdAt } : null;
+    const sanitize = u => u ? { id: u.id, email: u.email, displayName: u.displayName, avatarUrl: u.avatarUrl, method: u.method, status: u.status, role: u.role, createdAt: u.createdAt, profile: { bandaiName: u.profile?.bandaiName || null } } : null;
     return json({ pending: pending.filter(Boolean).map(sanitize), all: all.filter(Boolean).map(sanitize) }, 200, cors);
 }
 
@@ -425,6 +426,39 @@ async function handleProfilePut(request, env, cors) {
     return json({ ok: true, profile: user.profile }, 200, cors);
 }
 
+// ── Bandai Map ────────────────────────────────────────────────────────────────
+
+async function handleBandaiMapGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const map = await env.AUTH_KV.get('bandai_map');
+    return json({ map: map || '' }, 200, cors);
+}
+
+async function handleBandaiMapPut(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const body = await request.json();
+    const map = String(body.map || '').slice(0, 100000);
+    await env.AUTH_KV.put('bandai_map', map);
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Admin: associate registered user ↔ bandai player ─────────────────────────
+
+async function handleAdminAssociate(request, env, cors) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const { userId, bandaiName } = await request.json();
+    if (!userId || !bandaiName) return json({ error: 'userId and bandaiName required' }, 400, cors);
+    const user = await getUser(env, userId);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    user.profile = user.profile || {};
+    user.profile.bandaiName = String(bandaiName).slice(0, 64);
+    await putUser(env, user);
+    return json({ ok: true }, 200, cors);
+}
+
 // ── Event Cache (KV, keyed by bandaiId) ───────────────────────────────────────
 
 async function handleCacheGet(request, env, cors, bandaiId) {
@@ -475,6 +509,9 @@ export default {
             if (path === '/admin/users'          && method === 'GET')  return handleAdminUsers(request, env, cors);
             if (path === '/profile'              && method === 'GET')  return handleProfileGet(request, env, cors);
             if (path === '/profile'              && method === 'PUT')  return handleProfilePut(request, env, cors);
+            if (path === '/bandai-map'           && method === 'GET')  return handleBandaiMapGet(request, env, cors);
+            if (path === '/bandai-map'           && method === 'PUT')  return handleBandaiMapPut(request, env, cors);
+            if (path === '/admin/associate'      && method === 'POST') return handleAdminAssociate(request, env, cors);
 
             const approveMatch = path.match(/^\/admin\/approve\/(.+)$/);
             if (approveMatch && method === 'POST') return handleApprove(request, env, cors, approveMatch[1]);

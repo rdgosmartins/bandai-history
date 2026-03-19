@@ -17,6 +17,7 @@
             if (!currentAdmin) return;
             document.getElementById('adminName').textContent = currentAdmin.displayName || currentAdmin.email;
             loadUsers();
+            loadMap();
         })();
     </script>
 </head>
@@ -47,6 +48,43 @@
         <div id="allUsersList"><div class="empty-state">Loading…</div></div>
     </div>
 
+    <!-- Bandai Map -->
+    <div class="admin-card">
+        <h2>&#128196; Bandai Player Map</h2>
+        <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">
+            Paste the contents of <code>bandai_username_map.txt</code> here. All users will load this map automatically on login — no file upload needed.
+        </p>
+        <textarea id="bandaiMapText" rows="10" style="width:100%;font-family:monospace;font-size:.78rem;background:var(--bg,#f0f4f8);border:1px solid var(--border,#dee2e6);border-radius:8px;padding:.6rem .8rem;color:var(--text,#1a1a2e);resize:vertical;" placeholder="Name:BandaiID:eyJ0eXAiOi...&#10;Rodrigo:0000416920:eyJ0eXAiOi...&#10;Mori:0000235357:eyJ0eXAiOi..."></textarea>
+        <div style="display:flex;align-items:center;gap:1rem;margin-top:.6rem;justify-content:flex-end;">
+            <span id="mapSaveStatus" style="font-size:.82rem;"></span>
+            <button class="btn-approve" onclick="saveMap()">&#128190; Save Map</button>
+        </div>
+    </div>
+
+    <!-- Player Association -->
+    <div class="admin-card">
+        <h2>&#128279; Associate Player → User</h2>
+        <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">
+            Link a registered user account to their Bandai player name so they are auto-selected on the dashboard.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;">
+            <div>
+                <label style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted,#888);display:block;margin-bottom:.3rem;">Registered User</label>
+                <select id="assocUser" style="width:100%;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--border,#dee2e6);background:var(--bg,#f0f4f8);color:var(--text,#1a1a2e);font-size:.85rem;">
+                    <option value="">— loading users —</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted,#888);display:block;margin-bottom:.3rem;">Bandai Player Name</label>
+                <select id="assocPlayer" style="width:100%;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--border,#dee2e6);background:var(--bg,#f0f4f8);color:var(--text,#1a1a2e);font-size:.85rem;">
+                    <option value="">— save map first —</option>
+                </select>
+            </div>
+            <button class="btn-approve" onclick="saveAssociation()" style="white-space:nowrap;">&#128279; Associate</button>
+        </div>
+        <div id="assocStatus" style="font-size:.82rem;margin-top:.5rem;text-align:right;"></div>
+    </div>
+
 </div>
 
 <script>
@@ -57,8 +95,99 @@ async function loadUsers() {
         const { pending, all } = await res.json();
         renderPending(pending);
         renderAll(all);
+        populateAssocUsers(all);
     } catch {
         document.getElementById('pendingList').innerHTML = '<div class="empty-state">Failed to load users.</div>';
+    }
+}
+
+async function loadMap() {
+    try {
+        const res = await fetch(`${AUTH_BASE}/bandai-map`, { credentials: 'include' });
+        if (!res.ok) return;
+        const { map } = await res.json();
+        if (map) {
+            document.getElementById('bandaiMapText').value = map;
+            populateAssocPlayers(map);
+        }
+    } catch {}
+}
+
+function populateAssocUsers(users) {
+    const sel = document.getElementById('assocUser');
+    sel.innerHTML = '<option value="">— select a user —</option>';
+    for (const u of users) {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = `${u.displayName || u.email} (${u.email})`;
+        if (u.profile?.bandaiName) opt.textContent += ` · ${u.profile.bandaiName}`;
+        sel.appendChild(opt);
+    }
+}
+
+function populateAssocPlayers(mapText) {
+    const sel = document.getElementById('assocPlayer');
+    sel.innerHTML = '<option value="">— select a player —</option>';
+    for (const line of mapText.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const name = trimmed.split(':')[0].trim();
+        if (!name) continue;
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    }
+}
+
+async function saveMap() {
+    const btn = document.querySelector('.admin-card button[onclick="saveMap()"]');
+    const status = document.getElementById('mapSaveStatus');
+    const map = document.getElementById('bandaiMapText').value.trim();
+    if (!map) { status.textContent = 'Map is empty.'; status.style.color = 'var(--loss,#dc3545)'; return; }
+    if (btn) btn.disabled = true;
+    status.textContent = 'Saving…'; status.style.color = 'var(--text-muted,#888)';
+    try {
+        const res = await fetch(`${AUTH_BASE}/bandai-map`, {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ map }),
+        });
+        if (res.ok) {
+            status.textContent = '✓ Saved!'; status.style.color = 'var(--win,#28a745)';
+            populateAssocPlayers(map);
+            setTimeout(() => { status.textContent = ''; }, 3000);
+        } else {
+            status.textContent = 'Error saving map.'; status.style.color = 'var(--loss,#dc3545)';
+        }
+    } catch {
+        status.textContent = 'Network error.'; status.style.color = 'var(--loss,#dc3545)';
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function saveAssociation() {
+    const userId     = document.getElementById('assocUser').value;
+    const bandaiName = document.getElementById('assocPlayer').value;
+    const status     = document.getElementById('assocStatus');
+    if (!userId || !bandaiName) { status.textContent = 'Select both a user and a player.'; status.style.color = 'var(--loss,#dc3545)'; return; }
+    status.textContent = 'Saving…'; status.style.color = 'var(--text-muted,#888)';
+    try {
+        const res = await fetch(`${AUTH_BASE}/admin/associate`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, bandaiName }),
+        });
+        if (res.ok) {
+            status.textContent = `✓ Associated!`; status.style.color = 'var(--win,#28a745)';
+            loadUsers(); // refresh user list to show updated bandaiName
+            setTimeout(() => { status.textContent = ''; }, 3000);
+        } else {
+            status.textContent = 'Error saving.'; status.style.color = 'var(--loss,#dc3545)';
+        }
+    } catch {
+        status.textContent = 'Network error.'; status.style.color = 'var(--loss,#dc3545)';
     }
 }
 
