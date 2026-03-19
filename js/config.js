@@ -109,6 +109,30 @@ function saveCache(bandaiId, cache) {
     } catch (e) {
         console.warn('localStorage write failed — cache not saved:', e);
     }
+    // Push to shared KV cache (fire-and-forget — all sessions benefit)
+    fetch(`${AUTH_BASE}/cache/${bandaiId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cache),
+    }).catch(() => {});
+}
+
+// Pulls KV cache for a bandaiId and merges into localStorage.
+// Local entries win in case of conflict (most recently fetched device wins).
+async function pullServerCache(bandaiId) {
+    try {
+        const r = await fetch(`${AUTH_BASE}/cache/${bandaiId}`, { credentials: 'include' });
+        if (!r.ok) return;
+        const serverCache = await r.json();
+        if (!serverCache || !Object.keys(serverCache).length) return;
+        const localCache = loadCache(bandaiId);
+        const merged = { ...serverCache, ...localCache };
+        localStorage.setItem(cacheKey(bandaiId), JSON.stringify(merged));
+        console.log(`[Cache] Merged ${Object.keys(serverCache).length} server events for ${bandaiId} (local: ${Object.keys(localCache).length}, merged: ${Object.keys(merged).length})`);
+    } catch (e) {
+        console.warn('[Cache] Could not pull server cache:', e);
+    }
 }
 
 function clearCacheForUser(bandaiId) {

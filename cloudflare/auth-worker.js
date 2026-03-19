@@ -12,7 +12,7 @@ function corsHeaders(env, origin) {
     const o = (origin && origin === allowed) ? allowed : allowed;
     return {
         'Access-Control-Allow-Origin': o,
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Credentials': 'true',
     };
@@ -401,6 +401,34 @@ async function handleReject(request, env, cors, id) {
     return json({ ok: true }, 200, cors);
 }
 
+// ── Event Cache (KV, keyed by bandaiId) ───────────────────────────────────────
+
+async function handleCacheGet(request, env, cors, bandaiId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw = await env.AUTH_KV.get('cache:' + bandaiId);
+    if (!raw) return json({}, 200, cors);
+    return new Response(raw, { status: 200, headers: { 'Content-Type': 'application/json', ...cors } });
+}
+
+async function handleCachePut(request, env, cors, bandaiId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const body = await request.text();
+    // Merge: server cache + incoming, incoming wins (it has the freshest local events)
+    let merged = {};
+    const existing = await env.AUTH_KV.get('cache:' + bandaiId);
+    if (existing) {
+        try { merged = JSON.parse(existing); } catch {}
+    }
+    try {
+        const incoming = JSON.parse(body);
+        Object.assign(merged, incoming); // incoming keys overwrite
+    } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    await env.AUTH_KV.put('cache:' + bandaiId, JSON.stringify(merged));
+    return json({ ok: true, keys: Object.keys(merged).length }, 200, cors);
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
@@ -427,6 +455,10 @@ export default {
 
             const rejectMatch = path.match(/^\/admin\/reject\/(.+)$/);
             if (rejectMatch  && method === 'POST') return handleReject(request, env, cors, rejectMatch[1]);
+
+            const cacheMatch = path.match(/^\/cache\/(.+)$/);
+            if (cacheMatch && method === 'GET') return handleCacheGet(request, env, cors, cacheMatch[1]);
+            if (cacheMatch && method === 'PUT') return handleCachePut(request, env, cors, cacheMatch[1]);
 
             return json({ error: 'Not found' }, 404, cors);
         } catch (err) {

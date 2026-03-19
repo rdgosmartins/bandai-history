@@ -32,6 +32,9 @@ async function fetchUserEvents(user, onProgress) {
     const events = [...eventMap.values()];
     if (events.length === 0) throw new Error(`No events found for ${user.name} — all tab requests failed`);
 
+    // Merge server KV cache before using local — shares data across all browsers/sessions
+    await pullServerCache(user.bandaiId);
+
     const cache       = loadCache(user.bandaiId);
     const newEvents   = events.filter(ev => !cache[String(ev.id)]);
     const cachedCount = events.length - newEvents.length;
