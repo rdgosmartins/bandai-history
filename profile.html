@@ -1331,8 +1331,13 @@ function switchProfileTab(tab) {
 }
 
 // ── Deck Builder ─────────────────────────────────────────────────────────────
-const OPTCG_API = 'https://optcgapi.com/api/sets/filtered/';
-const OPTCG_SETS_API = 'https://optcgapi.com/api/allSets/';
+// Route all optcgapi calls through our CF Worker proxy (avoids browser CORS block)
+function optcgFetch(subpath, qs) {
+    const params = new URLSearchParams({ path: subpath });
+    if (qs) params.set('qs', qs);
+    return fetch(AUTH_BASE + '/optcg-proxy?' + params, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : Promise.reject(r));
+}
 const COLOR_ORDER = ['Red','Green','Blue','Purple','Black','Yellow'];
 
 let _dbLoaded     = false;   // init done
@@ -1343,14 +1348,15 @@ let _dbLeader     = null;    // { id, name, colors, image }
 let _dbCards      = [];      // [{ id, name, image, qty, color, type }]
 let _dbSearchTimer = null;
 
-// Initialise builder: load sets + user decks
+// Initialise builder: populate leader grid + load sets + user decks
 async function dbInitBuilder() {
     _dbLoaded = true;
-    // Load sets for the filter dropdown
+    // Populate leader grid from the existing <select id="favoriteDeck"> options
+    dbPopulateLeaderGrid();
+    // Load sets for the filter dropdown via proxy
     try {
-        const r = await fetch(OPTCG_SETS_API);
-        if (r.ok) {
-            const sets = await r.json();
+        const sets = await optcgFetch('allSets');
+        if (Array.isArray(sets)) {
             const sel = document.getElementById('dbSearchSet');
             sets.forEach(s => {
                 const opt = document.createElement('option');
@@ -1362,6 +1368,42 @@ async function dbInitBuilder() {
     } catch {}
     // Load user decks
     await dbLoadDecks();
+}
+
+// Build leader grid from the TCG-Info dropdown (same source as Favorite Leader section)
+function dbPopulateLeaderGrid(filter) {
+    const grid = document.getElementById('dbLeaderGrid');
+    const sel  = document.getElementById('favoriteDeck');
+    if (!sel) { grid.innerHTML = '<div class="db-empty-msg">Leader list unavailable.</div>'; return; }
+
+    const q = (filter || '').toLowerCase();
+    const leaders = [];
+    for (const opt of sel.options) {
+        if (!opt.value) continue;
+        const text = opt.text; // e.g. "Roronoa Zoro — OP01-001 (Red)"
+        const nameMatch  = text.match(/^(.+?)\s+—/);
+        const colorMatch = text.match(/\(([^)]+)\)$/);
+        const name   = nameMatch  ? nameMatch[1].trim()  : opt.value;
+        const colors = colorMatch ? colorMatch[1].split('/').map(c => c.trim()) : [];
+        if (q && !name.toLowerCase().includes(q) && !opt.value.toLowerCase().includes(q)) continue;
+        leaders.push({ id: opt.value, name, colors });
+    }
+
+    if (!leaders.length) {
+        grid.innerHTML = '<div class="db-empty-msg">No leaders found.</div>';
+        return;
+    }
+    grid.innerHTML = '';
+    leaders.forEach(l => {
+        const isSelected = _dbLeader?.id === l.id;
+        const div = document.createElement('div');
+        div.className = 'db-card leader-card-thumb' + (isSelected ? ' selected' : '');
+        div.title = `${l.name} (${l.colors.join('/')})`;
+        div.innerHTML = `<img src="https://optcgapi.com/media/static/Card_Images/${l.id}.jpg" alt="${_esc(l.name)}" loading="lazy" onerror="this.closest('.db-card').style.display='none'">`
+            + (isSelected ? `<span class="db-card-qty">✓</span>` : '');
+        div.onclick = () => dbSetLeader({ card_image_id: l.id, card_name: l.name, card_color: l.colors.join('/'), card_image: `https://optcgapi.com/media/static/Card_Images/${l.id}.jpg` });
+        grid.appendChild(div);
+    });
 }
 
 async function dbLoadDecks() {
@@ -1402,7 +1444,7 @@ function dbNewDeck() {
     _dbCards = [];
     document.getElementById('dbDeckName').value = '';
     document.getElementById('dbLeaderSearchName').value = '';
-    document.getElementById('dbLeaderGrid').innerHTML = '<div class="db-empty-msg">Search to find leader cards.</div>';
+    dbPopulateLeaderGrid();
     document.getElementById('dbArticle').innerHTML = '';
     document.getElementById('dbIsPublic').checked = false;
     document.getElementById('dbBuilder').style.display = '';
@@ -1442,62 +1484,17 @@ async function dbDeleteDeck(id) {
     await dbLoadDecks();
 }
 
-// ── Leader search ─────────────────────────────────────────────────────────────
+// ── Leader search (client-side filter from existing leader dropdown) ──────────
 let _dbLeaderTimer = null;
 
 function dbLeaderSearchDebounce() {
     clearTimeout(_dbLeaderTimer);
-    _dbLeaderTimer = setTimeout(dbLeaderSearch, 400);
+    _dbLeaderTimer = setTimeout(dbLeaderSearch, 200);
 }
 
-async function dbLeaderSearch() {
-    const name = document.getElementById('dbLeaderSearchName').value.trim();
-    const grid = document.getElementById('dbLeaderGrid');
-
-    if (!name) {
-        grid.innerHTML = '<div class="db-empty-msg">Search to find leader cards.</div>';
-        return;
-    }
-
-    grid.innerHTML = '<div class="db-loading-msg">Loading…</div>';
-    const params = new URLSearchParams({ card_type: 'Leader' });
-    if (name) params.set('card_name', name);
-
-    try {
-        const r = await fetch(OPTCG_API + '?' + params);
-        if (!r.ok) throw new Error('API error');
-        const cards = await r.json();
-        if (!Array.isArray(cards) || !cards.length) {
-            grid.innerHTML = '<div class="db-empty-msg">No leaders found.</div>';
-            return;
-        }
-        // Deduplicate base art only
-        const seen = new Set();
-        const unique = cards.filter(c => {
-            const baseId = (c.card_image_id || c.card_set_id || '').replace(/_p\d+$/, '');
-            if (seen.has(baseId)) return false;
-            seen.add(baseId); return true;
-        });
-        dbRenderLeaderGrid(unique);
-    } catch {
-        grid.innerHTML = '<div class="db-empty-msg">Error loading leaders.</div>';
-    }
-}
-
-function dbRenderLeaderGrid(cards) {
-    const grid = document.getElementById('dbLeaderGrid');
-    grid.innerHTML = '';
-    cards.forEach(card => {
-        const id = card.card_image_id || card.card_set_id;
-        const isSelected = _dbLeader?.id === id;
-        const div = document.createElement('div');
-        div.className = 'db-card leader-card-thumb' + (isSelected ? ' selected' : '');
-        div.title = card.card_name;
-        div.innerHTML = `<img src="${card.card_image}" alt="${_esc(card.card_name)}" loading="lazy">`
-            + (isSelected ? `<span class="db-card-qty">✓</span>` : '');
-        div.onclick = () => dbSetLeader(card);
-        grid.appendChild(div);
-    });
+function dbLeaderSearch() {
+    const q = document.getElementById('dbLeaderSearchName').value.trim();
+    dbPopulateLeaderGrid(q);
 }
 
 function dbSetLeader(card) {
@@ -1506,7 +1503,8 @@ function dbSetLeader(card) {
     _dbLeader = { id, name: card.card_name, colors, image: card.card_image };
     dbRenderLeaderSlot();
     dbUpdateCount();
-    dbLeaderSearch(); // refresh grid to show checkmark
+    // Refresh grid to show/remove checkmark
+    dbPopulateLeaderGrid(document.getElementById('dbLeaderSearchName').value.trim());
 }
 
 // ── Pill toggle ───────────────────────────────────────────────────────────────
@@ -1545,17 +1543,17 @@ async function dbSearch() {
     const colorList = colors.length ? colors : [''];
     const typeList  = types.length  ? types  : [''];
 
+    // One proxy call per (color × type) combination — run in parallel
     const calls = [];
     for (const color of colorList) {
         for (const type of typeList) {
-            // API requires at least one meaningful param — skip blank combos
             if (!name && !color && !type && !set) continue;
-            const params = new URLSearchParams();
-            if (name)  params.set('card_name',  name);
-            if (color) params.set('card_color', color);
-            if (type)  params.set('card_type',  type);
-            if (set)   params.set('set_id',     set);
-            calls.push(fetch(OPTCG_API + '?' + params).then(r => r.ok ? r.json() : []).catch(() => []));
+            const qs = new URLSearchParams();
+            if (name)  qs.set('card_name',  name);
+            if (color) qs.set('card_color', color);
+            if (type)  qs.set('card_type',  type);
+            if (set)   qs.set('set_id',     set);
+            calls.push(optcgFetch('sets/filtered', qs.toString()).catch(() => []));
         }
     }
 
@@ -1566,7 +1564,7 @@ async function dbSearch() {
             grid.innerHTML = '<div class="db-empty-msg">No cards found.</div>';
             return;
         }
-        // Deduplicate: keep base art only (drop parallels), keep first occurrence
+        // Deduplicate: keep base art only (drop parallels)
         const seen = new Set();
         const unique = allCards.filter(c => {
             const baseId = (c.card_image_id || c.card_set_id || '').replace(/_p\d+$/, '');
@@ -1663,8 +1661,7 @@ function dbClearLeader() {
     _dbLeader = null;
     dbRenderLeaderSlot();
     dbUpdateCount();
-    // Refresh leader grid to remove checkmark
-    if (document.getElementById('dbLeaderSearchName').value.trim()) dbLeaderSearch();
+    dbPopulateLeaderGrid(document.getElementById('dbLeaderSearchName').value.trim());
 }
 
 function dbRenderDeckList() {

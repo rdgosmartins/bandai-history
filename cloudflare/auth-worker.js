@@ -586,6 +586,27 @@ async function handlePlayerBadgesPut(request, env, cors) {
     return json({ ok: true }, 200, cors);
 }
 
+// ── OPTCG API Proxy (avoids browser CORS restriction) ────────────────────────
+
+async function handleOptcgProxy(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const url    = new URL(request.url);
+    const subpath = url.searchParams.get('path') || '';
+    const qs      = url.searchParams.get('qs')   || '';
+    // Only allow known safe API sub-paths
+    const allowed = ['sets/filtered', 'allSets', 'allSetCards', 'decks/filtered', 'allSTCards', 'allDonCards', 'don/filtered'];
+    if (!allowed.some(a => subpath.startsWith(a))) return json({ error: 'Forbidden path' }, 403, cors);
+    const apiUrl = `https://optcgapi.com/api/${subpath}${qs ? '?' + qs : ''}`;
+    try {
+        const r = await fetch(apiUrl, { headers: { 'Accept': 'application/json' } });
+        const body = await r.text();
+        return new Response(body, { status: r.status, headers: { 'Content-Type': 'application/json', ...cors } });
+    } catch(e) {
+        return json({ error: 'Upstream error' }, 502, cors);
+    }
+}
+
 // ── Bandai Map ────────────────────────────────────────────────────────────────
 
 async function handleBandaiMapGet(request, env, cors) {
@@ -692,6 +713,8 @@ export default {
 
             const profileByNameMatch = path.match(/^\/profile\/by-name\/(.+)$/);
             if (profileByNameMatch && method === 'GET') return handleProfileByName(request, env, cors, decodeURIComponent(profileByNameMatch[1]));
+
+            if (path === '/optcg-proxy' && method === 'GET') return handleOptcgProxy(request, env, cors);
 
             const cacheMatch = path.match(/^\/cache\/(.+)$/);
             if (cacheMatch && method === 'GET') return handleCacheGet(request, env, cors, cacheMatch[1]);
