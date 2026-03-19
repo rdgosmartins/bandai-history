@@ -277,6 +277,7 @@ async function syncAllUsers() {
         const _selIdx = document.getElementById('userSelect').value;
         document.getElementById('loadCacheBtn').disabled = _selIdx === ''
             || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx)]?.bandaiId || '')).length === 0;
+        pushPlayerBadges();
     }
 }
 
@@ -376,5 +377,6 @@ Then open <code>analyzer.html</code> in that window.`;
         const _selIdx2 = document.getElementById('userSelect').value;
         document.getElementById('loadCacheBtn').disabled = _selIdx2 === ''
             || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx2)]?.bandaiId || '')).length === 0;
+        pushPlayerBadges();
     }
 }

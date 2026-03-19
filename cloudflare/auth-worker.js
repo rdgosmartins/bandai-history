@@ -462,10 +462,14 @@ async function handleDirectory(request, env, cors) {
     const raw = await env.AUTH_KV.get('user_index');
     if (!raw) return json([], 200, cors);
     const ids   = JSON.parse(raw);
-    const users = await Promise.all(ids.map(id => getUser(env, id)));
-    const dir   = users
+    const [users, badgesRaw] = await Promise.all([
+        Promise.all(ids.map(id => getUser(env, id))),
+        env.AUTH_KV.get('player_badges'),
+    ]);
+    const badgesMap = badgesRaw ? JSON.parse(badgesRaw) : {};
+    const dir = users
         .filter(u => u && u.profile?.bandaiName)
-        .map(publicProfile);
+        .map(u => ({ ...publicProfile(u), badges: badgesMap[u.bandaiId] || [] }));
     return json(dir, 200, cors);
 }
 
@@ -475,12 +479,25 @@ async function handleProfileByName(request, env, cors, bandaiName) {
     const raw = await env.AUTH_KV.get('user_index');
     if (!raw) return json({ error: 'Not found' }, 404, cors);
     const ids   = JSON.parse(raw);
-    const users = await Promise.all(ids.map(id => getUser(env, id)));
+    const [users, badgesRaw] = await Promise.all([
+        Promise.all(ids.map(id => getUser(env, id))),
+        env.AUTH_KV.get('player_badges'),
+    ]);
     const target = users.find(u =>
         u?.profile?.bandaiName?.toLowerCase() === bandaiName.toLowerCase()
     );
     if (!target) return json({ error: 'Not found' }, 404, cors);
-    return json(publicProfile(target), 200, cors);
+    const badgesMap = badgesRaw ? JSON.parse(badgesRaw) : {};
+    return json({ ...publicProfile(target), badges: badgesMap[target.bandaiId] || [] }, 200, cors);
+}
+
+async function handlePlayerBadgesPut(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const { badges } = await request.json();
+    if (!badges) return json({ error: 'missing badges' }, 400, cors);
+    await env.AUTH_KV.put('player_badges', JSON.stringify(badges));
+    return json({ ok: true }, 200, cors);
 }
 
 // ── Bandai Map ────────────────────────────────────────────────────────────────
@@ -569,6 +586,7 @@ export default {
             if (path === '/directory'             && method === 'GET')  return handleDirectory(request, env, cors);
             if (path === '/bandai-map'           && method === 'GET')  return handleBandaiMapGet(request, env, cors);
             if (path === '/bandai-map'           && method === 'PUT')  return handleBandaiMapPut(request, env, cors);
+            if (path === '/player-badges'        && method === 'PUT')  return handlePlayerBadgesPut(request, env, cors);
             if (path === '/admin/associate'      && method === 'POST') return handleAdminAssociate(request, env, cors);
 
             const approveMatch = path.match(/^\/admin\/approve\/(.+)$/);

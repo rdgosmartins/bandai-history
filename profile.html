@@ -102,6 +102,20 @@
         .view-mode .field select,
         .view-mode .social-field input { pointer-events: none; background: transparent; border-color: transparent; }
         .view-mode .section-card { border-style: dashed; }
+        /* ── Badge cards (full profile) ─────────────────────────────── */
+        .badge-grid { display:flex; flex-wrap:wrap; gap:.75rem; margin-top:.5rem; }
+        .badge-card {
+            display:flex; align-items:center; gap:.65rem;
+            padding:.65rem .9rem; border-radius:12px; min-width:180px; flex:1;
+        }
+        .badge-card.rei       { background:#fff9e6; border:1.5px solid #ffc107; }
+        .badge-card.yonkou    { background:#e8f4ff; border:1.5px solid #90c4f9; }
+        .badge-card.shichi    { background:#eafbf0; border:1.5px solid #81cda1; }
+        .badge-card.almirante { background:#fff0f2; border:1.5px solid #f4a0ab; }
+        .badge-icon { font-size:1.6rem; line-height:1; flex-shrink:0; }
+        .badge-info { display:flex; flex-direction:column; gap:.1rem; }
+        .badge-label { font-weight:700; font-size:.82rem; line-height:1.2; }
+        .badge-stat  { font-size:.72rem; color:var(--muted,#6c757d); }
         .avatar-name {
             font-family: 'Cinzel', serif; font-size: 1rem;
             font-weight: 700; margin-bottom: .25rem;
@@ -620,6 +634,14 @@
             </div>
         </div>
 
+        <!-- Competitive Titles (view mode only) -->
+        <div class="section-card" id="badgesSection" style="display:none;">
+            <div class="section-title">
+                <span class="section-icon">🏆</span> Competitive Titles
+            </div>
+            <div class="badge-grid" id="badgeGrid"></div>
+        </div>
+
         <!-- Save bar -->
         <div class="save-bar">
             <span class="save-status" id="saveStatus"></span>
@@ -778,6 +800,21 @@ function onAvatarFile(event) {
             const sel = document.getElementById('favoriteDeck');
             sel.disabled = true;
             sel.title = 'Your favorite leader is set by the team and cannot be changed.';
+        }
+
+        // Badges (only in view mode — data comes from /profile/by-name which includes badges)
+        if (_isViewMode && p.badges && p.badges.length) {
+            const section = document.getElementById('badgesSection');
+            const grid    = document.getElementById('badgeGrid');
+            grid.innerHTML = p.badges.map(b => `
+                <div class="badge-card ${b.type}">
+                    <span class="badge-icon">${b.icon}</span>
+                    <div class="badge-info">
+                        <span class="badge-label">${b.label}</span>
+                        <span class="badge-stat">${b.stat}</span>
+                    </div>
+                </div>`).join('');
+            section.style.display = 'block';
         }
     } catch(e) {}
 })();
