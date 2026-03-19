@@ -600,9 +600,9 @@
 </main>
 
 <script>
-// Leaders locked per bandaiName (lowercase). These users cannot change their favorite leader.
+// Leaders locked per user email (lowercase). These users cannot change their favorite leader.
 const LOCKED_LEADERS = {
-    'mori': 'OP04-040', // Queen — Blue/Yellow
+    'paulogabriel8b@gmail.com': 'OP04-040', // Queen — Blue/Yellow
 };
 
 const COLOR_MAP = {
@@ -646,9 +646,13 @@ function onLeaderChange(id) {
     img.onerror = () => { img.style.display = 'none'; ph.style.display = ''; };
 }
 
+let _lockedDeck = null; // set during init, used in saveProfile()
+
 (async () => {
     const user = await requireAuth();
     if (!user) return;
+
+    _lockedDeck = LOCKED_LEADERS[(user.email || '').toLowerCase()] || null;
 
     // Avatar
     const initials = (user.displayName || user.email || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
@@ -675,7 +679,7 @@ function onLeaderChange(id) {
         document.getElementById('youtube').value      = p.youtube      || '';
         document.getElementById('twitch').value       = p.twitch       || '';
         // Apply leader lock before setting the deck value
-        const lockedDeck = LOCKED_LEADERS[(p.bandaiName || '').toLowerCase()];
+        const lockedDeck = _lockedDeck;
         const deckValue = lockedDeck || p.favoriteDeck || '';
         if (deckValue) {
             document.getElementById('favoriteDeck').value = deckValue;
@@ -703,14 +707,13 @@ async function saveProfile() {
     status.textContent = 'Saving…'; status.className = 'save-status wait';
 
     const bandaiName  = document.getElementById('bandaiName').value.trim();
-    const lockedDeck  = LOCKED_LEADERS[bandaiName.toLowerCase()];
     const payload = {
         displayName:  document.getElementById('displayName').value.trim(),
         age:          document.getElementById('age').value,
         city:         document.getElementById('city').value.trim(),
         bio:          document.getElementById('bio').value.trim(),
         bandaiName,
-        favoriteDeck: lockedDeck || document.getElementById('favoriteDeck').value,
+        favoriteDeck: _lockedDeck || document.getElementById('favoriteDeck').value,
         playstyle:    document.getElementById('playstyle').value.trim(),
         yearsPlaying: document.getElementById('yearsPlaying').value,
         instagram:    document.getElementById('instagram').value.trim(),
