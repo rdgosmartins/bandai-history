@@ -1116,7 +1116,7 @@ function playerNameLink(name) {
     if (!name) return name || '';
     const key = String(name).toLowerCase().trim();
     if (App.profileDirectory && App.profileDirectory[key]) {
-        return '<span class="player-link" onclick="openProfileModal(' + JSON.stringify(name) + ')" title="View profile">' + name + '</span>';
+        return `<span class="player-link" onclick='openProfileModal(${JSON.stringify(name)})' title="View profile">${name}</span>`;
     }
     return name;
 }
