@@ -133,10 +133,16 @@ async function fetchUserEvents(user, onProgress) {
         }
     }
 
-    // Backfill detail for cached events still missing applicant count or entry fee
+    // Backfill detail for cached events still missing applicant count or entry fee,
+    // or with a suspiciously high BRL entry fee (> 150) which indicates a corrupted cache value.
     const missingDetail = events.filter(ev => {
         const entry = cache[String(ev.id)];
-        return entry && (entry._applicant_count == null || entry._entry_fee == null);
+        if (!entry) return false;
+        const suspiciousFee = entry._entry_fee != null
+            && entry._entry_fee > 150
+            && (entry._entry_fee_currency ?? '').toUpperCase() !== 'USD';
+        if (suspiciousFee) entry._entry_fee = null; // force re-fetch
+        return entry._applicant_count == null || entry._entry_fee == null;
     });
     if (missingDetail.length > 0) {
         for (let i = 0; i < missingDetail.length; i++) {

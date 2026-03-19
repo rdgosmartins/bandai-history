@@ -13,7 +13,9 @@ function computeEventRoi(ev) {
     for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
 
     let prize = 0;
-    if (evL === 0) {
+    if (evW === 0 && evL === 0) {
+        // No rounds played — no prize
+    } else if (evL === 0) {
         // Undefeated — winner takes 40%
         prize = pot * 0.40;
     } else if (evL === 1) {
