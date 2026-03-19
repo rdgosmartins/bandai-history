@@ -789,7 +789,6 @@ async function saveProfile() {
 
     const bandaiName  = document.getElementById('bandaiName').value.trim();
     const payload = {
-        avatarCustom: _avatarCustom, // null means unchanged; empty string means remove
         displayName:  document.getElementById('displayName').value.trim(),
         age:          document.getElementById('age').value,
         city:         document.getElementById('city').value.trim(),
@@ -805,6 +804,9 @@ async function saveProfile() {
         youtube:      document.getElementById('youtube').value.trim(),
         twitch:       document.getElementById('twitch').value.trim(),
     };
+    // Only send avatarCustom when explicitly changed this session
+    // (null = unchanged — omitting it prevents the worker from deleting the saved photo)
+    if (_avatarCustom !== null) payload.avatarCustom = _avatarCustom;
 
     try {
         const r = await fetch(`${AUTH_BASE}/profile`, {
