@@ -2,3 +2,9 @@
 events/*
 events_*/*
 bandai_username_map.txt
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
