@@ -316,7 +316,7 @@ function renderMostActive(allUsers) {
     tbody.innerHTML = rows.map((r, i) => `
         <tr>
             <td class="td-num">${medals[i] ?? (i + 1)}</td>
-            <td><div class="player-cell"><div class="table-avatar">${_playerAvatar(r.bandaiId, r.name)}</div><strong>${r.name}</strong></div></td>
+            <td><div class="player-cell"><div class="table-avatar">${_playerAvatar(r.bandaiId, r.name)}</div><strong>${playerNameLink(r.name)}</strong></div></td>
             <td class="td-num" style="color:var(--accent);font-weight:700;">${r.tournaments}</td>
             <td class="td-num">${r.rounds}</td>
             <td class="td-num" style="color:var(--win)">${r.w}</td>
@@ -353,7 +353,7 @@ function renderEliteFour(allUsers) {
         <div class="elite-card" data-pos="${i + 1}">
             <div class="elite-rank-badge">${medals[i]}</div>
             <div class="elite-avatar">${_playerAvatar(p.bandaiId, p.name)}</div>
-            <div class="elite-name">${p.name}</div>
+            <div class="elite-name">${playerNameLink(p.name)}</div>
             <div class="elite-wins">${p.pct.toFixed(1)}%</div>
             <div class="elite-wins-lbl">Win Rate</div>
             <div class="elite-sub">${p.w}W &middot; ${p.l}L &middot; ${p.events} event${p.events !== 1 ? 's' : ''}</div>
@@ -443,7 +443,7 @@ function renderLeaderboard(allUsers) {
                         ${_playerAvatar(p.bandaiId, p.name)}
                         ${medals[i] ? `<span class="podium-medal">${medals[i]}</span>` : ''}
                     </div>
-                    <div class="podium-name" title="${p.name}">${p.name}</div>
+                    <div class="podium-name" title="${p.name}">${playerNameLink(p.name)}</div>
                     <div class="podium-pct">${primaryStat(p)}</div>
                     <div class="podium-sub">${p.w}W · ${p.l}L · ${p.pct.toFixed(1)}%<br>${p.tournaments} event${p.tournaments !== 1 ? 's' : ''}</div>
                     <div class="podium-bar">#${pos}</div>
@@ -461,7 +461,7 @@ function renderLeaderboard(allUsers) {
     tbody.innerHTML = rows.map((r, i) => `
         <tr>
             <td class="td-num">${medals[i] ?? (i+1)}</td>
-            <td><div class="player-cell"><div class="table-avatar">${_playerAvatar(r.bandaiId, r.name)}</div><strong>${r.name}</strong></div></td>
+            <td><div class="player-cell"><div class="table-avatar">${_playerAvatar(r.bandaiId, r.name)}</div><strong>${playerNameLink(r.name)}</strong></div></td>
             <td class="td-num" style="color:var(--win)">${r.w}</td>
             <td class="td-num" style="color:var(--loss)">${r.l}</td>
             <td class="td-pct" style="color:var(--accent)">${r.pct.toFixed(1)}%</td>
@@ -516,7 +516,7 @@ function renderH2HMatrix(allUsers) {
             const cls = w > l ? 'h2h-win' : (l > w ? 'h2h-loss' : '');
             return `<td class="${cls}">${w}–${l}</td>`;
         }).join('');
-        return `<tr><td class="h2h-label">${u.name}</td>${cells}</tr>`;
+        return `<tr><td class="h2h-label">${playerNameLink(u.name)}</td>${cells}</tr>`;
     }).join('');
 
     container.innerHTML = `
@@ -664,7 +664,7 @@ function renderStoreLeaderboard(allUsers) {
         const color = r.pct >= 50 ? 'var(--win)' : 'var(--loss)';
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${r.store}</td>
-            <td><strong>${r.topName}</strong></td>
+            <td><strong>${playerNameLink(r.topName)}</strong></td>
             <td class="td-pct" style="color:${color}">${r.pctStr}</td>
             <td class="td-num" style="color:var(--win)">${r.w}</td>
             <td class="td-num" style="color:var(--loss)">${r.l}</td>

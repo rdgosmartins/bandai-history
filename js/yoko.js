@@ -184,7 +184,7 @@ function renderYokoPlayerCard({ user, events }) {
         <div class="yoko-player-header">
             <div class="yoko-player-avatar">${_playerAvatar(user.bandaiId, user.name)}</div>
             <div class="yoko-player-info">
-                <span class="yoko-player-name">${user.name}</span>
+                <span class="yoko-player-name">${playerNameLink(user.name)}</span>
                 <div class="yoko-player-record">
                     <span class="yoko-w">${totalW}W</span>
                     <span class="yoko-sep">/</span>
@@ -249,7 +249,7 @@ function renderYokoBadges() {
                 <div class="hof-avatar-wrap hof-crown">
                     <div class="hof-avatar">${_playerAvatar(w.bandaiId, w.name)}</div>
                 </div>
-                <div class="hof-slot-name">${w.name}</div>
+                <div class="hof-slot-name">${playerNameLink(w.name)}</div>
                 <div class="hof-slot-stat">${(w.winRate * 100).toFixed(1)}% WR &nbsp;·&nbsp; ${w.w}W/${w.l}L</div>
             </div>`;
     }).join('');
@@ -275,7 +275,7 @@ function renderYokoBadges() {
             <div class="hof-rank-row">
                 <span class="hof-rank-num">#${offset + i + 1}</span>
                 <div class="hof-rank-avatar">${_playerAvatar(id, name)}</div>
-                <span class="hof-rank-name">${name}</span>
+                <span class="hof-rank-name">${playerNameLink(name)}</span>
                 ${wr ? `<span class="hof-rank-wr">${wr}</span>` : ''}
             </div>`;
     }).join('');
@@ -301,8 +301,8 @@ function renderYokoBadges() {
         const sNames = entry.shichibukai.map(id => App.usernameMap[id] || id);
         return `<tr>
             <td class="hof-hist-month">${label}</td>
-            <td class="hof-hist-names">${yNames.map(n => `<span class="hof-hist-chip yonkou-chip">${n}</span>`).join('')}</td>
-            <td class="hof-hist-names">${sNames.map(n => `<span class="hof-hist-chip shichi-chip">${n}</span>`).join('')}</td>
+            <td class="hof-hist-names">${yNames.map(n => `<span class="hof-hist-chip yonkou-chip">${playerNameLink(n)}</span>`).join('')}</td>
+            <td class="hof-hist-names">${sNames.map(n => `<span class="hof-hist-chip shichi-chip">${playerNameLink(n)}</span>`).join('')}</td>
         </tr>`;
     }).join('');
 
@@ -351,7 +351,7 @@ function renderYokoBadges() {
         <div class="hof-almirante-inner">
             <div class="hof-alm-avatar">${_playerAvatar(alm.bandaiId, alm.name)}</div>
             <div class="hof-alm-info">
-                <div class="hof-alm-name">${alm.name}</div>
+                <div class="hof-alm-name">${playerNameLink(alm.name)}</div>
                 <div class="hof-alm-stat">Best Regional placement: <strong>#${alm.bestRank}</strong>${alm.eventName ? ` &nbsp;·&nbsp; ${alm.eventName}` : ''}</div>
             </div>
         </div>` : `<div class="hof-alm-empty">No Regional data available yet</div>`;

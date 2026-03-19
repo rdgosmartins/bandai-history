@@ -333,8 +333,9 @@ async function handleGoogleCallback(request, env, cors) {
 async function handleMe(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
-    const { id, email, displayName, avatarUrl, role, status } = user;
-    const bandaiName = user.profile?.bandaiName || null;
+    const { id, email, displayName, role, status } = user;
+    const bandaiName  = user.profile?.bandaiName || null;
+    const avatarUrl   = user.profile?.avatarCustom || user.avatarUrl || null;
     return json({ id, email, displayName, avatarUrl, role, status, bandaiName }, 200, cors);
 }
 
@@ -422,8 +423,64 @@ async function handleProfilePut(request, env, cors) {
         if (body[k] !== undefined) user.profile[k] = String(body[k]).slice(0, 512);
     }
     if (body.displayName) user.displayName = String(body.displayName).slice(0, 64);
+    // Custom avatar: base64 data URL, max 150 KB
+    if (body.avatarCustom !== undefined) {
+        if (!body.avatarCustom) {
+            delete user.profile.avatarCustom;
+        } else if (String(body.avatarCustom).length <= 153600) {
+            user.profile.avatarCustom = String(body.avatarCustom);
+        }
+    }
     await putUser(env, user);
     return json({ ok: true, profile: user.profile }, 200, cors);
+}
+
+// ── Public directory (users with bandaiName set) ──────────────────────────────
+
+function publicProfile(u) {
+    return {
+        bandaiName:   u.profile?.bandaiName   || null,
+        displayName:  u.displayName,
+        avatarUrl:    u.profile?.avatarCustom || u.avatarUrl || null,
+        city:         u.profile?.city         || null,
+        bio:          u.profile?.bio          || null,
+        playstyle:    u.profile?.playstyle    || null,
+        yearsPlaying: u.profile?.yearsPlaying || null,
+        favoriteDeck: u.profile?.favoriteDeck || null,
+        instagram:    u.profile?.instagram    || null,
+        twitter:      u.profile?.twitter      || null,
+        discord:      u.profile?.discord      || null,
+        whatsapp:     u.profile?.whatsapp      || null,
+        youtube:      u.profile?.youtube      || null,
+        twitch:       u.profile?.twitch       || null,
+    };
+}
+
+async function handleDirectory(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw = await env.AUTH_KV.get('user_index');
+    if (!raw) return json([], 200, cors);
+    const ids   = JSON.parse(raw);
+    const users = await Promise.all(ids.map(id => getUser(env, id)));
+    const dir   = users
+        .filter(u => u && u.profile?.bandaiName)
+        .map(publicProfile);
+    return json(dir, 200, cors);
+}
+
+async function handleProfileByName(request, env, cors, bandaiName) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw = await env.AUTH_KV.get('user_index');
+    if (!raw) return json({ error: 'Not found' }, 404, cors);
+    const ids   = JSON.parse(raw);
+    const users = await Promise.all(ids.map(id => getUser(env, id)));
+    const target = users.find(u =>
+        u?.profile?.bandaiName?.toLowerCase() === bandaiName.toLowerCase()
+    );
+    if (!target) return json({ error: 'Not found' }, 404, cors);
+    return json(publicProfile(target), 200, cors);
 }
 
 // ── Bandai Map ────────────────────────────────────────────────────────────────
@@ -509,6 +566,7 @@ export default {
             if (path === '/admin/users'          && method === 'GET')  return handleAdminUsers(request, env, cors);
             if (path === '/profile'              && method === 'GET')  return handleProfileGet(request, env, cors);
             if (path === '/profile'              && method === 'PUT')  return handleProfilePut(request, env, cors);
+            if (path === '/directory'             && method === 'GET')  return handleDirectory(request, env, cors);
             if (path === '/bandai-map'           && method === 'GET')  return handleBandaiMapGet(request, env, cors);
             if (path === '/bandai-map'           && method === 'PUT')  return handleBandaiMapPut(request, env, cors);
             if (path === '/admin/associate'      && method === 'POST') return handleAdminAssociate(request, env, cors);
@@ -518,6 +576,9 @@ export default {
 
             const rejectMatch = path.match(/^\/admin\/reject\/(.+)$/);
             if (rejectMatch  && method === 'POST') return handleReject(request, env, cors, rejectMatch[1]);
+
+            const profileByNameMatch = path.match(/^\/profile\/by-name\/(.+)$/);
+            if (profileByNameMatch && method === 'GET') return handleProfileByName(request, env, cors, decodeURIComponent(profileByNameMatch[1]));
 
             const cacheMatch = path.match(/^\/cache\/(.+)$/);
             if (cacheMatch && method === 'GET') return handleCacheGet(request, env, cors, cacheMatch[1]);

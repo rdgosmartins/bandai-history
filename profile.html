@@ -80,7 +80,28 @@
             font-family: 'Cinzel', serif;
             font-size: 1.6rem; font-weight: 700; color: #fff;
             box-shadow: 0 4px 14px rgba(4,138,129,.25);
+            position: relative; overflow: hidden; cursor: pointer;
         }
+        .avatar-ring img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; }
+        .avatar-edit-overlay {
+            position: absolute; inset: 0; border-radius: 50%;
+            background: rgba(0,0,0,.45);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity .2s;
+            font-size: .7rem; color: #fff; font-family: 'Segoe UI', sans-serif; font-weight: 600;
+            pointer-events: none; flex-direction: column; gap: 2px;
+        }
+        .avatar-ring:hover .avatar-edit-overlay { opacity: 1; }
+        .avatar-edit-overlay svg { width: 18px; height: 18px; fill: #fff; }
+        /* In view mode, don't show edit overlay */
+        .view-mode .avatar-ring { cursor: default; }
+        .view-mode .avatar-edit-overlay { display: none; }
+        .view-mode .save-bar { display: none; }
+        .view-mode .field input,
+        .view-mode .field textarea,
+        .view-mode .field select,
+        .view-mode .social-field input { pointer-events: none; background: transparent; border-color: transparent; }
+        .view-mode .section-card { border-style: dashed; }
         .avatar-name {
             font-family: 'Cinzel', serif; font-size: 1rem;
             font-weight: 700; margin-bottom: .25rem;
@@ -283,7 +304,14 @@
     <aside class="sidebar">
 
         <div class="avatar-card">
-            <div class="avatar-ring" id="avatarRing">?</div>
+            <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="onAvatarFile(event)">
+            <div class="avatar-ring" id="avatarRing" onclick="document.getElementById('avatarFileInput').click()">
+                <span id="avatarInitials">?</span>
+                <div class="avatar-edit-overlay">
+                    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    Edit
+                </div>
+            </div>
             <div class="avatar-name" id="avatarName">Loading…</div>
             <div class="avatar-email" id="avatarEmail"></div>
         </div>
@@ -646,26 +674,83 @@ function onLeaderChange(id) {
     img.onerror = () => { img.style.display = 'none'; ph.style.display = ''; };
 }
 
-let _lockedDeck = null; // set during init, used in saveProfile()
+let _lockedDeck    = null; // set during init, used in saveProfile()
+let _avatarCustom  = null; // base64 data URL of uploaded avatar (null = unchanged)
+let _isViewMode    = false;
+
+function setAvatarDisplay(src, initials) {
+    const ring = document.getElementById('avatarRing');
+    const ini  = document.getElementById('avatarInitials');
+    if (src) {
+        ini.innerHTML = `<img src="${src}" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">`;
+    } else {
+        ini.textContent = initials || '?';
+    }
+}
+
+function onAvatarFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+            const SIZE = 200;
+            const canvas = document.createElement('canvas');
+            canvas.width = SIZE; canvas.height = SIZE;
+            const ctx = canvas.getContext('2d');
+            // Center-crop to square
+            const min = Math.min(img.width, img.height);
+            const sx  = (img.width  - min) / 2;
+            const sy  = (img.height - min) / 2;
+            ctx.drawImage(img, sx, sy, min, min, 0, 0, SIZE, SIZE);
+            _avatarCustom = canvas.toDataURL('image/jpeg', 0.78);
+            setAvatarDisplay(_avatarCustom, null);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be picked again
+    event.target.value = '';
+}
 
 (async () => {
     const user = await requireAuth();
     if (!user) return;
 
-    _lockedDeck = LOCKED_LEADERS[(user.email || '').toLowerCase()] || null;
+    // Check view mode (?view=BandaiName)
+    const viewName = new URLSearchParams(window.location.search).get('view');
+    _isViewMode = !!viewName;
 
-    // Avatar
-    const initials = (user.displayName || user.email || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    document.getElementById('avatarRing').textContent = initials;
-    document.getElementById('avatarName').textContent = user.displayName || '—';
-    document.getElementById('avatarEmail').textContent = user.email || '';
+    if (_isViewMode) {
+        document.querySelector('main').classList.add('view-mode');
+        document.querySelector('.pg-header h1').textContent = viewName + "'s Profile";
+        document.getElementById('avatarFileInput').disabled = true;
+    }
+
+    // Locked leader by email (only applies in edit mode)
+    _lockedDeck = _isViewMode ? null : (LOCKED_LEADERS[(user.email || '').toLowerCase()] || null);
+
+    const url = _isViewMode
+        ? AUTH_BASE + '/profile/by-name/' + encodeURIComponent(viewName)
+        : AUTH_BASE + '/profile';
 
     try {
-        const r = await fetch(`${AUTH_BASE}/profile`, { credentials: 'include' });
+        const r = await fetch(url, { credentials: 'include' });
         if (!r.ok) return;
-        const { profile } = await r.json();
-        const p = profile || {};
-        document.getElementById('displayName').value  = user.displayName || '';
+        const data = await r.json();
+        const p = _isViewMode ? data : (data.profile || {});
+
+        const displayName = _isViewMode ? (p.displayName || viewName) : (p.displayName || user.displayName || '');
+        const email       = _isViewMode ? '' : (user.email || '');
+        const avatarSrc   = _isViewMode ? p.avatarUrl : (p.avatarCustom || user.avatarUrl || null);
+        const initials    = displayName.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
+
+        setAvatarDisplay(avatarSrc, initials);
+        document.getElementById('avatarName').textContent  = displayName || '—';
+        document.getElementById('avatarEmail').textContent = email;
+
+        if (!_isViewMode) document.getElementById('displayName').value = displayName;
         document.getElementById('age').value          = p.age          || '';
         document.getElementById('city').value         = p.city         || '';
         document.getElementById('bio').value          = p.bio          || '';
@@ -678,9 +763,9 @@ let _lockedDeck = null; // set during init, used in saveProfile()
         document.getElementById('whatsapp').value     = p.whatsapp     || '';
         document.getElementById('youtube').value      = p.youtube      || '';
         document.getElementById('twitch').value       = p.twitch       || '';
-        // Apply leader lock before setting the deck value
+
         const lockedDeck = _lockedDeck;
-        const deckValue = lockedDeck || p.favoriteDeck || '';
+        const deckValue  = lockedDeck || p.favoriteDeck || '';
         if (deckValue) {
             document.getElementById('favoriteDeck').value = deckValue;
             onLeaderChange(deckValue);
@@ -690,16 +775,8 @@ let _lockedDeck = null; // set during init, used in saveProfile()
             sel.disabled = true;
             sel.title = 'Your favorite leader is set by the team and cannot be changed.';
         }
-        // Update avatar name if profile has custom displayName
-        if (p.displayName || user.displayName) {
-            const n = p.displayName || user.displayName;
-            document.getElementById('avatarName').textContent = n;
-            const ini = n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-            document.getElementById('avatarRing').textContent = ini;
-        }
     } catch(e) {}
 })();
-
 async function saveProfile() {
     const btn = document.getElementById('saveBtn');
     const status = document.getElementById('saveStatus');
@@ -708,6 +785,7 @@ async function saveProfile() {
 
     const bandaiName  = document.getElementById('bandaiName').value.trim();
     const payload = {
+        avatarCustom: _avatarCustom, // null means unchanged; empty string means remove
         displayName:  document.getElementById('displayName').value.trim(),
         age:          document.getElementById('age').value,
         city:         document.getElementById('city').value.trim(),
@@ -732,11 +810,9 @@ async function saveProfile() {
         });
         if (r.ok) {
             status.textContent = 'Changes saved!'; status.className = 'save-status ok';
-            // Update sidebar name live
+            if (_avatarCustom) _avatarCustom = null; // committed — no longer "pending"
             if (payload.displayName) {
                 document.getElementById('avatarName').textContent = payload.displayName;
-                const ini = payload.displayName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-                document.getElementById('avatarRing').textContent = ini;
             }
         } else {
             const err = await r.json().catch(()=>({}));

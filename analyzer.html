@@ -48,6 +48,8 @@
         .dash-player select:disabled { opacity: .6; cursor: not-allowed; }
         .dash-actions { display: flex; gap: .55rem; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
         .dash-cache { margin-top: .75rem; }
+        .player-link { color: var(--accent,#048A81); cursor: pointer; font-weight: 600; border-bottom: 1px dotted var(--accent,#048A81); transition: opacity .15s; }
+        .player-link:hover { opacity: .75; }
     </style>
     <script src="js/auth.js"></script>
     <script>
@@ -1051,6 +1053,39 @@
     </div>
 </div>
 
+    <!-- ── Profile Modal ─────────────────────────────── -->
+    <div id="profileModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:1rem;" onclick="if(event.target===this)closeProfileModal()">
+        <div style="background:var(--card,#fff);border-radius:20px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;position:relative;max-height:90vh;overflow-y:auto;">
+            <button onclick="closeProfileModal()" style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted,#888);line-height:1;z-index:1;">&times;</button>
+            <!-- Header -->
+            <div id="pmHeader" style="background:linear-gradient(135deg,var(--accent,#048A81),#035f5a);padding:1.5rem 1.25rem 1rem;color:#fff;display:flex;align-items:center;gap:1rem;">
+                <div id="pmAvatar" style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:1.2rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;"></div>
+                <div>
+                    <div id="pmName" style="font-family:'Cinzel',serif;font-size:1.1rem;font-weight:700;"></div>
+                    <div id="pmCity" style="font-size:.78rem;opacity:.8;margin-top:.2rem;"></div>
+                </div>
+            </div>
+            <!-- Leader -->
+            <div id="pmLeaderRow" style="display:none;background:var(--bg,#f0f4f8);border-bottom:1px solid var(--border,#dee2e6);padding:.75rem 1.25rem;display:none;align-items:center;gap:.75rem;">
+                <img id="pmLeaderImg" src="" alt="" style="width:52px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.2);">
+                <div>
+                    <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted,#888);margin-bottom:.2rem;">Favorite Leader</div>
+                    <div id="pmLeaderName" style="font-weight:700;font-size:.88rem;"></div>
+                    <div id="pmLeaderPills" style="display:flex;gap:.25rem;margin-top:.25rem;flex-wrap:wrap;"></div>
+                </div>
+            </div>
+            <!-- Body -->
+            <div style="padding:1rem 1.25rem;display:flex;flex-direction:column;gap:.75rem;">
+                <div id="pmBio" style="font-size:.85rem;line-height:1.6;color:var(--muted,#555);display:none;"></div>
+                <div id="pmTcg" style="display:flex;gap:.5rem;flex-wrap:wrap;"></div>
+                <div id="pmSocial" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.25rem;"></div>
+                <a id="pmProfileLink" href="#" style="display:inline-block;margin-top:.5rem;font-size:.8rem;color:var(--accent,#048A81);font-weight:600;text-decoration:none;">View full profile &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <script src="js/state.js"></script>
 <script src="js/constants.js"></script>
 <script src="js/utils.js"></script>
@@ -1067,6 +1102,91 @@
 <script src="js/yoko.js"></script>
 <script src="js/player-profile.js"></script>
 <script src="js/theme.js"></script>
+<script>
+// ── Player profile directory & modal ──────────────────────────────────────
+// App.profileDirectory: { 'name_lower' → publicProfile }
+
+function playerNameLink(name) {
+    if (!name) return name || '';
+    const key = String(name).toLowerCase().trim();
+    if (App.profileDirectory && App.profileDirectory[key]) {
+        return '<span class="player-link" onclick="openProfileModal(' + JSON.stringify(name) + ')" title="View profile">' + name + '</span>';
+    }
+    return name;
+}
+
+const COLOR_MAP_MODAL = {
+    red:'#e74c3c', green:'#27ae60', blue:'#2980b9',
+    purple:'#8e44ad', black:'#444', yellow:'#f1c40f'
+};
+
+function openProfileModal(name) {
+    const p = App.profileDirectory && App.profileDirectory[name.toLowerCase().trim()];
+    if (!p) return;
+
+    // Avatar
+    const avatarEl = document.getElementById('pmAvatar');
+    if (p.avatarUrl) {
+        avatarEl.innerHTML = '<img src="' + p.avatarUrl + '" style="width:60px;height:60px;border-radius:50%;object-fit:cover;">';
+    } else {
+        avatarEl.textContent = (p.displayName || p.bandaiName || '?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        avatarEl.style.background = 'rgba(255,255,255,.25)';
+    }
+    document.getElementById('pmName').textContent = p.displayName || p.bandaiName || name;
+    document.getElementById('pmCity').textContent = p.city ? '📍 ' + p.city : '';
+
+    // Leader
+    const leaderRow = document.getElementById('pmLeaderRow');
+    if (p.favoriteDeck) {
+        leaderRow.style.display = 'flex';
+        document.getElementById('pmLeaderImg').src = 'https://optcgapi.com/media/static/Card_Images/' + p.favoriteDeck + '.jpg';
+        // Find name from select option in profile.html — just show the ID nicely
+        document.getElementById('pmLeaderName').textContent = p.favoriteDeck;
+        document.getElementById('pmLeaderPills').innerHTML = '';
+    } else {
+        leaderRow.style.display = 'none';
+    }
+
+    // Bio
+    const bioEl = document.getElementById('pmBio');
+    if (p.bio) { bioEl.textContent = p.bio; bioEl.style.display = ''; }
+    else bioEl.style.display = 'none';
+
+    // TCG chips
+    const tcgEl = document.getElementById('pmTcg');
+    const chips = [];
+    if (p.yearsPlaying) chips.push('🏴‍☠️ ' + p.yearsPlaying + ' yr' + (p.yearsPlaying == 1 ? '' : 's') + ' playing');
+    if (p.playstyle)    chips.push('⚔️ ' + p.playstyle);
+    tcgEl.innerHTML = chips.map(c => '<span style="font-size:.75rem;padding:.2rem .55rem;border-radius:20px;background:var(--bg,#f0f4f8);color:var(--text,#222);border:1px solid var(--border,#dee2e6);">' + c + '</span>').join('');
+
+    // Social links
+    const socials = [
+        { key:'instagram', icon:'📸', label:'Instagram' },
+        { key:'twitter',   icon:'🐦', label:'Twitter/X' },
+        { key:'discord',   icon:'💬', label:'Discord' },
+        { key:'whatsapp',  icon:'📱', label:'WhatsApp' },
+        { key:'youtube',   icon:'▶️', label:'YouTube' },
+        { key:'twitch',    icon:'🎮', label:'Twitch' },
+    ];
+    const socEl = document.getElementById('pmSocial');
+    socEl.innerHTML = socials.filter(s => p[s.key]).map(s =>
+        '<span title="' + s.label + ': ' + p[s.key] + '" style="font-size:.78rem;padding:.25rem .6rem;border-radius:20px;background:var(--bg,#f0f4f8);border:1px solid var(--border,#dee2e6);">' + s.icon + ' ' + p[s.key] + '</span>'
+    ).join('');
+
+    // Link to full profile page
+    document.getElementById('pmProfileLink').href = '/profile.html?view=' + encodeURIComponent(p.bandaiName || name);
+
+    document.getElementById('profileModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeProfileModal() {
+    document.getElementById('profileModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProfileModal(); });
+</script>
+
 <script>
 // Populate config bar identity and auto-load bandai map from KV
 (async () => {
@@ -1085,11 +1205,20 @@
         avatarEl.textContent = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
     }
 
-    // Fetch map from KV
+    // Fetch directory + map in parallel
     try {
         dotEl.className = 'dash-dot warn';
         document.getElementById('fileStatus').textContent = 'Loading map…';
-        const r = await fetch(AUTH_BASE + '/bandai-map', { credentials: 'include' });
+        const [dirRes, mapRes] = await Promise.all([
+            fetch(AUTH_BASE + '/directory', { credentials: 'include' }),
+            fetch(AUTH_BASE + '/bandai-map', { credentials: 'include' }),
+        ]);
+        if (dirRes.ok) {
+            const dir = await dirRes.json();
+            App.profileDirectory = {};
+            for (const p of dir) if (p.bandaiName) App.profileDirectory[p.bandaiName.toLowerCase()] = p;
+        }
+        const r = mapRes;
         if (!r.ok) throw new Error('no map');
         const { map } = await r.json();
         if (!map) throw new Error('empty map');
