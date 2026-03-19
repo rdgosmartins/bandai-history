@@ -600,6 +600,11 @@
 </main>
 
 <script>
+// Leaders locked per bandaiName (lowercase). These users cannot change their favorite leader.
+const LOCKED_LEADERS = {
+    'mori': 'OP04-040', // Queen — Blue/Yellow
+};
+
 const COLOR_MAP = {
     'red':    'pill-red',    'green':  'pill-green',
     'blue':   'pill-blue',   'purple': 'pill-purple',
@@ -669,9 +674,17 @@ function onLeaderChange(id) {
         document.getElementById('whatsapp').value     = p.whatsapp     || '';
         document.getElementById('youtube').value      = p.youtube      || '';
         document.getElementById('twitch').value       = p.twitch       || '';
-        if (p.favoriteDeck) {
-            document.getElementById('favoriteDeck').value = p.favoriteDeck;
-            onLeaderChange(p.favoriteDeck);
+        // Apply leader lock before setting the deck value
+        const lockedDeck = LOCKED_LEADERS[(p.bandaiName || '').toLowerCase()];
+        const deckValue = lockedDeck || p.favoriteDeck || '';
+        if (deckValue) {
+            document.getElementById('favoriteDeck').value = deckValue;
+            onLeaderChange(deckValue);
+        }
+        if (lockedDeck) {
+            const sel = document.getElementById('favoriteDeck');
+            sel.disabled = true;
+            sel.title = 'Your favorite leader is set by the team and cannot be changed.';
         }
         // Update avatar name if profile has custom displayName
         if (p.displayName || user.displayName) {
@@ -689,13 +702,15 @@ async function saveProfile() {
     btn.disabled = true;
     status.textContent = 'Saving…'; status.className = 'save-status wait';
 
+    const bandaiName  = document.getElementById('bandaiName').value.trim();
+    const lockedDeck  = LOCKED_LEADERS[bandaiName.toLowerCase()];
     const payload = {
         displayName:  document.getElementById('displayName').value.trim(),
         age:          document.getElementById('age').value,
         city:         document.getElementById('city').value.trim(),
         bio:          document.getElementById('bio').value.trim(),
-        bandaiName:   document.getElementById('bandaiName').value.trim(),
-        favoriteDeck: document.getElementById('favoriteDeck').value,
+        bandaiName,
+        favoriteDeck: lockedDeck || document.getElementById('favoriteDeck').value,
         playstyle:    document.getElementById('playstyle').value.trim(),
         yearsPlaying: document.getElementById('yearsPlaying').value,
         instagram:    document.getElementById('instagram').value.trim(),
