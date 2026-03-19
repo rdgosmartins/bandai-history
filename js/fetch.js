@@ -176,8 +176,9 @@ async function syncAllUsers() {
 
     clearError();
     document.getElementById('progress').style.display = 'block';
-    document.getElementById('fetchBtn').disabled  = true;
-    document.getElementById('syncAllBtn').disabled = true;
+    document.getElementById('fetchBtn').disabled     = true;
+    document.getElementById('syncAllBtn').disabled   = true;
+    document.getElementById('loadCacheBtn').disabled = true;
 
     const results = []; // { name, newCount, totalCount, error }
 
@@ -271,8 +272,11 @@ async function syncAllUsers() {
     } catch (err) {
         showError(err.message);
     } finally {
-        document.getElementById('fetchBtn').disabled  = false;
-        document.getElementById('syncAllBtn').disabled = App.usersWithToken.length < 2;
+        document.getElementById('fetchBtn').disabled     = false;
+        document.getElementById('syncAllBtn').disabled   = App.usersWithToken.length < 2;
+        const _selIdx = document.getElementById('userSelect').value;
+        document.getElementById('loadCacheBtn').disabled = _selIdx === ''
+            || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx)]?.bandaiId || '')).length === 0;
     }
 }
 

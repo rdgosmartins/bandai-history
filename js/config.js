@@ -86,9 +86,13 @@ function onUserChange() {
     document.getElementById('fetchBtn').disabled = (idx === '');
     if (idx === '') {
         document.getElementById('cacheBar').style.display = 'none';
+        document.getElementById('loadCacheBtn').disabled = true;
         return;
     }
     const user = App.usersWithToken[parseInt(idx)];
+    const cache = loadCache(user.bandaiId);
+    const hasCache = Object.keys(cache).length > 0;
+    document.getElementById('loadCacheBtn').disabled = !hasCache;
     updateCacheBar(user.bandaiId);
 }
 

@@ -50,6 +50,9 @@
         .dash-cache { margin-top: .75rem; }
         .player-link { color: var(--accent,#048A81); cursor: pointer; font-weight: 600; border-bottom: 1px dotted var(--accent,#048A81); transition: opacity .15s; }
         .player-link:hover { opacity: .75; }
+        .btn-secondary { background: var(--bg,#f0f4f8); border: 1.5px solid var(--accent,#048A81); color: var(--accent,#048A81); }
+        .btn-secondary:hover:not(:disabled) { background: rgba(4,138,129,.08); }
+        .btn-secondary:disabled { opacity: .4; cursor: not-allowed; }
     </style>
     <script src="js/auth.js"></script>
     <script>
@@ -119,6 +122,9 @@
 
             <!-- Action buttons -->
             <div class="dash-actions">
+                <button class="btn btn-secondary" id="loadCacheBtn" onclick="loadFromCache()" disabled title="Instantly load data from local cache — no API calls">
+                    &#9889; Load Cache
+                </button>
                 <button class="btn btn-primary" id="fetchBtn" onclick="fetchAndAnalyze()" disabled>
                     &#9654; Fetch &amp; Analyze
                 </button>
@@ -1185,6 +1191,63 @@ function closeProfileModal() {
     document.body.style.overflow = '';
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProfileModal(); });
+
+// ── Load from cache (instant, no API calls) ───────────────────────────────
+function loadFromCache() {
+    const idx = document.getElementById('userSelect').value;
+    if (idx === '') return;
+    const user  = App.usersWithToken[parseInt(idx)];
+    const cache = loadCache(user.bandaiId);
+    const events = Object.values(cache).filter(e => e?._start_datetime);
+    if (events.length === 0) {
+        showError('No cached data for ' + user.name + '. Use Fetch & Analyze first.');
+        return;
+    }
+
+    const allEventData = events.sort((a, b) => new Date(b._start_datetime) - new Date(a._start_datetime));
+    App.allEventData     = allEventData;
+    App.selectedPlayerId = null;
+    App.selectedStore    = null;
+    App.regionalsOnly    = false;
+    document.getElementById('playerSearchInput').value = '';
+    document.getElementById('vsBanner').style.display  = 'none';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value   = '';
+    document.getElementById('regionalsOnlyBtn').classList.remove('active');
+
+    updateCacheBar(user.bandaiId);
+
+    let totalW = 0, totalL = 0;
+    for (const ev of allEventData) {
+        if (!ev?.rounds) continue;
+        for (const r of ev.rounds) { if (r.is_win) totalW++; else totalL++; }
+    }
+    const periodMap = {};
+    for (const p of SET_PERIODS) periodMap[p.name] = { w: 0, l: 0 };
+    for (const ev of allEventData) {
+        if (!ev?.rounds) continue;
+        const period = ev._start_datetime ? getPeriodForDate(ev._start_datetime) : SET_PERIODS[0].name;
+        for (const r of ev.rounds) { if (r.is_win) periodMap[period].w++; else periodMap[period].l++; }
+    }
+    const playerMap = {};
+    for (const ev of allEventData) {
+        if (!ev?.rounds) continue;
+        for (const r of ev.rounds) {
+            const pid = r.opponent_users?.[0]?.membership_number;
+            if (!pid) continue;
+            if (!playerMap[pid]) playerMap[pid] = [0, 0];
+            if (r.is_win) playerMap[pid][0]++; else playerMap[pid][1]++;
+        }
+    }
+    App.playerResults = playerMap;
+
+    buildFilterChips(allEventData);
+    buildStoreFilter(allEventData);
+    buildCompareCard();
+    displayResults(user.name, totalW, totalL, periodMap, playerMap, allEventData);
+    document.getElementById('tabNav').style.display = 'flex';
+    if (document.getElementById('rankingsTab').style.display !== 'none') buildGlobalRankings();
+}
 </script>
 
 <script>
