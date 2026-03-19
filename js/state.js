@@ -18,5 +18,6 @@ window.App = {
     storeH2HUsers: [],
     yokoLoading: false,
     competitiveBadges: null,   // { reiDosPiratas: {year: {bandaiId,name,winRate}}, yonkou: [], shichibukai: [], month }
+    profileDirectory: {},      // { 'bandainame_lower' → publicProfile }
 };
 const CACHE_PREFIX = 'bandai_events_';

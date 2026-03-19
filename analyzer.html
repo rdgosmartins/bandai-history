@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="css/layout.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/print.css">
-    <link rel="stylesheet" href="css/yoko.css">
+    <link rel="stylesheet" href="css/yoko.css">
     <style>
         /* ── Dashboard control bar ─────────────────────────────────────── */
         #configCard { padding: 1.1rem 1.4rem; }
@@ -1217,6 +1217,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProfile
             const dir = await dirRes.json();
             App.profileDirectory = {};
             for (const p of dir) if (p.bandaiName) App.profileDirectory[p.bandaiName.toLowerCase()] = p;
+            // If rankings tab is already visible, re-render so playerNameLink gets applied
+            if (document.getElementById('rankingsTab')?.style.display !== 'none') applyRankingsFilter();
+            if (document.getElementById('yokoTab')?.style.display !== 'none') renderYokoBadges();
         }
         const r = mapRes;
         if (!r.ok) throw new Error('no map');

@@ -304,14 +304,16 @@
     <aside class="sidebar">
 
         <div class="avatar-card">
-            <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="onAvatarFile(event)">
-            <div class="avatar-ring" id="avatarRing" onclick="document.getElementById('avatarFileInput').click()">
-                <span id="avatarInitials">?</span>
-                <div class="avatar-edit-overlay">
-                    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                    Edit
+            <label for="avatarFileInput" id="avatarRingLabel" style="display:contents;cursor:pointer;">
+                <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="onAvatarFile(event)">
+                <div class="avatar-ring" id="avatarRing">
+                    <span id="avatarInitials">?</span>
+                    <div class="avatar-edit-overlay">
+                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        Edit
+                    </div>
                 </div>
-            </div>
+            </label>
             <div class="avatar-name" id="avatarName">Loading…</div>
             <div class="avatar-email" id="avatarEmail"></div>
         </div>
@@ -726,6 +728,8 @@ function onAvatarFile(event) {
         document.querySelector('main').classList.add('view-mode');
         document.querySelector('.pg-header h1').textContent = viewName + "'s Profile";
         document.getElementById('avatarFileInput').disabled = true;
+        document.getElementById('avatarRingLabel').style.pointerEvents = 'none';
+        document.getElementById('avatarRingLabel').style.cursor = 'default';
     }
 
     // Locked leader by email (only applies in edit mode)
