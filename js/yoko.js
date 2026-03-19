@@ -260,7 +260,7 @@ function renderYokoBadges() {
                 <span class="hof-banner-icon">☠️</span>
                 <div>
                     <div class="hof-banner-title">Rei dos Piratas</div>
-                    <div class="hof-banner-sub">Best win rate of the year · awarded after Dec 31</div>
+                    <div class="hof-banner-sub">Best win rate of the year (Jan–Dec) · awarded after Dec 31</div>
                 </div>
             </div>
             <div class="hof-slots">${reiSlots}</div>

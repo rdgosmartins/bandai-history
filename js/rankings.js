@@ -894,31 +894,37 @@ function computeCompetitiveBadges() {
         if (ranked.length) reiDosPiratas[year] = ranked[0];
     }
 
-    // ── Yonkou & Shichibukai — compute for ALL past completed months ─────────
-    const lm   = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const month = `${lm.getFullYear()}-${String(lm.getMonth() + 1).padStart(2, '0')}`;
-
-    // Collect every month that appears in any player's cache
-    const allMonths = new Set();
-    for (const { evs } of players)
-        for (const ev of evs) allMonths.add(ev._start_datetime.slice(0, 7));
-
-    // Keep only months that are fully completed (strictly before current month)
+    // ── Yonkou & Shichibukai — current month (live) + history ────────────────
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const pastMonths = [...allMonths].filter(m => m < currentMonth).sort().reverse();
 
-    // Rank players for every past month
-    const history = pastMonths.map(m => {
+    // Rank players for a given month string
+    const rankMonth = (m, minRounds) => {
         const ranked = [];
         for (const { user, evs } of players) {
             const mEvs = evs.filter(ev => ev._start_datetime.startsWith(m));
             let w = 0, l = 0;
             for (const ev of mEvs) for (const r of ev.rounds) r.is_win ? w++ : l++;
             const total = w + l;
-            if (total < MIN_ROUNDS_MONTH) continue;
+            if (total < minRounds) continue;
             ranked.push({ bandaiId: user.bandaiId, name: user.name, winRate: w / total, w, l, total });
         }
         ranked.sort((a, b) => b.winRate - a.winRate || b.total - a.total);
+        return ranked;
+    };
+
+    // Current month rankings (no minimum — show everyone playing this month)
+    const mRanked     = rankMonth(currentMonth, 1);
+    const latestMonth = currentMonth;
+
+    // History: all fully-completed past months (strictly before current month)
+    const allMonths = new Set();
+    for (const { evs } of players)
+        for (const ev of evs) allMonths.add(ev._start_datetime.slice(0, 7));
+
+    const pastMonths = [...allMonths].filter(m => m < currentMonth).sort().reverse();
+
+    const history = pastMonths.map(m => {
+        const ranked = rankMonth(m, MIN_ROUNDS_MONTH);
         return {
             month: m,
             rankings: ranked,
@@ -926,10 +932,6 @@ function computeCompetitiveBadges() {
             shichibukai: ranked.slice(4, 11).map(p => p.bandaiId),
         };
     }).filter(entry => entry.rankings.length > 0);
-
-    // Current month = last completed month (first in history)
-    const mRanked      = history.length ? history[0].rankings : [];
-    const latestMonth  = history.length ? history[0].month : month;
 
     // ── Almirante de Frota (best Regional placement ever) ────────────────────
     // Match by BOTH date AND event name to avoid false positives from regular
