@@ -383,31 +383,56 @@
             max-height: 220px; overflow-y: auto;
         }
 
-        /* Card search filters — single compact row */
+        /* Card search filters */
         .db-filters {
-            display: flex; gap: .4rem; flex-wrap: wrap;
+            display: flex; flex-direction: column; gap: .45rem;
             padding: .6rem .75rem;
             border-bottom: 1px solid var(--border,#dee2e6);
-            align-items: center;
+        }
+        .db-filter-row {
+            display: flex; gap: .35rem; align-items: center; flex-wrap: wrap;
+        }
+        .db-filter-label {
+            font-size: .65rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .06em; color: var(--muted,#6c757d);
+            white-space: nowrap; min-width: 36px;
         }
         .db-filters input {
-            flex: 1; min-width: 120px;
+            flex: 1; min-width: 100px;
             background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
-            border-radius: 8px; padding: .4rem .65rem;
+            border-radius: 8px; padding: .38rem .65rem;
             font-size: .8rem; color: var(--text,#1a1a2e); font-family: inherit;
         }
-        .db-filters select {
+        .db-filters input:focus { outline: none; border-color: var(--accent,#048A81); }
+        .db-filter-pill {
+            padding: .22rem .55rem; border-radius: 20px; font-size: .72rem; font-weight: 600;
+            border: 1.5px solid var(--border,#dee2e6); background: var(--bg,#f0f4f8);
+            color: var(--muted,#6c757d); cursor: pointer; transition: all .12s;
+            white-space: nowrap; line-height: 1.3;
+        }
+        .db-filter-pill:hover { border-color: var(--accent,#048A81); color: var(--accent,#048A81); }
+        .db-filter-pill.active { color: #fff; border-color: transparent; }
+        /* Color pills active states */
+        .db-filter-pill[data-val="Red"].active    { background:#c0392b; }
+        .db-filter-pill[data-val="Green"].active  { background:#1e8449; }
+        .db-filter-pill[data-val="Blue"].active   { background:#1a5276; }
+        .db-filter-pill[data-val="Purple"].active { background:#6c3483; }
+        .db-filter-pill[data-val="Black"].active  { background:#333;    }
+        .db-filter-pill[data-val="Yellow"].active { background:#9a7d0a; }
+        /* Type pills active state */
+        .db-filter-pill[data-kind="type"].active  { background: var(--accent,#048A81); }
+
+        .db-filter-set {
             background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
-            border-radius: 8px; padding: .4rem .5rem;
+            border-radius: 8px; padding: .38rem .5rem;
             font-size: .78rem; color: var(--text,#1a1a2e); font-family: inherit;
-            cursor: pointer; max-width: 110px;
+            cursor: pointer; flex: 1; min-width: 80px; max-width: 160px;
         }
-        .db-filters input:focus, .db-filters select:focus {
-            outline: none; border-color: var(--accent,#048A81);
-        }
+        .db-filter-set:focus { outline: none; border-color: var(--accent,#048A81); }
+
         .db-search-btn {
             background: var(--accent,#048A81); color: #fff; border: none;
-            border-radius: 8px; padding: .4rem .85rem; font-size: .78rem; font-weight: 600;
+            border-radius: 8px; padding: .38rem .85rem; font-size: .78rem; font-weight: 600;
             cursor: pointer; transition: opacity .15s; white-space: nowrap; flex-shrink: 0;
         }
         .db-search-btn:hover { opacity: .85; }
@@ -602,7 +627,8 @@
         .deck-modal-article h2 { font-size: .9rem; margin-bottom: .4rem; color: var(--accent,#048A81); }
 
         [data-theme="dark"] .db-filters input,
-        [data-theme="dark"] .db-filters select,
+        [data-theme="dark"] .db-filter-set,
+        [data-theme="dark"] .db-filter-pill { background: #1a2535; border-color: #2a3a50; color: var(--text); }
         [data-theme="dark"] .db-leader-bar input,
         [data-theme="dark"] .db-deck-meta input,
         [data-theme="dark"] .db-article-editor { background: #1a2535; border-color: #2a3a50; color: var(--text); }
@@ -1008,27 +1034,36 @@
                     <div class="db-search-panel">
                         <div class="db-panel-header">&#128269; Cards</div>
                         <div class="db-filters">
-                            <input type="text" id="dbSearchName" placeholder="Card name…" oninput="dbSearchDebounce()">
-                            <select id="dbSearchColor" onchange="dbSearch()">
-                                <option value="">All colors</option>
-                                <option value="Red">Red</option>
-                                <option value="Green">Green</option>
-                                <option value="Blue">Blue</option>
-                                <option value="Purple">Purple</option>
-                                <option value="Black">Black</option>
-                                <option value="Yellow">Yellow</option>
-                            </select>
-                            <select id="dbSearchType" onchange="dbSearch()">
-                                <option value="">All types</option>
-                                <option value="Character">Character</option>
-                                <option value="Event">Event</option>
-                                <option value="Stage">Stage</option>
-                                <option value="DON!!">DON!!</option>
-                            </select>
-                            <select id="dbSearchSet" onchange="dbSearch()">
-                                <option value="">All sets</option>
-                            </select>
-                            <button class="db-search-btn" onclick="dbSearch()">Search</button>
+                            <!-- Name -->
+                            <div class="db-filter-row">
+                                <input type="text" id="dbSearchName" placeholder="Card name…" oninput="dbSearchDebounce()">
+                                <button class="db-search-btn" onclick="dbSearch()">Search</button>
+                            </div>
+                            <!-- Colors -->
+                            <div class="db-filter-row">
+                                <span class="db-filter-label">Color</span>
+                                <button class="db-filter-pill" data-val="Red"    data-kind="color" onclick="dbTogglePill(this)">Red</button>
+                                <button class="db-filter-pill" data-val="Green"  data-kind="color" onclick="dbTogglePill(this)">Green</button>
+                                <button class="db-filter-pill" data-val="Blue"   data-kind="color" onclick="dbTogglePill(this)">Blue</button>
+                                <button class="db-filter-pill" data-val="Purple" data-kind="color" onclick="dbTogglePill(this)">Purple</button>
+                                <button class="db-filter-pill" data-val="Black"  data-kind="color" onclick="dbTogglePill(this)">Black</button>
+                                <button class="db-filter-pill" data-val="Yellow" data-kind="color" onclick="dbTogglePill(this)">Yellow</button>
+                            </div>
+                            <!-- Types -->
+                            <div class="db-filter-row">
+                                <span class="db-filter-label">Type</span>
+                                <button class="db-filter-pill" data-val="Character" data-kind="type" onclick="dbTogglePill(this)">Character</button>
+                                <button class="db-filter-pill" data-val="Event"     data-kind="type" onclick="dbTogglePill(this)">Event</button>
+                                <button class="db-filter-pill" data-val="Stage"     data-kind="type" onclick="dbTogglePill(this)">Stage</button>
+                                <button class="db-filter-pill" data-val="DON!!"     data-kind="type" onclick="dbTogglePill(this)">DON!!</button>
+                            </div>
+                            <!-- Set -->
+                            <div class="db-filter-row">
+                                <span class="db-filter-label">Set</span>
+                                <select id="dbSearchSet" class="db-filter-set" onchange="dbSearch()">
+                                    <option value="">All sets</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="db-card-grid" id="dbCardGrid">
                             <div class="db-empty-msg">Search or filter to browse cards.</div>
@@ -1319,8 +1354,8 @@ async function dbInitBuilder() {
             const sel = document.getElementById('dbSearchSet');
             sets.forEach(s => {
                 const opt = document.createElement('option');
-                opt.value = s.set_id || s.setId || s;
-                opt.textContent = s.set_id || s.setId || s;
+                opt.value = s.set_id;
+                opt.textContent = `${s.set_id} · ${s.set_name}`;
                 sel.appendChild(opt);
             });
         }
@@ -1425,8 +1460,8 @@ async function dbLeaderSearch() {
     }
 
     grid.innerHTML = '<div class="db-loading-msg">Loading…</div>';
-    const params = new URLSearchParams({ cardType: 'Leader' });
-    if (name) params.set('cardName', name);
+    const params = new URLSearchParams({ card_type: 'Leader' });
+    if (name) params.set('card_name', name);
 
     try {
         const r = await fetch(OPTCG_API + '?' + params);
@@ -1474,6 +1509,17 @@ function dbSetLeader(card) {
     dbLeaderSearch(); // refresh grid to show checkmark
 }
 
+// ── Pill toggle ───────────────────────────────────────────────────────────────
+function dbTogglePill(btn) {
+    btn.classList.toggle('active');
+    dbSearchDebounce();
+}
+
+function dbGetSelectedPills(kind) {
+    return [...document.querySelectorAll(`.db-filter-pill[data-kind="${kind}"].active`)]
+        .map(b => b.dataset.val);
+}
+
 // ── Card search ───────────────────────────────────────────────────────────────
 function dbSearchDebounce() {
     clearTimeout(_dbSearchTimer);
@@ -1481,42 +1527,54 @@ function dbSearchDebounce() {
 }
 
 async function dbSearch() {
-    const name  = document.getElementById('dbSearchName').value.trim();
-    const color = document.getElementById('dbSearchColor').value;
-    const type  = document.getElementById('dbSearchType').value;
-    const set   = document.getElementById('dbSearchSet').value;
+    const name   = document.getElementById('dbSearchName').value.trim();
+    const colors = dbGetSelectedPills('color');
+    const types  = dbGetSelectedPills('type');
+    const set    = document.getElementById('dbSearchSet').value;
 
-    if (!name && !color && !type && !set) {
-        document.getElementById('dbCardGrid').innerHTML = '<div class="db-empty-msg">Enter a name or select filters to search.</div>';
+    if (!name && !colors.length && !types.length && !set) {
+        document.getElementById('dbCardGrid').innerHTML = '<div class="db-empty-msg">Search by name or select color/type filters.</div>';
         return;
     }
 
     const grid = document.getElementById('dbCardGrid');
     grid.innerHTML = '<div class="db-loading-msg">Loading…</div>';
 
-    const params = new URLSearchParams();
-    if (name)  params.set('cardName', name);
-    if (color) params.set('cardColor', color);
-    if (type)  params.set('cardType', type);
-    if (set)   params.set('setName', set);
+    // Build one request per (color × type) combination
+    // Empty arrays mean "no filter for that dimension" → use [''] as placeholder
+    const colorList = colors.length ? colors : [''];
+    const typeList  = types.length  ? types  : [''];
+
+    const calls = [];
+    for (const color of colorList) {
+        for (const type of typeList) {
+            // API requires at least one meaningful param — skip blank combos
+            if (!name && !color && !type && !set) continue;
+            const params = new URLSearchParams();
+            if (name)  params.set('card_name',  name);
+            if (color) params.set('card_color', color);
+            if (type)  params.set('card_type',  type);
+            if (set)   params.set('set_id',     set);
+            calls.push(fetch(OPTCG_API + '?' + params).then(r => r.ok ? r.json() : []).catch(() => []));
+        }
+    }
 
     try {
-        const r = await fetch(OPTCG_API + '?' + params);
-        if (!r.ok) throw new Error('API error');
-        const cards = await r.json();
-        if (!Array.isArray(cards) || !cards.length) {
+        const results  = await Promise.all(calls);
+        const allCards = results.flat();
+        if (!allCards.length || allCards[0]?.error) {
             grid.innerHTML = '<div class="db-empty-msg">No cards found.</div>';
             return;
         }
-        // Deduplicate by card_set_id (keep first, which has freshest price)
+        // Deduplicate: keep base art only (drop parallels), keep first occurrence
         const seen = new Set();
-        const unique = cards.filter(c => {
+        const unique = allCards.filter(c => {
             const baseId = (c.card_image_id || c.card_set_id || '').replace(/_p\d+$/, '');
             if (seen.has(baseId)) return false;
             seen.add(baseId); return true;
         });
         dbRenderCardGrid(unique);
-    } catch(e) {
+    } catch {
         grid.innerHTML = '<div class="db-empty-msg">Error loading cards. Try again.</div>';
     }
 }
