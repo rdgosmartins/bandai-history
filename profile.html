@@ -324,52 +324,98 @@
         /* ── Deck Builder ─────────────────────────────────────── */
         .db-layout {
             display: grid;
-            grid-template-columns: 1fr 340px;
+            grid-template-columns: 1fr 320px;
             gap: 1rem;
             align-items: start;
         }
-        @media (max-width: 860px) { .db-layout { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { .db-layout { grid-template-columns: 1fr; } }
 
-        .db-search-panel, .db-deck-panel {
+        /* Left column: stacks leader + card search vertically */
+        .db-left-col { display: flex; flex-direction: column; gap: .75rem; }
+
+        .db-leader-search-panel, .db-search-panel, .db-deck-panel {
             background: var(--card,#fff);
             border-radius: 14px;
             border: 1px solid var(--border,#dee2e6);
             box-shadow: 0 2px 10px rgba(0,0,0,.06);
             overflow: hidden;
         }
+        /* Gold accent for leader panel */
+        .db-leader-search-panel { border-color: #e8c96a; }
+
         .db-panel-header {
-            padding: .8rem 1rem;
+            padding: .65rem 1rem;
             border-bottom: 1px solid var(--border,#dee2e6);
-            display: flex; align-items: center; gap: .6rem;
-            font-family: 'Cinzel', serif; font-size: .82rem;
+            display: flex; align-items: center; gap: .5rem;
+            font-family: 'Cinzel', serif; font-size: .78rem;
             color: var(--accent,#048A81);
         }
-        .db-filters {
-            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .5rem;
-            padding: .75rem 1rem;
-            border-bottom: 1px solid var(--border,#dee2e6);
+        .db-leader-search-panel .db-panel-header {
+            color: #a07820; background: #fffbee;
+            border-bottom-color: #f0d980;
         }
-        @media (max-width: 600px) { .db-filters { grid-template-columns: 1fr 1fr; } }
-        .db-filters input, .db-filters select {
+
+        /* Leader search bar — single row */
+        .db-leader-bar {
+            display: flex; gap: .4rem; padding: .6rem .75rem;
+            border-bottom: 1px solid #f0d980;
+            align-items: center;
+        }
+        .db-leader-bar input {
+            flex: 1; min-width: 0;
             background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
-            border-radius: 8px; padding: .45rem .65rem;
+            border-radius: 8px; padding: .4rem .65rem;
             font-size: .8rem; color: var(--text,#1a1a2e); font-family: inherit;
+        }
+        .db-leader-bar input:focus { outline: none; border-color: #c9a84c; box-shadow: 0 0 0 3px rgba(201,168,76,.12); }
+        .db-leader-bar button {
+            background: #c9a84c; color: #fff; border: none;
+            border-radius: 8px; padding: .4rem .75rem;
+            font-size: .78rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+            transition: opacity .15s;
+        }
+        .db-leader-bar button:hover { opacity: .85; }
+
+        /* Leader card grid — smaller cards, horizontal scroll on mobile */
+        .db-leader-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+            gap: .4rem; padding: .6rem .75rem;
+            max-height: 220px; overflow-y: auto;
+        }
+
+        /* Card search filters — single compact row */
+        .db-filters {
+            display: flex; gap: .4rem; flex-wrap: wrap;
+            padding: .6rem .75rem;
+            border-bottom: 1px solid var(--border,#dee2e6);
+            align-items: center;
+        }
+        .db-filters input {
+            flex: 1; min-width: 120px;
+            background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
+            border-radius: 8px; padding: .4rem .65rem;
+            font-size: .8rem; color: var(--text,#1a1a2e); font-family: inherit;
+        }
+        .db-filters select {
+            background: var(--bg,#f0f4f8); border: 1px solid var(--border,#dee2e6);
+            border-radius: 8px; padding: .4rem .5rem;
+            font-size: .78rem; color: var(--text,#1a1a2e); font-family: inherit;
+            cursor: pointer; max-width: 110px;
         }
         .db-filters input:focus, .db-filters select:focus {
             outline: none; border-color: var(--accent,#048A81);
         }
-        .db-filters input { grid-column: 1 / -1; }
         .db-search-btn {
             background: var(--accent,#048A81); color: #fff; border: none;
-            border-radius: 8px; padding: .45rem .9rem; font-size: .8rem; font-weight: 600;
-            cursor: pointer; transition: opacity .15s;
+            border-radius: 8px; padding: .4rem .85rem; font-size: .78rem; font-weight: 600;
+            cursor: pointer; transition: opacity .15s; white-space: nowrap; flex-shrink: 0;
         }
         .db-search-btn:hover { opacity: .85; }
 
         .db-card-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: .5rem; padding: .75rem 1rem;
-            max-height: 400px; overflow-y: auto;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+            gap: .45rem; padding: .65rem .75rem;
+            max-height: 380px; overflow-y: auto;
         }
         .db-card {
             position: relative; cursor: pointer; border-radius: 6px; overflow: hidden;
@@ -380,13 +426,14 @@
         .db-card-qty {
             position: absolute; bottom: 3px; right: 4px;
             background: rgba(0,0,0,.75); color: #fff;
-            font-size: .65rem; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+            font-size: .62rem; font-weight: 700; padding: 1px 4px; border-radius: 4px;
         }
-        .db-card.maxed { opacity: .45; pointer-events: none; }
-        .db-card.leader-only { border-color: #c9a84c; }
+        .db-card.maxed { opacity: .4; pointer-events: none; }
+        .db-card.leader-card-thumb { border-color: #e8c96a; }
+        .db-card.leader-card-thumb.selected { border-color: #c9a84c; box-shadow: 0 0 0 3px rgba(201,168,76,.25); }
         .db-loading-msg, .db-empty-msg {
-            text-align: center; color: var(--muted,#6c757d); font-size: .82rem;
-            padding: 2rem 1rem;
+            text-align: center; color: var(--muted,#6c757d); font-size: .8rem;
+            padding: 1.5rem 1rem; line-height: 1.5;
         }
 
         /* Deck panel */
@@ -556,12 +603,15 @@
 
         [data-theme="dark"] .db-filters input,
         [data-theme="dark"] .db-filters select,
+        [data-theme="dark"] .db-leader-bar input,
         [data-theme="dark"] .db-deck-meta input,
         [data-theme="dark"] .db-article-editor { background: #1a2535; border-color: #2a3a50; color: var(--text); }
         [data-theme="dark"] .db-toolbar button { background: #1a2535; border-color: #2a3a50; color: var(--text); }
         [data-theme="dark"] .db-qty-btn { background: #1a2535; border-color: #2a3a50; }
         [data-theme="dark"] .db-saved-item:hover { background: #1a2535; }
         [data-theme="dark"] .deck-modal { background: #162031; }
+        [data-theme="dark"] .db-leader-search-panel { border-color: #5a4010; }
+        [data-theme="dark"] .db-leader-search-panel .db-panel-header { background: #1e1a08; border-bottom-color: #5a4010; }
     </style>
 </head>
 <body>
@@ -939,36 +989,53 @@
             <!-- Builder -->
             <div class="db-layout" id="dbBuilder" style="display:none;">
 
-                <!-- Left: Card search -->
-                <div class="db-search-panel">
-                    <div class="db-panel-header">&#128269; Card Search</div>
-                    <div class="db-filters">
-                        <input type="text" id="dbSearchName" placeholder="Card name…" oninput="dbSearchDebounce()">
-                        <select id="dbSearchColor" onchange="dbSearch()">
-                            <option value="">All colors</option>
-                            <option value="Red">Red</option>
-                            <option value="Green">Green</option>
-                            <option value="Blue">Blue</option>
-                            <option value="Purple">Purple</option>
-                            <option value="Black">Black</option>
-                            <option value="Yellow">Yellow</option>
-                        </select>
-                        <select id="dbSearchType" onchange="dbSearch()">
-                            <option value="">All types</option>
-                            <option value="Leader">Leader</option>
-                            <option value="Character">Character</option>
-                            <option value="Event">Event</option>
-                            <option value="Stage">Stage</option>
-                        </select>
-                        <select id="dbSearchSet" onchange="dbSearch()">
-                            <option value="">All sets</option>
-                        </select>
-                        <button class="db-search-btn" onclick="dbSearch()">Search</button>
+                <!-- Left column -->
+                <div class="db-left-col">
+
+                    <!-- Leader search -->
+                    <div class="db-leader-search-panel">
+                        <div class="db-panel-header">&#9812; Leader</div>
+                        <div class="db-leader-bar">
+                            <input type="text" id="dbLeaderSearchName" placeholder="Search leader name…" oninput="dbLeaderSearchDebounce()">
+                            <button onclick="dbLeaderSearch()">Search</button>
+                        </div>
+                        <div class="db-leader-grid" id="dbLeaderGrid">
+                            <div class="db-empty-msg">Search to find leader cards.</div>
+                        </div>
                     </div>
-                    <div class="db-card-grid" id="dbCardGrid">
-                        <div class="db-empty-msg">Search or select colors to browse cards.</div>
+
+                    <!-- Card search -->
+                    <div class="db-search-panel">
+                        <div class="db-panel-header">&#128269; Cards</div>
+                        <div class="db-filters">
+                            <input type="text" id="dbSearchName" placeholder="Card name…" oninput="dbSearchDebounce()">
+                            <select id="dbSearchColor" onchange="dbSearch()">
+                                <option value="">All colors</option>
+                                <option value="Red">Red</option>
+                                <option value="Green">Green</option>
+                                <option value="Blue">Blue</option>
+                                <option value="Purple">Purple</option>
+                                <option value="Black">Black</option>
+                                <option value="Yellow">Yellow</option>
+                            </select>
+                            <select id="dbSearchType" onchange="dbSearch()">
+                                <option value="">All types</option>
+                                <option value="Character">Character</option>
+                                <option value="Event">Event</option>
+                                <option value="Stage">Stage</option>
+                                <option value="DON!!">DON!!</option>
+                            </select>
+                            <select id="dbSearchSet" onchange="dbSearch()">
+                                <option value="">All sets</option>
+                            </select>
+                            <button class="db-search-btn" onclick="dbSearch()">Search</button>
+                        </div>
+                        <div class="db-card-grid" id="dbCardGrid">
+                            <div class="db-empty-msg">Search or filter to browse cards.</div>
+                        </div>
                     </div>
-                </div>
+
+                </div><!-- end db-left-col -->
 
                 <!-- Right: Deck -->
                 <div class="db-deck-panel">
@@ -1011,8 +1078,7 @@
                         </div>
                         <div class="db-save-status" id="dbSaveStatus"></div>
                     </div>
-                </div>
-
+                </div><!-- end db-deck-panel -->
             </div><!-- end db-layout -->
 
             <!-- Public decks in view mode -->
@@ -1300,6 +1366,8 @@ function dbNewDeck() {
     _dbLeader = null;
     _dbCards = [];
     document.getElementById('dbDeckName').value = '';
+    document.getElementById('dbLeaderSearchName').value = '';
+    document.getElementById('dbLeaderGrid').innerHTML = '<div class="db-empty-msg">Search to find leader cards.</div>';
     document.getElementById('dbArticle').innerHTML = '';
     document.getElementById('dbIsPublic').checked = false;
     document.getElementById('dbBuilder').style.display = '';
@@ -1337,6 +1405,73 @@ async function dbDeleteDeck(id) {
         document.getElementById('dbBuilder').style.display = 'none';
     }
     await dbLoadDecks();
+}
+
+// ── Leader search ─────────────────────────────────────────────────────────────
+let _dbLeaderTimer = null;
+
+function dbLeaderSearchDebounce() {
+    clearTimeout(_dbLeaderTimer);
+    _dbLeaderTimer = setTimeout(dbLeaderSearch, 400);
+}
+
+async function dbLeaderSearch() {
+    const name = document.getElementById('dbLeaderSearchName').value.trim();
+    const grid = document.getElementById('dbLeaderGrid');
+
+    if (!name) {
+        grid.innerHTML = '<div class="db-empty-msg">Search to find leader cards.</div>';
+        return;
+    }
+
+    grid.innerHTML = '<div class="db-loading-msg">Loading…</div>';
+    const params = new URLSearchParams({ cardType: 'Leader' });
+    if (name) params.set('cardName', name);
+
+    try {
+        const r = await fetch(OPTCG_API + '?' + params);
+        if (!r.ok) throw new Error('API error');
+        const cards = await r.json();
+        if (!Array.isArray(cards) || !cards.length) {
+            grid.innerHTML = '<div class="db-empty-msg">No leaders found.</div>';
+            return;
+        }
+        // Deduplicate base art only
+        const seen = new Set();
+        const unique = cards.filter(c => {
+            const baseId = (c.card_image_id || c.card_set_id || '').replace(/_p\d+$/, '');
+            if (seen.has(baseId)) return false;
+            seen.add(baseId); return true;
+        });
+        dbRenderLeaderGrid(unique);
+    } catch {
+        grid.innerHTML = '<div class="db-empty-msg">Error loading leaders.</div>';
+    }
+}
+
+function dbRenderLeaderGrid(cards) {
+    const grid = document.getElementById('dbLeaderGrid');
+    grid.innerHTML = '';
+    cards.forEach(card => {
+        const id = card.card_image_id || card.card_set_id;
+        const isSelected = _dbLeader?.id === id;
+        const div = document.createElement('div');
+        div.className = 'db-card leader-card-thumb' + (isSelected ? ' selected' : '');
+        div.title = card.card_name;
+        div.innerHTML = `<img src="${card.card_image}" alt="${_esc(card.card_name)}" loading="lazy">`
+            + (isSelected ? `<span class="db-card-qty">✓</span>` : '');
+        div.onclick = () => dbSetLeader(card);
+        grid.appendChild(div);
+    });
+}
+
+function dbSetLeader(card) {
+    const id = card.card_image_id || card.card_set_id;
+    const colors = (card.card_color || '').split('/').map(c => c.trim()).filter(Boolean);
+    _dbLeader = { id, name: card.card_name, colors, image: card.card_image };
+    dbRenderLeaderSlot();
+    dbUpdateCount();
+    dbLeaderSearch(); // refresh grid to show checkmark
 }
 
 // ── Card search ───────────────────────────────────────────────────────────────
@@ -1389,19 +1524,21 @@ async function dbSearch() {
 function dbRenderCardGrid(cards) {
     const grid = document.getElementById('dbCardGrid');
     grid.innerHTML = '';
-    cards.forEach(card => {
-        const id    = card.card_image_id || card.card_set_id;
-        const isLeader = (card.card_type || '').toLowerCase() === 'leader';
-        const qty   = isLeader
-            ? (_dbLeader?.id === id ? 1 : 0)
-            : (_dbCards.find(c => c.id === id)?.qty || 0);
-        const maxed = isLeader ? (!!_dbLeader) : (qty >= 4);
-
+    // Filter out Leaders from the card grid — leaders are handled separately
+    const nonLeaders = cards.filter(c => (c.card_type || '').toLowerCase() !== 'leader');
+    if (!nonLeaders.length) {
+        grid.innerHTML = '<div class="db-empty-msg">No cards found.<br><small>Leaders are searched in the section above.</small></div>';
+        return;
+    }
+    nonLeaders.forEach(card => {
+        const id  = card.card_image_id || card.card_set_id;
+        const qty = _dbCards.find(c => c.id === id)?.qty || 0;
+        const maxed = qty >= 4;
         const div = document.createElement('div');
-        div.className = 'db-card' + (maxed ? ' maxed' : '') + (isLeader ? ' leader-only' : '');
-        div.title = card.card_name + (isLeader ? ' (Leader)' : '');
+        div.className = 'db-card' + (maxed ? ' maxed' : '');
+        div.title = card.card_name;
         div.innerHTML = `<img src="${card.card_image}" alt="${_esc(card.card_name)}" loading="lazy">`
-            + (qty > 0 ? `<span class="db-card-qty">${isLeader ? 'L' : 'x'+qty}</span>` : '');
+            + (qty > 0 ? `<span class="db-card-qty">x${qty}</span>` : '');
         div.onclick = () => dbAddCard(card);
         grid.appendChild(div);
     });
@@ -1409,17 +1546,6 @@ function dbRenderCardGrid(cards) {
 
 function dbAddCard(card) {
     const id = card.card_image_id || card.card_set_id;
-    const isLeader = (card.card_type || '').toLowerCase() === 'leader';
-
-    if (isLeader) {
-        // Set as leader
-        const colors = (card.card_color || '').split('/').map(c => c.trim()).filter(Boolean);
-        _dbLeader = { id, name: card.card_name, colors, image: card.card_image };
-        dbRenderLeaderSlot();
-        dbUpdateCount();
-        dbSearch(); // refresh grid to show leader selected
-        return;
-    }
 
     // Enforce color rules if leader is set
     if (_dbLeader) {
@@ -1479,6 +1605,8 @@ function dbClearLeader() {
     _dbLeader = null;
     dbRenderLeaderSlot();
     dbUpdateCount();
+    // Refresh leader grid to remove checkmark
+    if (document.getElementById('dbLeaderSearchName').value.trim()) dbLeaderSearch();
 }
 
 function dbRenderDeckList() {
