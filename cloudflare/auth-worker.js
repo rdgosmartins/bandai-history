@@ -401,6 +401,30 @@ async function handleReject(request, env, cors, id) {
     return json({ ok: true }, 200, cors);
 }
 
+// ── User Profile ──────────────────────────────────────────────────────────────
+
+async function handleProfileGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    return json({ profile: user.profile || {} }, 200, cors);
+}
+
+async function handleProfilePut(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const body = await request.json();
+    const allowed = ['displayName', 'age', 'city', 'bio', 'favoriteDeck', 'bandaiName',
+                     'playstyle', 'yearsPlaying', 'instagram', 'twitter', 'discord',
+                     'whatsapp', 'youtube', 'twitch'];
+    user.profile = user.profile || {};
+    for (const k of allowed) {
+        if (body[k] !== undefined) user.profile[k] = String(body[k]).slice(0, 512);
+    }
+    if (body.displayName) user.displayName = String(body.displayName).slice(0, 64);
+    await putUser(env, user);
+    return json({ ok: true, profile: user.profile }, 200, cors);
+}
+
 // ── Event Cache (KV, keyed by bandaiId) ───────────────────────────────────────
 
 async function handleCacheGet(request, env, cors, bandaiId) {
@@ -449,6 +473,8 @@ export default {
             if (path === '/auth/me'              && method === 'GET')  return handleMe(request, env, cors);
             if (path === '/auth/logout'          && method === 'POST') return handleLogout(request, env, cors);
             if (path === '/admin/users'          && method === 'GET')  return handleAdminUsers(request, env, cors);
+            if (path === '/profile'              && method === 'GET')  return handleProfileGet(request, env, cors);
+            if (path === '/profile'              && method === 'PUT')  return handleProfilePut(request, env, cors);
 
             const approveMatch = path.match(/^\/admin\/approve\/(.+)$/);
             if (approveMatch && method === 'POST') return handleApprove(request, env, cors, approveMatch[1]);

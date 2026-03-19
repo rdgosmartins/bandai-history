@@ -20,6 +20,7 @@
             const user = await requireAuth();
             if (!user) return;
             document.getElementById('signOutBtn').style.display = '';
+            document.getElementById('profileBtn').style.display = '';
             if (user.role === 'admin') {
                 document.getElementById('adminPanelBtn').style.display = '';
             }
@@ -31,7 +32,8 @@
 <header>
     <button class="theme-toggle" onclick="toggleTheme()" id="themeToggleBtn">&#127775; Light</button>
     <button class="theme-toggle" id="signOutBtn" onclick="logout()" style="display:none;right:8rem;">&#9171; Sign Out</button>
-    <button class="theme-toggle" id="adminPanelBtn" onclick="window.location.href='/admin.html'" style="display:none;right:16rem;">&#9881; Admin</button>
+    <button class="theme-toggle" id="profileBtn" onclick="window.location.href='/profile.html'" style="display:none;right:13rem;">&#128100; Profile</button>
+    <button class="theme-toggle" id="adminPanelBtn" onclick="window.location.href='/admin.html'" style="display:none;right:19rem;">&#9881; Admin</button>
     <div class="header-inner">
         <div class="header-skull">&#9760;&#65039;</div>
         <div class="header-text">

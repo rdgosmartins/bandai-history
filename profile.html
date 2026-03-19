@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile — [YOKO] One Piece TCG - History Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/auth.css">
+    <style>
+        .profile-card { max-width: 640px; }
+        .profile-card h2 { font-family: 'Cinzel', serif; font-size: 1.2rem; margin: 1.5rem 0 0.75rem; color: var(--accent, #c9a84c); border-bottom: 1px solid rgba(255,255,255,.08); padding-bottom: 0.4rem; }
+        .profile-card h2:first-of-type { margin-top: 0; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+        @media(max-width:520px) { .form-row { grid-template-columns: 1fr; } }
+        .form-group { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.75rem; }
+        .form-group label { font-size: .78rem; opacity: .7; text-transform: uppercase; letter-spacing: .04em; }
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 8px;
+            color: inherit;
+            font-size: .9rem;
+            padding: .55rem .75rem;
+            transition: border-color .2s;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .form-group select option { background: #1a1a2e; }
+        .form-group select optgroup { background: #1a1a2e; font-style: normal; font-weight: 600; }
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus { outline: none; border-color: var(--accent, #c9a84c); }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .social-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+        @media(max-width:520px) { .social-grid { grid-template-columns: 1fr; } }
+        .btn-save {
+            width: 100%; padding: .75rem; border: none; border-radius: 10px;
+            background: var(--accent, #c9a84c); color: #111; font-weight: 700;
+            font-size: 1rem; cursor: pointer; margin-top: 1rem; transition: opacity .2s;
+        }
+        .btn-save:hover { opacity: .85; }
+        .btn-save:disabled { opacity: .5; cursor: not-allowed; }
+        .profile-status { text-align: center; font-size: .85rem; margin-top: .6rem; min-height: 1.2em; }
+        .profile-status.ok { color: #4caf50; }
+        .profile-status.err { color: #e05252; }
+        .back-link { display: block; text-align: center; margin-top: 1.2rem; opacity: .6; font-size: .85rem; text-decoration: none; }
+        .back-link:hover { opacity: 1; }
+        .color-dot {
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+            margin-right: 4px; vertical-align: middle;
+        }
+    </style>
+    <script src="js/auth.js"></script>
+</head>
+<body>
+<div class="auth-container">
+    <div class="auth-card profile-card">
+        <div class="auth-header">
+            <span class="skull">&#9760;&#65039;</span>
+            <h1>[YOKO] One Piece TCG</h1>
+            <p>My Profile</p>
+        </div>
+
+        <h2>Personal Info</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Display Name</label>
+                <input type="text" id="displayName" placeholder="Your name" maxlength="64">
+            </div>
+            <div class="form-group">
+                <label>Age</label>
+                <input type="number" id="age" placeholder="e.g. 25" min="1" max="120">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>City</label>
+            <input type="text" id="city" placeholder="e.g. São Paulo" maxlength="128">
+        </div>
+        <div class="form-group">
+            <label>Bio</label>
+            <textarea id="bio" placeholder="A little about yourself..." maxlength="512"></textarea>
+        </div>
+
+        <h2>TCG Info</h2>
+        <div class="form-group">
+            <label>Bandai Username</label>
+            <input type="text" id="bandaiName" placeholder="Your name in the Bandai system" maxlength="64">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Years Playing OPTCG</label>
+                <input type="number" id="yearsPlaying" placeholder="e.g. 2" min="0" max="20">
+            </div>
+            <div class="form-group">
+                <label>Playstyle</label>
+                <input type="text" id="playstyle" placeholder="e.g. Aggro, Control..." maxlength="64">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Favorite Leader / Deck</label>
+            <select id="favoriteDeck">
+                <option value="">— Select a leader —</option>
+
+                <optgroup label="OP-01 · Romance Dawn">
+                    <option value="OP01-001">Roronoa Zoro — OP01-001 (Green)</option>
+                    <option value="OP01-002">Trafalgar Law — OP01-002 (Blue/Purple)</option>
+                    <option value="OP01-003">Monkey D. Luffy — OP01-003 (Red)</option>
+                    <option value="OP01-004">Kaido — OP01-004 (Purple/Black)</option>
+                    <option value="OP01-005">Crocodile — OP01-005 (Blue)</option>
+                    <option value="OP01-006">Charlotte Linlin — OP01-006 (Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-02 · Paramount War">
+                    <option value="OP02-001">Edward Newgate — OP02-001 (Black)</option>
+                    <option value="OP02-002">Monkey D. Garp — OP02-002 (Red/Black)</option>
+                    <option value="OP02-003">Kin'emon — OP02-003 (Green)</option>
+                    <option value="OP02-004">Sanji — OP02-004 (Blue)</option>
+                    <option value="OP02-005">Ivankov Emporio — OP02-005 (Purple)</option>
+                    <option value="OP02-006">Magellan — OP02-006 (Black)</option>
+                    <option value="OP02-007">Zephyr — OP02-007 (Black)</option>
+                    <option value="OP02-008">Smoker — OP02-008 (Black)</option>
+                </optgroup>
+
+                <optgroup label="OP-03 · Pillars of Strength">
+                    <option value="OP03-001">Portgas D. Ace — OP03-001 (Red/Yellow)</option>
+                    <option value="OP03-002">Kuro — OP03-002 (Blue)</option>
+                    <option value="OP03-003">Arlong — OP03-003 (Green)</option>
+                    <option value="OP03-004">Nami — OP03-004 (Blue/Yellow)</option>
+                    <option value="OP03-005">Iceburg — OP03-005 (Blue)</option>
+                    <option value="OP03-006">Rob Lucci — OP03-006 (Black)</option>
+                    <option value="OP03-007">Charlotte Linlin — OP03-007 (Yellow)</option>
+                    <option value="OP03-008">Charlotte Katakuri — OP03-008 (Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-04 · Kingdoms of Intrigue">
+                    <option value="OP04-001">Nefertari Vivi — OP04-001 (Red/Blue)</option>
+                    <option value="OP04-002">Crocodile — OP04-002 (Purple/Yellow)</option>
+                    <option value="OP04-003">Donquixote Doflamingo — OP04-003 (Green/Purple)</option>
+                    <option value="OP04-004">Fujitora (Issho) — OP04-004 (Green/Black)</option>
+                    <option value="OP04-005">Rebecca — OP04-005 (Blue/Black)</option>
+                    <option value="OP04-006">Queen — OP04-006 (Blue/Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-05 · Awakening of the New Era">
+                    <option value="OP05-001">Monkey D. Luffy — OP05-001 (Purple)</option>
+                    <option value="OP05-002">Sabo — OP05-002 (Red/Green)</option>
+                    <option value="OP05-003">Belo Betty — OP05-003 (Red)</option>
+                    <option value="OP05-004">Donquixote Rosinante — OP05-004 (Blue/Black)</option>
+                    <option value="OP05-005">Sakazuki — OP05-005 (Blue/Black)</option>
+                    <option value="OP05-006">Enel — OP05-006 (Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-06 · Wings of the Captain">
+                    <option value="OP06-001">Gecko Moria — OP06-001 (Black/Purple)</option>
+                    <option value="OP06-002">Hody Jones — OP06-002 (Green)</option>
+                    <option value="OP06-003">Vinsmoke Reiju — OP06-003 (Red/Black)</option>
+                    <option value="OP06-004">Uta — OP06-004 (Green)</option>
+                    <option value="OP06-005">Perona — OP06-005 (Purple)</option>
+                    <option value="OP06-006">Yamato — OP06-006 (Green/Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-07 · 500 Years in the Future">
+                    <option value="OP07-001">Kozuki Oden — OP07-001 (Red/Green)</option>
+                    <option value="OP07-002">Hannyabal — OP07-002 (Yellow/Purple)</option>
+                    <option value="OP07-003">Kyros — OP07-003 (Blue)</option>
+                    <option value="OP07-004">Monkey D. Dragon — OP07-004 (Red)</option>
+                    <option value="OP07-005">Jewelry Bonney — OP07-005 (Green)</option>
+                    <option value="OP07-006">Boa Hancock — OP07-006 (Blue)</option>
+                </optgroup>
+
+                <optgroup label="OP-08 · Two Legends">
+                    <option value="OP08-001">Gol D. Roger — OP08-001 (Red)</option>
+                    <option value="OP08-002">Shanks — OP08-002 (Red)</option>
+                    <option value="OP08-003">Silvers Rayleigh — OP08-003 (Blue)</option>
+                    <option value="OP08-004">Monkey D. Luffy (Gear 5) — OP08-004 (Red/Black)</option>
+                    <option value="OP08-005">Kuzan (Aokiji) — OP08-005 (Blue)</option>
+                    <option value="OP08-006">Dracule Mihawk — OP08-006 (Black)</option>
+                </optgroup>
+
+                <optgroup label="OP-09 · Emperors in the New World">
+                    <option value="OP09-001">Gol D. Roger — OP09-001 (Purple)</option>
+                    <option value="OP09-002">Charlotte Linlin — OP09-002 (Red/Yellow)</option>
+                    <option value="OP09-003">Kaido — OP09-003 (Green/Black)</option>
+                    <option value="OP09-004">Marshall D. Teach — OP09-004 (Black)</option>
+                    <option value="OP09-005">Monkey D. Luffy — OP09-005 (Yellow)</option>
+                    <option value="OP09-006">Shanks — OP09-006 (Red/Black)</option>
+                </optgroup>
+
+                <optgroup label="OP-10 · Royal Blood">
+                    <option value="OP10-001">Nefertari Cobra — OP10-001 (Yellow)</option>
+                    <option value="OP10-002">Nefertari Vivi — OP10-002 (Green/Yellow)</option>
+                    <option value="OP10-003">Wapol — OP10-003 (Blue/Black)</option>
+                    <option value="OP10-004">Sakazuki — OP10-004 (Red)</option>
+                    <option value="OP10-005">Crocodile — OP10-005 (Red/Blue)</option>
+                    <option value="OP10-006">Monkey D. Luffy — OP10-006 (Red/Green)</option>
+                </optgroup>
+
+                <optgroup label="OP-11 · A Fist of Divine Speed">
+                    <option value="OP11-001">Foxy — OP11-001 (Purple)</option>
+                    <option value="OP11-002">Rob Lucci — OP11-002 (Blue/Black)</option>
+                    <option value="OP11-003">Usopp (Sogeking) — OP11-003 (Red)</option>
+                    <option value="OP11-004">Aokiji &amp; Akainu — OP11-004 (Blue/Black)</option>
+                    <option value="OP11-005">Monkey D. Luffy — OP11-005 (Red/Blue)</option>
+                    <option value="OP11-006">Kizaru (Borsalino) — OP11-006 (Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-12 · Legacy of the Master">
+                    <option value="OP12-001">Silvers Rayleigh — OP12-001 (Red/Purple)</option>
+                    <option value="OP12-002">Monkey D. Luffy — OP12-002 (Purple/Black)</option>
+                    <option value="OP12-003">Scopper Gaban — OP12-003 (Green)</option>
+                    <option value="OP12-004">Shanks — OP12-004 (Blue)</option>
+                    <option value="OP12-005">Kozuki Toki — OP12-005 (Yellow)</option>
+                    <option value="OP12-006">Marshall D. Teach — OP12-006 (Black)</option>
+                </optgroup>
+
+                <optgroup label="OP-13 · Carrying On His Will">
+                    <option value="OP13-001">Portgas D. Ace — OP13-001 (Red/Yellow)</option>
+                    <option value="OP13-002">Marco — OP13-002 (Green/Blue)</option>
+                    <option value="OP13-003">Edward Newgate — OP13-003 (Black/Yellow)</option>
+                    <option value="OP13-004">Monkey D. Luffy — OP13-004 (Red/Purple)</option>
+                    <option value="OP13-005">Marshall D. Teach — OP13-005 (Purple/Black)</option>
+                    <option value="OP13-006">Sengoku — OP13-006 (Black)</option>
+                </optgroup>
+
+                <optgroup label="OP-14 · The Azure Sea's Seven">
+                    <option value="OP14-001">Roronoa Zoro — OP14-001 (Red/Black)</option>
+                    <option value="OP14-002">Dracule Mihawk — OP14-002 (Green)</option>
+                    <option value="OP14-003">Nami — OP14-003 (Blue/Yellow)</option>
+                    <option value="OP14-004">Nico Robin — OP14-004 (Purple)</option>
+                    <option value="OP14-005">Crocodile — OP14-005 (Black/Yellow)</option>
+                    <option value="OP14-006">Monkey D. Luffy — OP14-006 (Red/Yellow)</option>
+                </optgroup>
+
+                <optgroup label="OP-15 · Adventure on Kami's Island">
+                    <option value="OP15-001">Monkey D. Luffy — OP15-001 (Red)</option>
+                    <option value="OP15-002">Boa Hancock — OP15-002 (Green/Yellow)</option>
+                    <option value="OP15-003">Vegapunk — OP15-003 (Blue)</option>
+                    <option value="OP15-004">Kizaru — OP15-004 (Yellow/Black)</option>
+                    <option value="OP15-005">Enel — OP15-005 (Purple)</option>
+                    <option value="OP15-006">Monkey D. Garp — OP15-006 (Black/Red)</option>
+                </optgroup>
+
+                <optgroup label="OP-16 · The Time of Battle">
+                    <option value="OP16-TBD">— Coming Soon —</option>
+                </optgroup>
+
+                <optgroup label="ST · Starter Decks">
+                    <option value="ST01-001">Monkey D. Luffy — ST-01 (Red)</option>
+                    <option value="ST02-001">Eustass Kid — ST-02 (Green)</option>
+                    <option value="ST03-001">Crocodile — ST-03 (Blue)</option>
+                    <option value="ST04-001">Kaido — ST-04 (Purple)</option>
+                    <option value="ST05-001">Uta — ST-05 (Red)</option>
+                    <option value="ST06-001">Sakazuki — ST-06 (Black)</option>
+                    <option value="ST07-001">Charlotte Linlin — ST-07 (Yellow)</option>
+                    <option value="ST08-001">Monkey D. Luffy — ST-08 (Red/Green)</option>
+                    <option value="ST09-001">Yamato — ST-09 (Green/Yellow)</option>
+                    <option value="ST10-001">Trafalgar Law / Luffy / Kid — ST-10</option>
+                    <option value="ST11-001">Uta — ST-11 (Green)</option>
+                    <option value="ST12-001">Roronoa Zoro &amp; Sanji — ST-12</option>
+                    <option value="ST13-001">Luffy / Ace / Sabo — ST-13</option>
+                    <option value="ST14-001">Monkey D. Luffy — ST-14 (Red/Purple)</option>
+                    <option value="ST15-001">Edward Newgate — ST-15 (Red)</option>
+                    <option value="ST16-001">Uta — ST-16 (Green)</option>
+                    <option value="ST17-001">Donquixote Doflamingo — ST-17 (Blue)</option>
+                    <option value="ST18-001">Monkey D. Luffy — ST-18 (Purple)</option>
+                    <option value="ST19-001">Smoker — ST-19 (Black)</option>
+                    <option value="ST20-001">Charlotte Katakuri — ST-20 (Yellow)</option>
+                    <option value="ST21-001">Monkey D. Luffy (Gear 5) — ST-21 (Red/Black)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <h2>Social Links</h2>
+        <div class="social-grid">
+            <div class="form-group">
+                <label>Instagram</label>
+                <input type="text" id="instagram" placeholder="@username" maxlength="128">
+            </div>
+            <div class="form-group">
+                <label>Twitter / X</label>
+                <input type="text" id="twitter" placeholder="@username" maxlength="128">
+            </div>
+            <div class="form-group">
+                <label>Discord</label>
+                <input type="text" id="discord" placeholder="user#0000 or username" maxlength="128">
+            </div>
+            <div class="form-group">
+                <label>WhatsApp</label>
+                <input type="text" id="whatsapp" placeholder="+55 11 99999-9999" maxlength="32">
+            </div>
+            <div class="form-group">
+                <label>YouTube</label>
+                <input type="text" id="youtube" placeholder="channel URL or @handle" maxlength="256">
+            </div>
+            <div class="form-group">
+                <label>Twitch</label>
+                <input type="text" id="twitch" placeholder="twitch.tv/username" maxlength="128">
+            </div>
+        </div>
+
+        <button class="btn-save" id="saveBtn" onclick="saveProfile()">Save Profile</button>
+        <div class="profile-status" id="profileStatus"></div>
+        <a href="/analyzer.html" class="back-link">&#8592; Back to Dashboard</a>
+    </div>
+</div>
+
+<script>
+const AUTH_BASE = 'https://bandai-auth.rdgosmartins.workers.dev';
+
+(async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    // Pre-fill from server
+    try {
+        const r = await fetch(`${AUTH_BASE}/profile`, { credentials: 'include' });
+        if (r.ok) {
+            const { profile } = await r.json();
+            const p = profile || {};
+            document.getElementById('displayName').value  = user.displayName || '';
+            document.getElementById('age').value          = p.age          || '';
+            document.getElementById('city').value         = p.city         || '';
+            document.getElementById('bio').value          = p.bio          || '';
+            document.getElementById('bandaiName').value   = p.bandaiName   || '';
+            document.getElementById('yearsPlaying').value = p.yearsPlaying || '';
+            document.getElementById('playstyle').value    = p.playstyle    || '';
+            document.getElementById('instagram').value    = p.instagram    || '';
+            document.getElementById('twitter').value      = p.twitter      || '';
+            document.getElementById('discord').value      = p.discord      || '';
+            document.getElementById('whatsapp').value     = p.whatsapp     || '';
+            document.getElementById('youtube').value      = p.youtube      || '';
+            document.getElementById('twitch').value       = p.twitch       || '';
+            if (p.favoriteDeck) document.getElementById('favoriteDeck').value = p.favoriteDeck;
+        }
+    } catch(e) {}
+})();
+
+async function saveProfile() {
+    const btn = document.getElementById('saveBtn');
+    const status = document.getElementById('profileStatus');
+    btn.disabled = true;
+    status.textContent = 'Saving…';
+    status.className = 'profile-status';
+
+    const payload = {
+        displayName:  document.getElementById('displayName').value.trim(),
+        age:          document.getElementById('age').value,
+        city:         document.getElementById('city').value.trim(),
+        bio:          document.getElementById('bio').value.trim(),
+        bandaiName:   document.getElementById('bandaiName').value.trim(),
+        favoriteDeck: document.getElementById('favoriteDeck').value,
+        playstyle:    document.getElementById('playstyle').value.trim(),
+        yearsPlaying: document.getElementById('yearsPlaying').value,
+        instagram:    document.getElementById('instagram').value.trim(),
+        twitter:      document.getElementById('twitter').value.trim(),
+        discord:      document.getElementById('discord').value.trim(),
+        whatsapp:     document.getElementById('whatsapp').value.trim(),
+        youtube:      document.getElementById('youtube').value.trim(),
+        twitch:       document.getElementById('twitch').value.trim(),
+    };
+
+    try {
+        const r = await fetch(`${AUTH_BASE}/profile`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (r.ok) {
+            status.textContent = 'Profile saved!';
+            status.className = 'profile-status ok';
+        } else {
+            const err = await r.json().catch(() => ({}));
+            status.textContent = 'Error: ' + (err.error || r.status);
+            status.className = 'profile-status err';
+        }
+    } catch(e) {
+        status.textContent = 'Network error — try again.';
+        status.className = 'profile-status err';
+    } finally {
+        btn.disabled = false;
+        setTimeout(() => { status.textContent = ''; }, 4000);
+    }
+}
+</script>
+</body>
+</html>
