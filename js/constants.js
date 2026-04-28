@@ -20,6 +20,7 @@ const SET_PERIODS = [
     { name: "OP-12 · Legacy of the Master",           date: new Date("2025-08-22") },
     { name: "OP-13 · Carrying On His Will",           date: new Date("2025-11-07") },
     { name: "OP-14 / EB-04 · The Azure Sea's Seven",  date: new Date("2026-01-16") },
+    { name: "OP-15 · Adventure on KAMI's Island",      date: new Date("2026-04-03") },
 ];
 
 const REGIONALS = [
@@ -27,6 +28,11 @@ const REGIONALS = [
     { date: "2025-08-03", name: "One Piece Offline Regionals 02/05 - Day 2" },
     { date: "2025-11-08", name: "Latam TCG One Piece Regional - Brazil" },
     { date: "2025-11-09", name: "Offline Treasure Cup - Brazil Day 2" },
+];
+
+// Dates to exclude from all rankings and badge calculations (format: 'YYYY-MM-DD').
+const EXCLUDED_DATES = [
+    '2026-03-28',
 ];
 
 // Players whose events only count when at least one other mapped player attended the same tournament.
