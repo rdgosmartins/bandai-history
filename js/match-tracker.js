@@ -8,6 +8,7 @@ const ML_TYPES = ['Testing','Local','Store CS','Treasure Cup','Flagship','Region
 let _mlMatches              = [];   // cached list
 let _mlRoundCtx             = null; // { matchId, type } while the round detail modal is open
 let _mlPendingBandaiEventId = null; // bandaiEventId selected via suggestion chip
+let _mlCurrentBandaiId      = null; // resolved bandaiId of the logged-in user
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
@@ -25,8 +26,14 @@ async function loadMatchLog() {
         ${_mlRoundDetailModalHtml()}
     `;
     try {
-        const r = await fetch(`${AUTH_BASE}/my-matches`, { credentials: 'include' });
-        _mlMatches = r.ok ? await r.json() : [];
+        const [matchRes, authUser] = await Promise.all([
+            fetch(`${AUTH_BASE}/my-matches`, { credentials: 'include' }),
+            _authUserPromise,
+        ]);
+        _mlMatches = matchRes.ok ? await matchRes.json() : [];
+        const me = (App.usersWithToken || []).find(u =>
+            u.name.toLowerCase() === (authUser?.bandaiName || '').toLowerCase());
+        _mlCurrentBandaiId = me?.bandaiId || null;
     } catch { _mlMatches = []; }
     _renderMatchList();
 }
@@ -156,6 +163,52 @@ function _mlTournamentStatsHtml(m) {
     if (topCutRounds.length)
         cells.push(`<div style="line-height:1.5;">🏆 Top cut <strong>${topCutRounds.length}</strong> round${topCutRounds.length > 1 ? 's' : ''}</div>`);
 
+    // Bandai API fields from local cache (read synchronously — already fetched by My Stats)
+    if (m.bandaiEventId && _mlCurrentBandaiId) {
+        try {
+            const cache     = loadCache(_mlCurrentBandaiId);
+            const evUser    = cache[String(m.bandaiEventId)]?.user;
+            if (evUser) {
+                // Opponent Win Rate — try every known field name; value is typically 0–1 (decimal)
+                const owr = evUser.opponent_match_win_rate
+                    ?? evUser.opponent_win_rate
+                    ?? evUser.resistance
+                    ?? evUser.owp ?? null;
+                if (owr != null) {
+                    const owrPct = owr > 1 ? Math.round(owr) : Math.round(owr * 100);
+                    cells.push(stat('Resistência (OWR)', `${owrPct}%`, owrPct));
+                }
+                // Game Win Rate
+                const gwr = evUser.game_win_rate ?? evUser.gwp ?? evUser.game_win_percentage ?? null;
+                if (gwr != null) {
+                    const gwrPct = gwr > 1 ? Math.round(gwr) : Math.round(gwr * 100);
+                    cells.push(stat('GWR', `${gwrPct}%`, gwrPct));
+                }
+                // Current standing (rank during live event)
+                const liveRank = evUser.rank ?? null;
+                if (liveRank != null && m.finalRank == null) {
+                    cells.push(`<div style="line-height:1.5;">📍 Colocação atual <strong>#${liveRank}</strong></div>`);
+                }
+                // Drop status
+                if (evUser.drop_flg === 1 || evUser.is_drop === true) {
+                    cells.push(`<div style="line-height:1.5;color:var(--loss,#dc3545);">⚠️ <strong>Drop</strong></div>`);
+                }
+            }
+        } catch { /* cache unavailable */ }
+    }
+
+    // Persisted sync values (from the Sync button — stored in worker)
+    if (m.opponentWinRate != null) {
+        const owrPct = m.opponentWinRate > 1 ? Math.round(m.opponentWinRate) : Math.round(m.opponentWinRate * 100);
+        if (!cells.some(c => c.includes('Resistência')))
+            cells.push(stat('Resistência (OWR)', `${owrPct}%`, owrPct));
+    }
+    if (m.gameWinRate != null) {
+        const gwrPct = m.gameWinRate > 1 ? Math.round(m.gameWinRate) : Math.round(m.gameWinRate * 100);
+        if (!cells.some(c => c.includes('GWR')))
+            cells.push(stat('GWR', `${gwrPct}%`, gwrPct));
+    }
+
     if (!cells.length) return '';
 
     const thumbsHtml = uniqueLeaders.length
@@ -183,8 +236,12 @@ function _mlStandingsHtml(m) {
         const rank   = m.finalRank   != null ? `<span>&#127885; #${m.finalRank}</span>` : '';
         const pts    = m.finalPoints != null ? `<span>&#9889; ${m.finalPoints}pts</span>` : '';
         const status = m.finalStatus ? `<span style="font-style:italic;">${_esc(m.finalStatus)}</span>` : '';
+        const owr    = m.opponentWinRate != null
+            ? `<span title="Opponent Win Rate">OWR ${m.opponentWinRate > 1 ? Math.round(m.opponentWinRate) : Math.round(m.opponentWinRate * 100)}%</span>` : '';
+        const gwr    = m.gameWinRate != null
+            ? `<span title="Game Win Rate">GWR ${m.gameWinRate > 1 ? Math.round(m.gameWinRate) : Math.round(m.gameWinRate * 100)}%</span>` : '';
         return `<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin-top:.6rem;padding:.4rem .55rem;background:rgba(4,138,129,.07);border-radius:7px;font-size:.82rem;">
-            ${rank}${pts}${status}
+            ${rank}${pts}${status}${owr}${gwr}
             <span style="flex:1;"></span>
             ${syncBtn}
         </div>`;
@@ -205,19 +262,26 @@ async function mlSyncStandings(matchId) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const info   = data?.success;
-        const finalRank    = info?.user?.rank   ?? null;
-        const finalPoints  = info?.user?.match_point ?? null;
-        const finalStatus  = info?.event?.status_name ?? null;
+        const finalRank   = info?.user?.rank        ?? null;
+        const finalPoints = info?.user?.match_point  ?? null;
+        const finalStatus = info?.event?.status_name ?? null;
+        const opponentWinRate = info?.user?.opponent_match_win_rate
+            ?? info?.user?.opponent_win_rate
+            ?? info?.user?.resistance
+            ?? info?.user?.owp ?? null;
+        const gameWinRate = info?.user?.game_win_rate
+            ?? info?.user?.gwp
+            ?? info?.user?.game_win_percentage ?? null;
 
         const r2 = await fetch(`${AUTH_BASE}/my-matches/${matchId}`, {
             method: 'PUT', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ finalRank, finalPoints, finalStatus }),
+            body: JSON.stringify({ finalRank, finalPoints, finalStatus, opponentWinRate, gameWinRate }),
         });
         if (!r2.ok) throw new Error(await r2.text());
 
         const idx = _mlMatches.findIndex(x => x.id === matchId);
-        if (idx !== -1) { _mlMatches[idx].finalRank = finalRank; _mlMatches[idx].finalPoints = finalPoints; _mlMatches[idx].finalStatus = finalStatus; }
+        if (idx !== -1) Object.assign(_mlMatches[idx], { finalRank, finalPoints, finalStatus, opponentWinRate, gameWinRate });
         _renderMatchList();
     } catch (e) {
         _mlSetSyncLoading(matchId, false);

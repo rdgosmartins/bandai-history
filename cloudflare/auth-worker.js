@@ -618,11 +618,13 @@ async function handleMatchesPost(request, env, cors) {
         date:         String(date).slice(0, 10),
         set:          set   ? String(set).slice(0, 10)  : null,
         type:         type  ? String(type).slice(0, 30) : null,
-        bandaiEventId: bandaiEventId ? String(bandaiEventId).slice(0, 32) : null,
-        finalRank:    null,
-        finalPoints:  null,
-        finalStatus:  null,
-        rounds:       [],
+        bandaiEventId:    bandaiEventId ? String(bandaiEventId).slice(0, 32) : null,
+        finalRank:        null,
+        finalPoints:      null,
+        finalStatus:      null,
+        opponentWinRate:  null,
+        gameWinRate:      null,
+        rounds:           [],
         createdAt:    new Date().toISOString(),
     };
     const matches = await getMatches(env, user.id);
@@ -648,7 +650,9 @@ async function handleMatchPut(request, env, cors, matchId) {
     if (body.bandaiEventId !== undefined) m.bandaiEventId = body.bandaiEventId ? String(body.bandaiEventId).slice(0, 32) : null;
     if (body.finalRank     !== undefined) m.finalRank     = body.finalRank != null ? Number(body.finalRank) : null;
     if (body.finalPoints   !== undefined) m.finalPoints   = body.finalPoints != null ? Number(body.finalPoints) : null;
-    if (body.finalStatus   !== undefined) m.finalStatus   = body.finalStatus ? String(body.finalStatus).slice(0, 40) : null;
+    if (body.finalStatus      !== undefined) m.finalStatus      = body.finalStatus ? String(body.finalStatus).slice(0, 40) : null;
+    if (body.opponentWinRate  !== undefined) m.opponentWinRate  = body.opponentWinRate  != null ? Number(body.opponentWinRate)  : null;
+    if (body.gameWinRate      !== undefined) m.gameWinRate      = body.gameWinRate      != null ? Number(body.gameWinRate)      : null;
     matches[idx] = m;
     await putMatches(env, user.id, matches);
     return json(m, 200, cors);
