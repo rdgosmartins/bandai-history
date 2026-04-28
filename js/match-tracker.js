@@ -175,6 +175,9 @@ function _mlRoundRowHtml(r, num) {
     const oppImg = r.opponentLeaderId
         ? `<img src="${_leaderImgUrl(r.opponentLeaderId)}" style="width:28px;height:28px;object-fit:cover;border-radius:3px;vertical-align:middle;" onerror="this.style.display='none'">`
         : `<span style="color:var(--muted);font-size:.8rem;">—</span>`;
+    const oppNameHtml = r.opponentName
+        ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.15rem;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${_esc(r.opponentName)}">${_esc(r.opponentName)}</div>`
+        : '';
     const diceHtml = r.wonDice === true
         ? `<span title="Won dice" style="font-size:1rem;">🎲</span>`
         : (r.wonDice === false ? `<span title="Lost dice" style="font-size:1rem;opacity:.35;">🎲</span>` : '—');
@@ -188,7 +191,7 @@ function _mlRoundRowHtml(r, num) {
 
     return `<tr style="background:${rowBg};">
         <td style="padding:.3rem .4rem;"><strong style="color:${r.won === true ? 'var(--win,#28a745)' : (r.won === false ? 'var(--loss,#dc3545)' : 'var(--muted)')};">${num}</strong>${topCutBadge}</td>
-        <td style="padding:.3rem .4rem;">${oppImg}</td>
+        <td style="padding:.3rem .4rem;">${oppImg}${oppNameHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${diceHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${orderHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${resultHtml}</td>
@@ -397,6 +400,13 @@ function _mlRoundDetailModalHtml() {
                 <label style="display:block;font-weight:700;margin-bottom:.45rem;">Opponent Leader</label>
                 ${_mlLeaderSelectHtml('mlRoundOppLeaderId')}
             </div>
+            <div style="margin-bottom:1rem;">
+                <label style="display:block;font-weight:700;margin-bottom:.45rem;">Opponent Name <span style="font-weight:400;color:var(--muted);font-size:.8rem;">(optional)</span></label>
+                <div style="position:relative;">
+                    <input id="mlRoundOppName" type="text" style="width:100%;box-sizing:border-box;padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);" placeholder="e.g. João Silva">
+                    <span id="mlOppNameHint" style="display:none;position:absolute;right:.6rem;top:50%;transform:translateY(-50%);font-size:.68rem;color:var(--accent,#048A81);pointer-events:none;">&#128279; Bandai</span>
+                </div>
+            </div>
             <div style="margin-bottom:.75rem;">
                 <button id="mlDiceBtn" onclick="mlToggle('dice')" class="ml-toggle-btn ml-toggle-lost" style="width:100%;">🎲 &nbsp;Lost Dice</button>
             </div>
@@ -441,7 +451,7 @@ function mlToggle(which) {
     }
 }
 
-function openRoundDetailModal() {
+async function openRoundDetailModal() {
     if (!_mlRoundCtx) return;
     const { matchId, type } = _mlRoundCtx;
     const m = _mlMatches.find(x => x.id === matchId);
@@ -456,6 +466,35 @@ function openRoundDetailModal() {
     orderBtn.dataset.first  = '0'; orderBtn.className  = 'ml-toggle-btn ml-toggle-second'; orderBtn.innerHTML  = '2 &nbsp;Went Second';
     resultBtn.dataset.won   = '0'; resultBtn.className = 'ml-toggle-btn ml-toggle-lost';   resultBtn.innerHTML = '✕ &nbsp;Lost Match';
     document.getElementById('mlRoundOppLeaderId').value = '';
+    document.getElementById('mlRoundOppName').value = '';
+    document.getElementById('mlOppNameHint').style.display = 'none';
+
+    // Auto-suggest opponent name + result from Bandai cache
+    if (m?.bandaiEventId) {
+        try {
+            const user = await _authUserPromise;
+            const me   = (App.usersWithToken || []).find(u => u.name.toLowerCase() === (user?.bandaiName || '').toLowerCase());
+            if (me?.bandaiId) {
+                const cache      = loadCache(me.bandaiId);
+                const eventData  = cache[String(m.bandaiEventId)];
+                const bandaiRound = eventData?.rounds?.[roundNum - 1];
+                if (bandaiRound) {
+                    const oppName = bandaiRound.opponent_users?.[0]?.player_name?.trim();
+                    if (oppName) {
+                        document.getElementById('mlRoundOppName').value = oppName;
+                        document.getElementById('mlOppNameHint').style.display = '';
+                    }
+                    if (bandaiRound.is_win != null) {
+                        const won = !!bandaiRound.is_win;
+                        resultBtn.dataset.won = won ? '1' : '0';
+                        resultBtn.className   = 'ml-toggle-btn ' + (won ? 'ml-toggle-won' : 'ml-toggle-lost');
+                        resultBtn.innerHTML   = won ? '✔ &nbsp;Won Match' : '✕ &nbsp;Lost Match';
+                    }
+                }
+            }
+        } catch { /* silently skip if cache unavailable */ }
+    }
+
     document.getElementById('mlRoundDetailModal').style.display = '';
 }
 
@@ -469,10 +508,11 @@ async function submitAddRound() {
     const m = _mlMatches.find(x => x.id === matchId);
     if (!m) return;
     const opponentLeaderId = document.getElementById('mlRoundOppLeaderId').value || null;
+    const opponentName     = document.getElementById('mlRoundOppName').value.trim() || null;
     const wonDice   = document.getElementById('mlDiceBtn').dataset.won   === '1';
     const wentFirst = document.getElementById('mlOrderBtn').dataset.first === '1';
     const won       = document.getElementById('mlResultBtn').dataset.won  === '1';
-    const round = { type, opponentLeaderId, wonDice, wentFirst, won };
+    const round = { type, opponentLeaderId, opponentName, wonDice, wentFirst, won };
     const rounds = [...m.rounds, round];
     closeRoundDetailModal();
     await _mlSaveRounds(matchId, rounds);
