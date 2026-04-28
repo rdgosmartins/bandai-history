@@ -141,9 +141,8 @@ function _mlCreateModalHtml() {
                     <input id="mlTournamentName" type="text" style="width:100%;box-sizing:border-box;padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);" placeholder="e.g. Treasure Cup April">
                 </div>
                 <div style="margin-bottom:1.1rem;">
-                    <label style="display:block;font-weight:700;margin-bottom:.2rem;">Deck</label>
-                    <p style="margin:0 0 .4rem;font-size:.78rem;color:var(--muted);">e.g. Donquixote Doflamingo (OP04)</p>
-                    ${_mlLeaderPickerHtml('mlCreateLeader')}
+                    <label style="display:block;font-weight:700;margin-bottom:.45rem;">Deck</label>
+                    ${_mlLeaderSelectHtml('mlCreateLeaderId')}
                 </div>
                 <div style="margin-bottom:1.1rem;">
                     <label style="display:block;font-weight:700;margin-bottom:.45rem;">Date</label>
@@ -175,7 +174,7 @@ function openCreateMatchModal() {
     document.getElementById('mlTournamentDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('mlTournamentSet').value  = '';
     document.getElementById('mlTournamentType').value = '';
-    _mlResetLeaderPicker('mlCreateLeader');
+    document.getElementById('mlCreateLeaderId').value = '';
 }
 
 function closeCreateMatchModal() {
@@ -187,7 +186,7 @@ async function submitCreateMatch() {
     const date     = document.getElementById('mlTournamentDate').value;
     const set      = document.getElementById('mlTournamentSet').value  || null;
     const type     = document.getElementById('mlTournamentType').value || null;
-    const leaderId = document.getElementById('mlCreateLeader_hidden')?.value || null;
+    const leaderId = document.getElementById('mlCreateLeaderId').value || null;
     if (!name || !date) { alert('Tournament Name and Date are required.'); return; }
     try {
         const r = await fetch(`${AUTH_BASE}/my-matches`, {
@@ -266,9 +265,8 @@ function _mlRoundDetailModalHtml() {
             <button onclick="closeRoundDetailModal()" style="position:absolute;top:.75rem;right:.9rem;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--muted);">✕</button>
             <h3 id="mlRoundDetailTitle" style="margin:0 0 1.25rem;font-size:1.05rem;">Round 1 – Swiss</h3>
             <div style="margin-bottom:1rem;">
-                <label style="display:block;font-weight:700;margin-bottom:.2rem;">Opponent Leader</label>
-                <p style="margin:0 0 .4rem;font-size:.78rem;color:var(--muted);">e.g. Donquixote Doflamingo (OP04)</p>
-                ${_mlLeaderPickerHtml('mlRoundOppLeader')}
+                <label style="display:block;font-weight:700;margin-bottom:.45rem;">Opponent Leader</label>
+                ${_mlLeaderSelectHtml('mlRoundOppLeaderId')}
             </div>
             <div style="margin-bottom:.75rem;">
                 <button id="mlDiceBtn" onclick="mlToggle('dice')" class="ml-toggle-btn ml-toggle-lost" style="width:100%;">🎲 &nbsp;Lost Dice</button>
@@ -328,7 +326,7 @@ function openRoundDetailModal() {
     diceBtn.dataset.won     = '0'; diceBtn.className   = 'ml-toggle-btn ml-toggle-lost';   diceBtn.innerHTML   = '🎲 &nbsp;Lost Dice';
     orderBtn.dataset.first  = '0'; orderBtn.className  = 'ml-toggle-btn ml-toggle-second'; orderBtn.innerHTML  = '2 &nbsp;Went Second';
     resultBtn.dataset.won   = '0'; resultBtn.className = 'ml-toggle-btn ml-toggle-lost';   resultBtn.innerHTML = '✕ &nbsp;Lost Match';
-    _mlResetLeaderPicker('mlRoundOppLeader');
+    document.getElementById('mlRoundOppLeaderId').value = '';
     document.getElementById('mlRoundDetailModal').style.display = '';
 }
 
@@ -341,7 +339,7 @@ async function submitAddRound() {
     const { matchId, type } = _mlRoundCtx;
     const m = _mlMatches.find(x => x.id === matchId);
     if (!m) return;
-    const opponentLeaderId = document.getElementById('mlRoundOppLeader_hidden')?.value || null;
+    const opponentLeaderId = document.getElementById('mlRoundOppLeaderId').value || null;
     const wonDice   = document.getElementById('mlDiceBtn').dataset.won   === '1';
     const wentFirst = document.getElementById('mlOrderBtn').dataset.first === '1';
     const won       = document.getElementById('mlResultBtn').dataset.won  === '1';
@@ -378,60 +376,15 @@ async function deleteMatch(matchId) {
     } catch (e) { alert('Erro: ' + e.message); }
 }
 
-// ── Leader Picker (search-as-you-type over TRN_LEADERS) ───────────────────────
+// ── Leader Select (reuses TRN_LEADERS from tournaments.js) ────────────────────
 
-function _mlLeaderPickerHtml(prefix) {
-    return `
-    <div style="position:relative;" id="${prefix}_container">
-        <input id="${prefix}_input" type="text" autocomplete="off"
-            style="width:100%;box-sizing:border-box;padding:.55rem 2rem .55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);"
-            placeholder="Search leader…"
-            oninput="_mlLeaderSearch('${prefix}')"
-            onfocus="_mlLeaderSearch('${prefix}')"
-            onblur="setTimeout(()=>_mlLeaderHide('${prefix}'),180)">
-        <span style="position:absolute;right:.65rem;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--muted);">▼</span>
-        <input type="hidden" id="${prefix}_hidden">
-        <div id="${prefix}_dropdown" style="display:none;position:absolute;z-index:100;left:0;right:0;top:calc(100% + 2px);max-height:220px;overflow-y:auto;background:var(--card,#fff);border:1.5px solid var(--border,#dee2e6);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.12);">
-        </div>
-    </div>`;
-}
-
-function _mlLeaderSearch(prefix) {
-    const q = (document.getElementById(prefix + '_input')?.value || '').toLowerCase();
-    const dd = document.getElementById(prefix + '_dropdown');
-    if (!dd) return;
-    const filtered = TRN_LEADERS.filter(l =>
-        l.name.toLowerCase().includes(q) || l.id.toLowerCase().includes(q)
-    ).slice(0, 40);
-    if (filtered.length === 0) { dd.style.display = 'none'; return; }
-    dd.innerHTML = filtered.map(l => `
-        <div onclick="_mlLeaderSelect('${prefix}','${l.id}','${_esc(l.name)}')"
-            style="display:flex;align-items:center;gap:.5rem;padding:.42rem .7rem;cursor:pointer;font-size:.87rem;"
-            onmouseover="this.style.background='var(--bg,#f8f9fa)'"
-            onmouseout="this.style.background=''">
-            <img src="${_leaderImgUrl(l.id)}" style="width:28px;height:28px;object-fit:cover;border-radius:3px;flex-shrink:0;" onerror="this.style.display='none'">
-            <span>${_esc(l.name)} <span style="color:var(--muted);font-size:.78rem;">(${l.id.split('-')[0]})</span></span>
-        </div>`).join('');
-    dd.style.display = '';
-}
-
-function _mlLeaderSelect(prefix, id, name) {
-    document.getElementById(prefix + '_input').value  = name;
-    document.getElementById(prefix + '_hidden').value = id;
-    document.getElementById(prefix + '_dropdown').style.display = 'none';
-}
-
-function _mlLeaderHide(prefix) {
-    const dd = document.getElementById(prefix + '_dropdown');
-    if (dd) dd.style.display = 'none';
-}
-
-function _mlResetLeaderPicker(prefix) {
-    const inp = document.getElementById(prefix + '_input');
-    const hid = document.getElementById(prefix + '_hidden');
-    if (inp) inp.value = '';
-    if (hid) hid.value = '';
-    _mlLeaderHide(prefix);
+function _mlLeaderSelectHtml(id) {
+    const opts = TRN_LEADERS.map(l =>
+        `<option value="${l.id}">${l.id} · ${l.name}</option>`
+    ).join('');
+    return `<select id="${id}" style="width:100%;padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);">
+        <option value="">— líder —</option>${opts}
+    </select>`;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
