@@ -15,7 +15,7 @@ async function loadMatchLog() {
     if (!el) return;
     el.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-            <h2 style="margin:0;font-size:1.15rem;">&#128211; Match Log</h2>
+            <h2 style="margin:0;font-size:1.15rem;">&#129527; Log Pose</h2>
             <button class="btn btn-primary btn-sm" onclick="openCreateMatchModal()">+ Add Tournament</button>
         </div>
         <div id="mlList"><p style="color:var(--muted);text-align:center;padding:3rem 0;">Carregando…</p></div>
