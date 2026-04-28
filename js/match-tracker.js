@@ -5,8 +5,9 @@ const ML_SETS = ['OP15','OP14','EB04','OP13','EB03','OP12','EB02','OP11','EB01',
                  'OP10','OP09','OP08','OP07','OP06','OP05','OP04','OP03','OP02','OP01'];
 const ML_TYPES = ['Testing','Local','Store CS','Treasure Cup','Flagship','Regional','National','World'];
 
-let _mlMatches   = [];   // cached list
-let _mlRoundCtx  = null; // { matchId, type } while the round detail modal is open
+let _mlMatches              = [];   // cached list
+let _mlRoundCtx             = null; // { matchId, type } while the round detail modal is open
+let _mlPendingBandaiEventId = null; // bandaiEventId selected via suggestion chip
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
@@ -90,9 +91,77 @@ function _mlCardHtml(m) {
                     ${roundsHtml}
                 </div>
             </div>
+            ${m.bandaiEventId ? _mlStandingsHtml(m) : ''}
             <button class="btn btn-outline btn-sm" style="margin-top:.75rem;width:100%;" onclick="openAddRoundModal('${m.id}')">+ Add round</button>
         </div>
     </div>`;
+}
+
+function _mlStandingsHtml(m) {
+    const syncBtn = `<button data-sync-match="${m.id}" onclick="mlSyncStandings('${m.id}')"
+        style="font-size:.78rem;padding:.22rem .55rem;border:1px solid var(--accent,#048A81);border-radius:6px;background:none;color:var(--accent,#048A81);cursor:pointer;white-space:nowrap;">&#8635; Sync</button>`;
+    const hasFinal = m.finalRank != null || m.finalPoints != null || m.finalStatus;
+    if (hasFinal) {
+        const rank   = m.finalRank   != null ? `<span>&#127885; #${m.finalRank}</span>` : '';
+        const pts    = m.finalPoints != null ? `<span>&#9889; ${m.finalPoints}pts</span>` : '';
+        const status = m.finalStatus ? `<span style="font-style:italic;">${_esc(m.finalStatus)}</span>` : '';
+        return `<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin-top:.6rem;padding:.4rem .55rem;background:rgba(4,138,129,.07);border-radius:7px;font-size:.82rem;">
+            ${rank}${pts}${status}
+            <span style="flex:1;"></span>
+            ${syncBtn}
+        </div>`;
+    }
+    return `<div style="margin-top:.6rem;text-align:right;">${syncBtn}</div>`;
+}
+
+async function mlSyncStandings(matchId) {
+    const m = _mlMatches.find(x => x.id === matchId);
+    if (!m?.bandaiEventId) return;
+    const user = await _authUserPromise;
+    const me   = (App.usersWithToken || []).find(u => u.name.toLowerCase() === (user?.bandaiName || '').toLowerCase());
+    if (!me?.token) { _mlShowSyncError(matchId, 'Token não disponível'); return; }
+    _mlSetSyncLoading(matchId, true);
+    try {
+        const res = await fetch(`${BANDAI_API_BASE}/api/user/event/${m.bandaiEventId}/history`,
+            { headers: { 'X-Authentication': me.token } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const info   = data?.success;
+        const finalRank    = info?.user?.rank   ?? null;
+        const finalPoints  = info?.user?.match_point ?? null;
+        const finalStatus  = info?.event?.status_name ?? null;
+
+        const r2 = await fetch(`${AUTH_BASE}/my-matches/${matchId}`, {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ finalRank, finalPoints, finalStatus }),
+        });
+        if (!r2.ok) throw new Error(await r2.text());
+
+        const idx = _mlMatches.findIndex(x => x.id === matchId);
+        if (idx !== -1) { _mlMatches[idx].finalRank = finalRank; _mlMatches[idx].finalPoints = finalPoints; _mlMatches[idx].finalStatus = finalStatus; }
+        _renderMatchList();
+    } catch (e) {
+        _mlSetSyncLoading(matchId, false);
+        _mlShowSyncError(matchId, e.message);
+    }
+}
+
+function _mlSetSyncLoading(matchId, loading) {
+    const btn = document.querySelector(`[data-sync-match="${matchId}"]`);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.textContent = loading ? '…' : '↻ Sync';
+}
+
+function _mlShowSyncError(matchId, msg) {
+    const btn = document.querySelector(`[data-sync-match="${matchId}"]`);
+    if (!btn) return;
+    btn.disabled = false;
+    btn.style.color = 'var(--loss,#dc3545)';
+    btn.style.borderColor = 'var(--loss,#dc3545)';
+    btn.title = msg;
+    btn.textContent = '✕ Erro';
 }
 
 function _mlRoundRowHtml(r, num) {
@@ -139,6 +208,7 @@ function _mlCreateModalHtml() {
                 <div style="margin-bottom:1.1rem;">
                     <label style="display:block;font-weight:700;margin-bottom:.45rem;">Tournament Name</label>
                     <input id="mlTournamentName" type="text" style="width:100%;box-sizing:border-box;padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);" placeholder="e.g. Treasure Cup April">
+                    <div id="mlUnlinkChip" style="display:none;margin-top:.4rem;"></div>
                 </div>
                 <div style="margin-bottom:1.1rem;">
                     <label style="display:block;font-weight:700;margin-bottom:.45rem;">Deck</label>
@@ -146,7 +216,8 @@ function _mlCreateModalHtml() {
                 </div>
                 <div style="margin-bottom:1.1rem;">
                     <label style="display:block;font-weight:700;margin-bottom:.45rem;">Date</label>
-                    <input id="mlTournamentDate" type="date" style="padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);">
+                    <input id="mlTournamentDate" type="date" style="padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.9rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);" oninput="_mlOnDateChange(this.value)">
+                    <div id="mlEventSuggestions" style="display:none;margin-top:.6rem;"></div>
                 </div>
                 <div style="margin-bottom:1.1rem;">
                     <label style="display:block;font-weight:700;margin-bottom:.45rem;">Set <span style="font-weight:400;color:var(--muted);">(optional)</span></label>
@@ -169,16 +240,73 @@ function _mlCreateModalHtml() {
 }
 
 function openCreateMatchModal() {
+    _mlPendingBandaiEventId = null;
     document.getElementById('mlCreateModal').style.display = '';
     document.getElementById('mlTournamentName').value = '';
     document.getElementById('mlTournamentDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('mlTournamentSet').value  = '';
     document.getElementById('mlTournamentType').value = '';
     document.getElementById('mlCreateLeaderId').value = '';
+    const sugg = document.getElementById('mlEventSuggestions');
+    sugg.style.display = 'none'; sugg.innerHTML = '';
+    const chip = document.getElementById('mlUnlinkChip');
+    chip.style.display = 'none'; chip.innerHTML = '';
 }
 
 function closeCreateMatchModal() {
     document.getElementById('mlCreateModal').style.display = 'none';
+}
+
+async function _mlOnDateChange(dateVal) {
+    const sugg = document.getElementById('mlEventSuggestions');
+    const chip = document.getElementById('mlUnlinkChip');
+    if (!sugg) return;
+    sugg.style.display = 'none';
+    sugg.innerHTML = '';
+
+    const user = await _authUserPromise;
+    if (document.getElementById('mlTournamentDate')?.value !== dateVal) return; // race guard
+
+    if (!user?.bandaiName) return;
+    const me = (App.usersWithToken || []).find(u => u.name.toLowerCase() === user.bandaiName.toLowerCase());
+    if (!me?.bandaiId) {
+        sugg.innerHTML = `<p style="font-size:.8rem;color:var(--muted);margin:.2rem 0;">Cache não encontrado. <a href="#" onclick="switchTab('my-stats');closeCreateMatchModal();return false;" style="color:var(--accent,#048A81);">Vá a My Stats</a> para carregar seus eventos.</p>`;
+        sugg.style.display = '';
+        return;
+    }
+    const cache = loadCache(me.bandaiId);
+    const matches = Object.values(cache).filter(e => (e._start_datetime || '').slice(0, 10) === dateVal);
+    if (!matches.length) return;
+
+    sugg.innerHTML = `<p style="font-size:.78rem;font-weight:600;color:var(--muted);margin:0 0 .4rem;">Eventos nessa data:</p>` +
+        matches.map(e => {
+            const label = _esc(e._event_name || e._store_name || e.id || 'Evento desconhecido');
+            return `<button type="button" onclick="_mlSelectSuggestion(${JSON.stringify(String(e.id || ''))}, ${JSON.stringify(label)})"
+                style="display:block;width:100%;text-align:left;margin-bottom:.3rem;padding:.4rem .65rem;border:1.5px solid var(--accent,#048A81);border-radius:7px;background:rgba(4,138,129,.07);color:var(--text,#1a1a2e);font-size:.83rem;cursor:pointer;">${label}</button>`;
+        }).join('');
+    sugg.style.display = '';
+}
+
+function _mlSelectSuggestion(eventId, eventName) {
+    _mlPendingBandaiEventId = eventId;
+    const nameEl = document.getElementById('mlTournamentName');
+    if (nameEl && !nameEl.value.trim()) nameEl.value = eventName;
+    const sugg = document.getElementById('mlEventSuggestions');
+    sugg.style.display = 'none';
+    sugg.innerHTML = '';
+    const chip = document.getElementById('mlUnlinkChip');
+    chip.innerHTML = `<span style="display:inline-flex;align-items:center;gap:.4rem;padding:.28rem .6rem;background:rgba(4,138,129,.12);border:1px solid var(--accent,#048A81);border-radius:20px;font-size:.78rem;color:var(--accent,#048A81);">
+        &#128279; Vinculado: <strong>${_esc(eventName)}</strong>
+        <button type="button" onclick="_mlUnlinkEvent()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.95rem;line-height:1;padding:0 0 0 .15rem;">&#x2715;</button>
+    </span>`;
+    chip.style.display = '';
+}
+
+function _mlUnlinkEvent() {
+    _mlPendingBandaiEventId = null;
+    const chip = document.getElementById('mlUnlinkChip');
+    chip.style.display = 'none';
+    chip.innerHTML = '';
 }
 
 async function submitCreateMatch() {
@@ -192,11 +320,12 @@ async function submitCreateMatch() {
         const r = await fetch(`${AUTH_BASE}/my-matches`, {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, leaderId, date, set, type }),
+            body: JSON.stringify({ name, leaderId, date, set, type, bandaiEventId: _mlPendingBandaiEventId || null }),
         });
         if (!r.ok) throw new Error(await r.text());
         const m = await r.json();
         _mlMatches.unshift(m);
+        _mlPendingBandaiEventId = null;
         closeCreateMatchModal();
         _renderMatchList();
     } catch (e) { alert('Erro: ' + e.message); }

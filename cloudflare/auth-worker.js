@@ -609,17 +609,21 @@ async function handleMatchesPost(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
     const body = await request.json();
-    const { name, leaderId, date, set, type } = body;
+    const { name, leaderId, date, set, type, bandaiEventId } = body;
     if (!name || !date) return json({ error: 'name and date are required' }, 400, cors);
     const match = {
-        id:        newMatchId(),
-        name:      String(name).slice(0, 80),
-        leaderId:  leaderId || null,
-        date:      String(date).slice(0, 10),
-        set:       set   ? String(set).slice(0, 10)  : null,
-        type:      type  ? String(type).slice(0, 30) : null,
-        rounds:    [],
-        createdAt: new Date().toISOString(),
+        id:           newMatchId(),
+        name:         String(name).slice(0, 80),
+        leaderId:     leaderId || null,
+        date:         String(date).slice(0, 10),
+        set:          set   ? String(set).slice(0, 10)  : null,
+        type:         type  ? String(type).slice(0, 30) : null,
+        bandaiEventId: bandaiEventId ? String(bandaiEventId).slice(0, 32) : null,
+        finalRank:    null,
+        finalPoints:  null,
+        finalStatus:  null,
+        rounds:       [],
+        createdAt:    new Date().toISOString(),
     };
     const matches = await getMatches(env, user.id);
     matches.unshift(match);
@@ -640,7 +644,11 @@ async function handleMatchPut(request, env, cors, matchId) {
     if (body.date     !== undefined) m.date     = String(body.date).slice(0, 10);
     if (body.set      !== undefined) m.set      = body.set ? String(body.set).slice(0, 10) : null;
     if (body.type     !== undefined) m.type     = body.type ? String(body.type).slice(0, 30) : null;
-    if (body.rounds   !== undefined) m.rounds   = Array.isArray(body.rounds) ? body.rounds : m.rounds;
+    if (body.rounds        !== undefined) m.rounds        = Array.isArray(body.rounds) ? body.rounds : m.rounds;
+    if (body.bandaiEventId !== undefined) m.bandaiEventId = body.bandaiEventId ? String(body.bandaiEventId).slice(0, 32) : null;
+    if (body.finalRank     !== undefined) m.finalRank     = body.finalRank != null ? Number(body.finalRank) : null;
+    if (body.finalPoints   !== undefined) m.finalPoints   = body.finalPoints != null ? Number(body.finalPoints) : null;
+    if (body.finalStatus   !== undefined) m.finalStatus   = body.finalStatus ? String(body.finalStatus).slice(0, 40) : null;
     matches[idx] = m;
     await putMatches(env, user.id, matches);
     return json(m, 200, cors);
