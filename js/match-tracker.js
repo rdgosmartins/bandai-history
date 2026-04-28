@@ -91,9 +91,87 @@ function _mlCardHtml(m) {
                     ${roundsHtml}
                 </div>
             </div>
+            ${_mlTournamentStatsHtml(m)}
             ${m.bandaiEventId ? _mlStandingsHtml(m) : ''}
             <button class="btn btn-outline btn-sm" style="margin-top:.75rem;width:100%;" onclick="openAddRoundModal('${m.id}')">+ Add round</button>
         </div>
+    </div>`;
+}
+
+function _mlTournamentStatsHtml(m) {
+    const rounds = (m.rounds || []).filter(r => r.type !== 'bye' && r.won != null);
+    if (rounds.length < 2) return '';
+
+    // Dice
+    const withDice   = rounds.filter(r => r.wonDice != null);
+    const diceWon    = withDice.filter(r => r.wonDice).length;
+    const dicePct    = withDice.length ? Math.round(diceWon / withDice.length * 100) : null;
+
+    // Order
+    const goFirst    = rounds.filter(r => r.wentFirst === true);
+    const goSecond   = rounds.filter(r => r.wentFirst === false);
+    const firstWin   = goFirst.filter(r => r.won).length;
+    const secondWin  = goSecond.filter(r => r.won).length;
+    const firstPct   = goFirst.length  ? Math.round(firstWin  / goFirst.length  * 100) : null;
+    const secondPct  = goSecond.length ? Math.round(secondWin / goSecond.length * 100) : null;
+
+    // Dice vs result correlation
+    const wonDiceRounds  = withDice.filter(r => r.wonDice === true);
+    const lostDiceRounds = withDice.filter(r => r.wonDice === false);
+    const winWhenDice    = wonDiceRounds.filter(r => r.won).length;
+    const winWhenNoDice  = lostDiceRounds.filter(r => r.won).length;
+    const wdPct          = wonDiceRounds.length  >= 2 ? Math.round(winWhenDice   / wonDiceRounds.length  * 100) : null;
+    const wndPct         = lostDiceRounds.length >= 2 ? Math.round(winWhenNoDice / lostDiceRounds.length * 100) : null;
+
+    // Unique opponent decks
+    const uniqueLeaders = [...new Set(rounds.map(r => r.opponentLeaderId).filter(Boolean))];
+    const namedOpps     = [...new Set(rounds.map(r => r.opponentName).filter(Boolean))];
+    const uniqueDeckCount = uniqueLeaders.length || namedOpps.length;
+
+    // Top cut rounds
+    const topCutRounds = rounds.filter(r => r.type === 'topcut');
+
+    function pctColor(p) {
+        if (p == null) return 'var(--muted)';
+        return p >= 60 ? 'var(--win,#28a745)' : (p <= 40 ? 'var(--loss,#dc3545)' : 'var(--text,#555)');
+    }
+    function stat(label, val, pct) {
+        const c = pctColor(pct);
+        return `<div style="line-height:1.5;">${label} <strong style="color:${c};">${val}</strong>${pct != null ? ` <span style="font-size:.7rem;color:${c};">(${pct}%)</span>` : ''}</div>`;
+    }
+
+    const cells = [];
+    if (withDice.length >= 1)
+        cells.push(stat('🎲 Dado', `${diceWon}/${withDice.length}`, dicePct));
+    if (uniqueDeckCount)
+        cells.push(`<div style="line-height:1.5;">🃏 Decks <strong>${uniqueDeckCount}</strong> distintos</div>`);
+    if (goFirst.length)
+        cells.push(stat('1º jogador', `${firstWin}V ${goFirst.length - firstWin}D`, firstPct));
+    if (goSecond.length)
+        cells.push(stat('2º jogador', `${secondWin}V ${goSecond.length - secondWin}D`, secondPct));
+    if (wdPct  != null)
+        cells.push(stat('+Dado', `${winWhenDice}/${wonDiceRounds.length}`, wdPct));
+    if (wndPct != null)
+        cells.push(stat('−Dado', `${winWhenNoDice}/${lostDiceRounds.length}`, wndPct));
+    if (topCutRounds.length)
+        cells.push(`<div style="line-height:1.5;">🏆 Top cut <strong>${topCutRounds.length}</strong> round${topCutRounds.length > 1 ? 's' : ''}</div>`);
+
+    if (!cells.length) return '';
+
+    const thumbsHtml = uniqueLeaders.length
+        ? `<div style="margin-top:.45rem;display:flex;gap:.25rem;flex-wrap:wrap;align-items:center;">
+            ${uniqueLeaders.map(id => `<img src="${_leaderImgUrl(id)}" title="${_esc(id)}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;" onerror="this.style.display='none'">`).join('')}
+           </div>`
+        : '';
+
+    const cols = cells.length >= 4 ? '1fr 1fr' : '1fr';
+    return `
+    <div style="margin-top:.65rem;padding:.5rem .7rem;background:var(--bg,#f8f9fa);border-radius:8px;border:1px solid var(--border,#dee2e6);">
+        <div style="font-size:.67rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem;">Estatísticas do torneio</div>
+        <div style="display:grid;grid-template-columns:${cols};gap:.2rem .8rem;font-size:.79rem;">
+            ${cells.join('')}
+        </div>
+        ${thumbsHtml}
     </div>`;
 }
 
