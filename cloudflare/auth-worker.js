@@ -12,7 +12,7 @@ function corsHeaders(env, origin) {
     const o = (origin && origin === allowed) ? allowed : allowed;
     return {
         'Access-Control-Allow-Origin': o,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Credentials': 'true',
     };
@@ -186,7 +186,19 @@ async function authenticate(request, env) {
     if (!payload) return null;
     const sessionOk = await env.AUTH_KV.get(`session:${payload.jti}`);
     if (!sessionOk) return null;
-    return getUser(env, payload.sub);
+    const user = await getUser(env, payload.sub);
+    if (user?.status === 'suspended') return null;
+    return user;
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+
+async function appendAuditLog(env, { actorId, actorName, action, targetId = '', targetName = '', detail = '' }) {
+    const raw = await env.AUTH_KV.get('audit_log');
+    const log = raw ? JSON.parse(raw) : [];
+    log.unshift({ ts: new Date().toISOString(), actorId, actorName, action, targetId, targetName, detail });
+    if (log.length > 500) log.length = 500;
+    await env.AUTH_KV.put('audit_log', JSON.stringify(log));
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -373,6 +385,19 @@ async function handleAdminUsers(request, env, cors) {
     return json({ pending: pending.filter(Boolean).map(sanitize), all: all.filter(Boolean).map(sanitize) }, 200, cors);
 }
 
+async function handleSetRole(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const body = await request.json().catch(() => ({}));
+    const role = body.role === 'admin' ? 'admin' : 'user';
+    const user = await getUser(env, id);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    user.role = role;
+    await putUser(env, user);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'set_role', targetId: user.id, targetName: user.displayName, detail: role });
+    return json({ ok: true, role }, 200, cors);
+}
+
 async function handleApprove(request, env, cors, id) {
     const actor = await authenticate(request, env);
     if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
@@ -385,6 +410,7 @@ async function handleApprove(request, env, cors, id) {
     user.approvedBy = actor.id;
     await putUser(env, user);
     await removeIndex(env, 'pending_index', id);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'approve', targetId: user.id, targetName: user.displayName });
 
     return json({ ok: true }, 200, cors);
 }
@@ -399,6 +425,7 @@ async function handleReject(request, env, cors, id) {
     user.status = 'rejected';
     await putUser(env, user);
     await removeIndex(env, 'pending_index', id);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'reject', targetId: user.id, targetName: user.displayName });
 
     return json({ ok: true }, 200, cors);
 }
@@ -612,8 +639,8 @@ async function handleOptcgProxy(request, env, cors) {
 async function handleBandaiMapGet(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
-    const map = await env.AUTH_KV.get('bandai_map');
-    return json({ map: map || '' }, 200, cors);
+    const map = await env.AUTH_KV.get('bandai_map') || '';
+    return json({ map }, 200, cors);
 }
 
 async function handleBandaiMapPut(request, env, cors) {
@@ -668,6 +695,1027 @@ async function handleCachePut(request, env, cors, bandaiId) {
     return json({ ok: true, keys: Object.keys(merged).length }, 200, cors);
 }
 
+// ── Admin: User Management ────────────────────────────────────────────────────
+
+async function handleSuspend(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const user = await getUser(env, id);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    user.status = 'suspended';
+    await putUser(env, user);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'suspend', targetId: user.id, targetName: user.displayName });
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleUnsuspend(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const user = await getUser(env, id);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    user.status = 'approved';
+    await putUser(env, user);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'unsuspend', targetId: user.id, targetName: user.displayName });
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleAdminEditUser(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const user = await getUser(env, id);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (body.displayName !== undefined) user.displayName = String(body.displayName).slice(0, 64);
+    if (body.email !== undefined) {
+        const newEmail = String(body.email).toLowerCase().trim();
+        if (newEmail !== user.email) {
+            await env.AUTH_KV.delete(`email:${user.email}`);
+            await env.AUTH_KV.put(`email:${newEmail}`, user.id);
+            user.email = newEmail;
+        }
+    }
+    await putUser(env, user);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'edit_user', targetId: user.id, targetName: user.displayName, detail: 'name/email updated' });
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleDeleteUser(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    if (id === actor.id) return json({ error: 'Cannot delete yourself' }, 400, cors);
+    const user = await getUser(env, id);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    await env.AUTH_KV.delete(`user:${id}`);
+    await env.AUTH_KV.delete(`email:${user.email}`);
+    if (user.googleId) await env.AUTH_KV.delete(`google:${user.googleId}`);
+    await removeIndex(env, 'user_index', id);
+    await removeIndex(env, 'pending_index', id);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'delete_user', targetId: id, targetName: user.displayName });
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleAuditLog(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const raw = await env.AUTH_KV.get('audit_log');
+    return json(raw ? JSON.parse(raw) : [], 200, cors);
+}
+
+// ── Admin: Profile edit (any user) ───────────────────────────────────────────
+
+async function handleAdminProfileEdit(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const user = await getUser(env, id);
+    if (!user) return json({ error: 'User not found' }, 404, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    user.profile = user.profile || {};
+    if (body.displayName !== undefined) { user.displayName = String(body.displayName).slice(0, 64); user.profile.displayName = user.displayName; }
+    if (body.bio !== undefined) user.profile.bio = String(body.bio).slice(0, 512);
+    if (body.avatarCustom !== undefined) {
+        if (!body.avatarCustom) delete user.profile.avatarCustom;
+        else if (String(body.avatarCustom).length <= 153600) user.profile.avatarCustom = String(body.avatarCustom);
+    }
+    await putUser(env, user);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'edit_profile', targetId: user.id, targetName: user.displayName });
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Admin: Banner ─────────────────────────────────────────────────────────────
+
+async function handleBannerGet(request, env, cors) {
+    const raw = await env.AUTH_KV.get('global_banner');
+    return json(raw ? JSON.parse(raw) : { message: null }, 200, cors);
+}
+
+async function handleBannerPut(request, env, cors) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (!body.message) {
+        await env.AUTH_KV.delete('global_banner');
+        return json({ ok: true, cleared: true }, 200, cors);
+    }
+    const banner = {
+        message:   String(body.message).slice(0, 300),
+        type:      ['info', 'warning', 'success'].includes(body.type) ? body.type : 'info',
+        createdBy: actor.displayName,
+        createdAt: new Date().toISOString(),
+    };
+    await env.AUTH_KV.put('global_banner', JSON.stringify(banner));
+    return json({ ok: true, banner }, 200, cors);
+}
+
+// ── Web Push / VAPID ─────────────────────────────────────────────────────────
+function _b64u(buf) {
+    return btoa(String.fromCharCode(...new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer)))
+        .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function _b64uDec(s) {
+    s = s.replace(/-/g,'+').replace(/_/g,'/'); while (s.length%4) s+='=';
+    return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+function _concat(...arrs) {
+    const out = new Uint8Array(arrs.reduce((n,a)=>n+a.length,0));
+    let i=0; for (const a of arrs){out.set(a,i);i+=a.length;} return out;
+}
+async function _hmac(key, data) {
+    const k = await crypto.subtle.importKey('raw', key, {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+    return new Uint8Array(await crypto.subtle.sign('HMAC', k, data));
+}
+async function _vapidJwt(env, audience) {
+    const privJwk = JSON.parse(env.VAPID_PRIVATE_KEY_JWK);
+    const key = await crypto.subtle.importKey('jwk', privJwk, {name:'ECDSA',namedCurve:'P-256'}, false, ['sign']);
+    const te  = new TextEncoder();
+    const hdr = _b64u(te.encode(JSON.stringify({typ:'JWT',alg:'ES256'})));
+    const pay = _b64u(te.encode(JSON.stringify({aud:audience, exp:Math.floor(Date.now()/1000)+43200, sub:'mailto:admin@bandai.local'})));
+    const sig = await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'}, key, te.encode(`${hdr}.${pay}`));
+    return `${hdr}.${pay}.${_b64u(sig)}`;
+}
+async function _encryptPush(subscription, payloadStr) {
+    const { keys: { p256dh, auth: authB64 } } = subscription;
+    const uaPub      = _b64uDec(p256dh);
+    const authSecret = _b64uDec(authB64);
+    const plaintext  = new TextEncoder().encode(payloadStr);
+    const asPair   = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveBits']);
+    const asPubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', asPair.publicKey));
+    const uaKey    = await crypto.subtle.importKey('raw', uaPub, {name:'ECDH',namedCurve:'P-256'}, false, []);
+    const ikmRaw   = new Uint8Array(await crypto.subtle.deriveBits({name:'ECDH',public:uaKey}, asPair.privateKey, 256));
+    const ikmKey   = await crypto.subtle.importKey('raw', ikmRaw, 'HKDF', false, ['deriveBits']);
+    const keyInfo  = _concat(new TextEncoder().encode('WebPush: info\0'), uaPub, asPubRaw);
+    const prkKey   = new Uint8Array(await crypto.subtle.deriveBits(
+        {name:'HKDF',hash:'SHA-256',salt:authSecret,info:keyInfo}, ikmKey, 256));
+    const salt  = crypto.getRandomValues(new Uint8Array(16));
+    const prk   = await _hmac(salt, prkKey);
+    const cek   = (await _hmac(prk, _concat(new TextEncoder().encode('Content-Encoding: aes128gcm\0'), new Uint8Array([1])))).slice(0,16);
+    const nonce = (await _hmac(prk, _concat(new TextEncoder().encode('Content-Encoding: nonce\0'),     new Uint8Array([1])))).slice(0,12);
+    const rs     = 4096;
+    const padded = _concat(plaintext, new Uint8Array([2]), new Uint8Array(rs - 16 - 1 - plaintext.length));
+    const aesKey = await crypto.subtle.importKey('raw', cek, {name:'AES-GCM'}, false, ['encrypt']);
+    const ct     = new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:nonce}, aesKey, padded));
+    const rs4    = new Uint8Array(4); new DataView(rs4.buffer).setUint32(0, rs, false);
+    return _concat(salt, rs4, new Uint8Array([asPubRaw.length]), asPubRaw, ct);
+}
+async function _sendPushToUser(env, userId, payload) {
+    const raw = await env.AUTH_KV.get(`push_sub:${userId}`);
+    if (!raw) return;
+    const sub = JSON.parse(raw);
+    try {
+        const url = new URL(sub.endpoint);
+        const jwt = await _vapidJwt(env, `${url.protocol}//${url.host}`);
+        const body = await _encryptPush(sub, JSON.stringify(payload));
+        const res  = await fetch(sub.endpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization':    `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
+                'Content-Type':     'application/octet-stream',
+                'Content-Encoding': 'aes128gcm',
+                'TTL':              '86400',
+            },
+            body,
+        });
+        if (res.status === 410 || res.status === 404) {
+            await env.AUTH_KV.delete(`push_sub:${userId}`);
+            const raw2 = await env.AUTH_KV.get('push_sub_index');
+            const idx  = raw2 ? JSON.parse(raw2) : [];
+            await env.AUTH_KV.put('push_sub_index', JSON.stringify(idx.filter(id => id !== userId)));
+        }
+    } catch {}
+}
+async function _broadcastPush(env, payload) {
+    const raw = await env.AUTH_KV.get('push_sub_index');
+    if (!raw) return;
+    const ids = JSON.parse(raw);
+    await Promise.all(ids.map(id => _sendPushToUser(env, id, payload)));
+}
+
+async function handlePushSubscribe(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    let body; try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (!body?.endpoint || !body?.keys?.p256dh || !body?.keys?.auth)
+        return json({ error: 'Invalid subscription' }, 400, cors);
+    await env.AUTH_KV.put(`push_sub:${user.id}`, JSON.stringify(body));
+    const rawIdx = await env.AUTH_KV.get('push_sub_index');
+    const idx    = rawIdx ? JSON.parse(rawIdx) : [];
+    if (!idx.includes(user.id)) { idx.push(user.id); await env.AUTH_KV.put('push_sub_index', JSON.stringify(idx)); }
+    return json({ ok: true }, 200, cors);
+}
+async function handlePushUnsubscribe(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    await env.AUTH_KV.delete(`push_sub:${user.id}`);
+    const rawIdx = await env.AUTH_KV.get('push_sub_index');
+    const idx    = rawIdx ? JSON.parse(rawIdx) : [];
+    await env.AUTH_KV.put('push_sub_index', JSON.stringify(idx.filter(id => id !== user.id)));
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Admin: Inbox / Messages ───────────────────────────────────────────────────
+
+async function handleSendMessage(request, env, cors, targetId) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const target = await getUser(env, targetId);
+    if (!target) return json({ error: 'User not found' }, 404, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (!body.message) return json({ error: 'message required' }, 400, cors);
+    const key = `inbox:${targetId}`;
+    const raw = await env.AUTH_KV.get(key);
+    const inbox = raw ? JSON.parse(raw) : [];
+    inbox.unshift({ id: crypto.randomUUID(), fromName: actor.displayName, message: String(body.message).slice(0, 1000), createdAt: new Date().toISOString(), read: false });
+    if (inbox.length > 50) inbox.length = 50;
+    await env.AUTH_KV.put(key, JSON.stringify(inbox));
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleInboxGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw = await env.AUTH_KV.get(`inbox:${user.id}`);
+    return json(raw ? JSON.parse(raw) : [], 200, cors);
+}
+
+async function handleInboxRead(request, env, cors, msgId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const key = `inbox:${user.id}`;
+    const raw = await env.AUTH_KV.get(key);
+    if (!raw) return json({ ok: true }, 200, cors);
+    const inbox = JSON.parse(raw).map(m => m.id === msgId ? { ...m, read: true } : m);
+    await env.AUTH_KV.put(key, JSON.stringify(inbox));
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Admin: Decks moderation ───────────────────────────────────────────────────
+
+async function handleAdminDecksGet(request, env, cors) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const raw  = await env.AUTH_KV.get('user_index');
+    const ids  = raw ? JSON.parse(raw) : [];
+    const results = [];
+    await Promise.all(ids.map(async uid => {
+        const dRaw = await env.AUTH_KV.get(`decks:${uid}`);
+        if (!dRaw) return;
+        const decks = JSON.parse(dRaw).filter(d => d.isPublic);
+        if (decks.length) results.push({ userId: uid, decks });
+    }));
+    return json(results, 200, cors);
+}
+
+async function handleAdminDeckDelete(request, env, cors, userId, deckId) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const key = `decks:${userId}`;
+    const raw = await env.AUTH_KV.get(key);
+    if (!raw) return json({ error: 'Not found' }, 404, cors);
+    const decks = JSON.parse(raw).filter(d => d.id !== deckId);
+    await env.AUTH_KV.put(key, JSON.stringify(decks));
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'delete_deck', targetId: deckId, targetName: userId });
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Tournament: Clone / Reopen / Export ──────────────────────────────────────
+
+async function handleTournamentClone(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const src = await getTournament(env, id);
+    if (!src) return json({ error: 'Not found' }, 404, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (!body.name || !body.date) return json({ error: 'name e date são obrigatórios' }, 400, cors);
+    const t = {
+        id:              newTournamentId(),
+        name:            String(body.name).slice(0, 128),
+        date:            String(body.date).slice(0, 10),
+        format:          src.format,
+        matchFormat:     src.matchFormat,
+        topCutSize:      src.topCutSize,
+        swissTopCutSize: src.swissTopCutSize,
+        phase:           src.format === 'swiss_top_cut' ? 'swiss' : undefined,
+        status:          'pending',
+        circuitId:       src.circuitId || null,
+        participants:    (src.participants || []).map(p => ({ id: p.id, name: p.name, isGuest: p.isGuest })),
+        rounds:          [],
+        placements:      [],
+        createdAt:       new Date().toISOString(),
+        createdBy:       actor.id,
+        clonedFrom:      src.id,
+    };
+    await putTournament(env, t);
+    await appendIndex(env, 'tournament_index', t.id);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'clone_tournament', targetId: t.id, targetName: t.name, detail: `cloned from ${src.name}` });
+    return json(t, 201, cors);
+}
+
+async function handleReopenRound(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+    if (!t.rounds || !t.rounds.length) return json({ error: 'No rounds' }, 400, cors);
+    t.rounds[t.rounds.length - 1].complete = false;
+    await putTournament(env, t);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'reopen_round', targetId: t.id, targetName: t.name });
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleTournamentExport(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+    return json(t, 200, cors);
+}
+
+// ── Circuit: Manual points / Close ────────────────────────────────────────────
+
+async function handleCircuitManualPoints(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const c = await getCircuit(env, id);
+    if (!c) return json({ error: 'Not found' }, 404, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (!body.participantId || body.points == null) return json({ error: 'participantId e points obrigatórios' }, 400, cors);
+    c.manualPoints = c.manualPoints || [];
+    c.manualPoints.push({
+        participantId:   String(body.participantId).slice(0, 64),
+        participantName: String(body.participantName || body.participantId).slice(0, 64),
+        points:          Number(body.points),
+        reason:          String(body.reason || '').slice(0, 256),
+        addedBy:         actor.displayName,
+        addedAt:         new Date().toISOString(),
+    });
+    await putCircuit(env, c);
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleCircuitClose(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const c = await getCircuit(env, id);
+    if (!c) return json({ error: 'Not found' }, 404, cors);
+    c.status   = 'closed';
+    c.closedAt = new Date().toISOString();
+    await putCircuit(env, c);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'close_circuit', targetId: c.id, targetName: c.name });
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Circuits ─────────────────────────────────────────────────────────────────
+
+function newCircuitId() { return 'crc_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12); }
+
+async function getCircuit(env, id) {
+    const raw = await env.AUTH_KV.get(`circuit:${id}`);
+    return raw ? JSON.parse(raw) : null;
+}
+
+async function putCircuit(env, c) {
+    await env.AUTH_KV.put(`circuit:${c.id}`, JSON.stringify(c));
+}
+
+async function handleCircuitsGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw  = await env.AUTH_KV.get('circuit_index');
+    const ids  = raw ? JSON.parse(raw) : [];
+    const list = (await Promise.all(ids.map(id => getCircuit(env, id)))).filter(Boolean);
+    list.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+    return json(list, 200, cors);
+}
+
+async function handleCircuitsPost(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+
+    const { name, season, startDate, endDate, pointTable, winBonus } = body;
+    if (!name) return json({ error: 'name é obrigatório' }, 400, cors);
+
+    const c = {
+        id:         newCircuitId(),
+        name:       String(name).slice(0, 128),
+        season:     season ? String(season).slice(0, 64) : null,
+        startDate:  startDate ? String(startDate).slice(0, 10) : null,
+        endDate:    endDate   ? String(endDate).slice(0, 10)   : null,
+        pointTable:   pointTable && typeof pointTable === 'object' ? pointTable : { 1: 10, 2: 7, 3: 5, 4: 5, '5-8': 3, default: 1 },
+        winBonus:     winBonus != null ? Number(winBonus) : 0,
+        participants: Array.isArray(body.participants)
+            ? body.participants.slice(0, 256).map(p => ({ id: String(p.id || '').slice(0, 64), name: String(p.name || '').slice(0, 64) }))
+            : [],
+        createdAt:    new Date().toISOString(),
+    };
+
+    await putCircuit(env, c);
+    await appendIndex(env, 'circuit_index', c.id);
+    await appendAuditLog(env, { actorId: user.id, actorName: user.displayName, action: 'create_circuit', targetId: c.id, targetName: c.name });
+    return json(c, 201, cors);
+}
+
+async function handleCircuitPut(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const c = await getCircuit(env, id);
+    if (!c) return json({ error: 'Not found' }, 404, cors);
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+
+    if (body.name      !== undefined) c.name      = String(body.name).slice(0, 128);
+    if (body.season    !== undefined) c.season    = body.season ? String(body.season).slice(0, 64) : null;
+    if (body.startDate !== undefined) c.startDate = body.startDate ? String(body.startDate).slice(0, 10) : null;
+    if (body.endDate   !== undefined) c.endDate   = body.endDate   ? String(body.endDate).slice(0, 10)   : null;
+    if (body.pointTable !== undefined && typeof body.pointTable === 'object') c.pointTable = body.pointTable;
+    if (body.winBonus  !== undefined) c.winBonus  = Number(body.winBonus);
+    if (body.participants !== undefined) c.participants = Array.isArray(body.participants)
+        ? body.participants.slice(0, 256).map(p => ({ id: String(p.id || '').slice(0, 64), name: String(p.name || '').slice(0, 64) }))
+        : [];
+
+    await putCircuit(env, c);
+    return json(c, 200, cors);
+}
+
+async function handleCircuitDelete(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const c = await getCircuit(env, id);
+    if (!c) return json({ error: 'Not found' }, 404, cors);
+
+    await env.AUTH_KV.delete(`circuit:${id}`);
+    await removeIndex(env, 'circuit_index', id);
+    await appendAuditLog(env, { actorId: user.id, actorName: user.displayName, action: 'delete_circuit', targetId: id, targetName: c.name });
+    return json({ ok: true }, 200, cors);
+}
+
+// ── Tournaments ───────────────────────────────────────────────────────────────
+
+function newTournamentId() { return 'trn_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12); }
+
+async function getTournament(env, id) {
+    const raw = await env.AUTH_KV.get(`tournament:${id}`);
+    return raw ? JSON.parse(raw) : null;
+}
+
+async function putTournament(env, t) {
+    await env.AUTH_KV.put(`tournament:${t.id}`, JSON.stringify(t));
+}
+
+async function handleTournamentsGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw  = await env.AUTH_KV.get('tournament_index');
+    const ids  = raw ? JSON.parse(raw) : [];
+    const list = (await Promise.all(ids.map(id => getTournament(env, id)))).filter(Boolean);
+    // Sort newest first
+    list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return json(list, 200, cors);
+}
+
+async function handleTournamentsPost(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+
+    const { name, date, format, matchFormat, rounds, topCutSize, swissTopCutSize, participants, circuitId } = body;
+    if (!name || !date || !format) return json({ error: 'name, date e format são obrigatórios' }, 400, cors);
+    if (!['swiss', 'round_robin', 'top_cut', 'swiss_top_cut'].includes(format)) return json({ error: 'format inválido' }, 400, cors);
+
+    const t = {
+        id:          newTournamentId(),
+        name:        String(name).slice(0, 128),
+        date:        String(date).slice(0, 10),
+        format,
+        matchFormat: ['md1', 'md3', 'md5'].includes(matchFormat) ? matchFormat : 'md3',
+        rounds:      undefined,
+        topCutSize: format === 'top_cut'
+                        ? ([4, 8, 16].includes(Number(topCutSize)) ? Number(topCutSize) : 8)
+                        : undefined,
+        swissTopCutSize: format === 'swiss_top_cut'
+                        ? ([4, 8, 16].includes(Number(swissTopCutSize)) ? Number(swissTopCutSize) : 8)
+                        : undefined,
+        phase: format === 'swiss_top_cut' ? 'swiss' : undefined,
+        status:     'pending',
+        circuitId:  circuitId || null,
+        participants: Array.isArray(participants)
+            ? participants.slice(0, 256).map(p => ({
+                id:      String(p.id   || '').slice(0, 64),
+                name:    String(p.name || '').slice(0, 64),
+                isGuest: !!p.isGuest,
+              }))
+            : [],
+        createdAt: new Date().toISOString(),
+        createdBy: user.id,
+    };
+
+    await putTournament(env, t);
+    await appendIndex(env, 'tournament_index', t.id);
+    await appendAuditLog(env, { actorId: user.id, actorName: user.displayName, action: 'create_tournament', targetId: t.id, targetName: t.name });
+    return json(t, 201, cors);
+}
+
+// ── Tournament: helpers ───────────────────────────────────────────────────────
+
+function _computeStandings(t) {
+    const map = {};
+    for (const p of (t.participants || [])) {
+        map[p.id] = { id: p.id, name: p.name, wins: 0, losses: 0, gw: 0, gl: 0, opponents: [] };
+    }
+    for (const round of (t.rounds || [])) {
+        for (const pair of round.pairings) {
+            if (!pair.result) continue;
+            const { winnerId, p1GameWins: p1g = 0, p2GameWins: p2g = 0 } = pair.result;
+            const loserId = winnerId === pair.p1Id ? pair.p2Id : pair.p1Id;
+            if (map[winnerId]) {
+                map[winnerId].wins++;
+                map[winnerId].gw += winnerId === pair.p1Id ? p1g : p2g;
+                map[winnerId].gl += winnerId === pair.p1Id ? p2g : p1g;
+                if (loserId !== 'BYE') map[winnerId].opponents.push(loserId);
+            }
+            if (map[loserId]) {
+                map[loserId].losses++;
+                map[loserId].gw += loserId === pair.p1Id ? p1g : p2g;
+                map[loserId].gl += loserId === pair.p1Id ? p2g : p1g;
+                if (winnerId !== 'BYE') map[loserId].opponents.push(winnerId);
+            }
+        }
+    }
+    // Compute OMW%: average of each opponent's match win rate (min 33%)
+    const standings = Object.values(map);
+    for (const s of standings) {
+        if (!s.opponents.length) { s.omwPct = 0.33; continue; }
+        const rates = s.opponents.map(opId => {
+            const op = map[opId];
+            if (!op) return 0.33;
+            const total = op.wins + op.losses;
+            if (!total) return 0.33;
+            return Math.max(0.33, op.wins / total);
+        });
+        s.omwPct = rates.reduce((a, b) => a + b, 0) / rates.length;
+        delete s.opponents;
+    }
+    return standings.sort((a, b) =>
+        b.wins - a.wins || a.losses - b.losses || b.omwPct - a.omwPct || b.gw - a.gw
+    );
+}
+
+function _swissPairings(participants, rounds) {
+    participants = participants.filter(p => !p.dropped);
+    const wins   = {};
+    const played = {};
+    for (const p of participants) wins[p.id] = 0;
+    for (const r of rounds) {
+        for (const pair of r.pairings) {
+            if (pair.result?.winnerId) wins[pair.result.winnerId] = (wins[pair.result.winnerId] || 0) + 1;
+            const key = [pair.p1Id, pair.p2Id].sort().join('|');
+            played[key] = true;
+        }
+    }
+    const sorted = [...participants].sort((a, b) => (wins[b.id] || 0) - (wins[a.id] || 0));
+    const result = [];
+    const used   = new Set();
+    for (let i = 0; i < sorted.length; i++) {
+        if (used.has(sorted[i].id)) continue;
+        const p1 = sorted[i];
+        let found = false;
+        for (let j = i + 1; j < sorted.length; j++) {
+            if (used.has(sorted[j].id)) continue;
+            const p2  = sorted[j];
+            const key = [p1.id, p2.id].sort().join('|');
+            if (!played[key]) {
+                result.push({ p1Id: p1.id, p2Id: p2.id });
+                used.add(p1.id); used.add(p2.id); found = true; break;
+            }
+        }
+        if (!found) {
+            for (let j = i + 1; j < sorted.length; j++) {
+                if (!used.has(sorted[j].id)) {
+                    result.push({ p1Id: p1.id, p2Id: sorted[j].id });
+                    used.add(p1.id); used.add(sorted[j].id); found = true; break;
+                }
+            }
+        }
+        if (!found && !used.has(p1.id)) {
+            result.push({ p1Id: p1.id, p2Id: 'BYE' });
+            used.add(p1.id);
+        }
+    }
+    return result;
+}
+
+function _roundRobinRounds(participants) {
+    const ids = participants.map(p => p.id);
+    if (ids.length % 2 === 1) ids.push('BYE');
+    const n        = ids.length;
+    const rounds   = [];
+    const fixed    = ids[0];
+    const rotating = ids.slice(1);
+    for (let r = 0; r < n - 1; r++) {
+        const circle   = [fixed, ...rotating];
+        const pairings = [];
+        for (let i = 0; i < n / 2; i++) {
+            const p1Id = circle[i];
+            const p2Id = circle[n - 1 - i];
+            const isBye = p1Id === 'BYE' || p2Id === 'BYE';
+            pairings.push({
+                id: `r${r + 1}p${i}`,
+                p1Id,
+                p2Id,
+                result: isBye ? { winnerId: p1Id === 'BYE' ? p2Id : p1Id, p1GameWins: 2, p2GameWins: 0 } : null,
+            });
+        }
+        rounds.push({ number: r + 1, pairings, complete: pairings.every(p => p.result !== null) });
+        rotating.push(rotating.shift());
+    }
+    return rounds;
+}
+
+function _topCutPairings(participants, standings, topCutSize, existingRounds) {
+    if (!existingRounds.length) {
+        const seeded = standings.slice(0, topCutSize);
+        const pairs  = [];
+        for (let i = 0; i < seeded.length / 2; i++)
+            pairs.push({ p1Id: seeded[i].id, p2Id: seeded[seeded.length - 1 - i].id });
+        return pairs;
+    }
+    const last    = existingRounds[existingRounds.length - 1];
+    const winners = last.pairings.map(p => p.result?.winnerId).filter(Boolean);
+    const pairs   = [];
+    for (let i = 0; i < winners.length; i += 2)
+        pairs.push({ p1Id: winners[i], p2Id: winners[i + 1] });
+    return pairs;
+}
+
+// ── Tournament: CRUD + round management ──────────────────────────────────────
+
+async function handleTournamentGet(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+    return json(t, 200, cors);
+}
+
+async function handleGenerateRound(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+    if (t.status === 'completed') return json({ error: 'Torneio já encerrado' }, 400, cors);
+
+    t.rounds = t.rounds || [];
+    const last = t.rounds[t.rounds.length - 1];
+    if (last && !last.complete) return json({ error: 'Rodada atual ainda não encerrada' }, 400, cors);
+
+    t.status = 'in_progress';
+
+    if (t.format === 'round_robin') {
+        if (t.rounds.length) return json({ error: 'Rodadas já geradas' }, 400, cors);
+        t.rounds = _roundRobinRounds(t.participants);
+        await putTournament(env, t);
+        _broadcastPush(env, { title: `🏆 ${t.name}`, body: `Rodada 1 aberta! Verifique sua mesa.`, url: '/', tag: `round-${t.id}` }).catch(() => {});
+        return json(t, 200, cors);
+    }
+
+    // Swiss: check termination before generating
+    if (t.format === 'swiss' && t.rounds.length > 0) {
+        const standings  = _computeStandings(t);
+        const undefeated = standings.filter(s => s.losses === 0);
+        if (undefeated.length <= 1) {
+            t.status = 'completed';
+            await putTournament(env, t);
+            return json(t, 200, cors);
+        }
+    }
+
+    // Swiss→TopCut hybrid: check swiss termination, then pivot to top cut
+    if (t.format === 'swiss_top_cut') {
+        if (t.phase === 'swiss' && t.rounds.length > 0) {
+            const standings  = _computeStandings(t);
+            const undefeated = standings.filter(s => s.losses === 0);
+            if (undefeated.length <= 1) {
+                // Transition to top cut phase
+                t.phase = 'top_cut';
+            }
+        }
+        const roundNumber = t.rounds.length + 1;
+        let rawPairs;
+        if (t.phase === 'swiss') {
+            rawPairs = _swissPairings(t.participants, t.rounds);
+        } else {
+            // top_cut phase: use swiss_top_cut rounds so far as "existing top cut rounds"
+            const topCutRounds = t.rounds.filter(r => r.isTopCut);
+            const standings = _computeStandings(t);
+            rawPairs = _topCutPairings(t.participants, standings, t.swissTopCutSize, topCutRounds);
+        }
+        const pairings = rawPairs.map((p, i) => {
+            const isBye = p.p2Id === 'BYE';
+            return {
+                id:       `r${roundNumber}p${i}`,
+                p1Id:     p.p1Id,
+                p2Id:     p.p2Id,
+                isTopCut: t.phase === 'top_cut',
+                result:   isBye ? { winnerId: p.p1Id, p1GameWins: 2, p2GameWins: 0 } : null,
+            };
+        });
+        const newRound = { number: roundNumber, pairings, isTopCut: t.phase === 'top_cut', complete: pairings.every(p => p.result !== null) };
+        t.rounds.push(newRound);
+        await putTournament(env, t);
+        _broadcastPush(env, { title: `🏆 ${t.name}`, body: `Rodada ${roundNumber} aberta! Verifique sua mesa.`, url: '/', tag: `round-${t.id}` }).catch(() => {});
+        return json(t, 200, cors);
+    }
+
+    const roundNumber = t.rounds.length + 1;
+    let rawPairs;
+    if (t.format === 'swiss') {
+        rawPairs = _swissPairings(t.participants, t.rounds);
+    } else {
+        const standings = _computeStandings(t);
+        rawPairs = _topCutPairings(t.participants, standings, t.topCutSize, t.rounds);
+    }
+
+    const pairings = rawPairs.map((p, i) => {
+        const isBye = p.p2Id === 'BYE';
+        return {
+            id:     `r${roundNumber}p${i}`,
+            p1Id:   p.p1Id,
+            p2Id:   p.p2Id,
+            result: isBye ? { winnerId: p.p1Id, p1GameWins: 2, p2GameWins: 0 } : null,
+        };
+    });
+
+    const newRound = { number: roundNumber, pairings, complete: pairings.every(p => p.result !== null) };
+    t.rounds.push(newRound);
+    await putTournament(env, t);
+    _broadcastPush(env, { title: `🏆 ${t.name}`, body: `Rodada ${roundNumber} aberta! Verifique sua mesa.`, url: '/', tag: `round-${t.id}` }).catch(() => {});
+    return json(t, 200, cors);
+}
+
+async function handleRecordResult(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    const { roundNumber, pairingId, winnerId, p1GameWins, p2GameWins, timeExtension } = body;
+
+    const round = (t.rounds || []).find(r => r.number === roundNumber);
+    if (!round) return json({ error: 'Rodada não encontrada' }, 404, cors);
+    const pair  = round.pairings.find(p => p.id === pairingId);
+    if (!pair)  return json({ error: 'Partida não encontrada' }, 404, cors);
+    if (winnerId !== pair.p1Id && winnerId !== pair.p2Id)
+        return json({ error: 'Vencedor inválido' }, 400, cors);
+
+    pair.result = { winnerId, p1GameWins: Number(p1GameWins) || 0, p2GameWins: Number(p2GameWins) || 0 };
+    if (timeExtension && Number(timeExtension) > 0) {
+        t.timeExtensions = t.timeExtensions || {};
+        t.timeExtensions[pairingId] = Number(timeExtension);
+    }
+    round.complete = round.pairings.every(p => p.result !== null);
+
+    if (round.complete) {
+        if (t.format === 'swiss') {
+            const standings  = _computeStandings(t);
+            const undefeated = standings.filter(s => s.losses === 0);
+            if (undefeated.length <= 1) t.status = 'completed';
+        } else if (t.format === 'round_robin') {
+            if (t.rounds.every(r => r.complete)) t.status = 'completed';
+        } else if (t.format === 'top_cut') {
+            if (round.pairings.length === 1) t.status = 'completed';
+        } else if (t.format === 'swiss_top_cut') {
+            if (round.isTopCut && round.pairings.length === 1) t.status = 'completed';
+        }
+    }
+
+    await putTournament(env, t);
+    return json(t, 200, cors);
+}
+
+async function handleParticipantPut(request, env, cors, id, participantId) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+
+    const participant = (t.participants || []).find(p => p.id === participantId);
+    if (!participant) return json({ error: 'Participant not found' }, 404, cors);
+
+    if (body.leaderId !== undefined) {
+        participant.leaderId = String(body.leaderId || '').slice(0, 32) || undefined;
+    }
+    if (body.checkedIn !== undefined) {
+        participant.checkedIn = !!body.checkedIn;
+    }
+
+    await putTournament(env, t);
+    return json(t, 200, cors);
+}
+
+async function handleTournamentPut(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+
+    if (body.name      !== undefined) t.name      = String(body.name).slice(0, 128);
+    if (body.date      !== undefined) t.date      = String(body.date).slice(0, 10);
+    if (body.matchFormat !== undefined) t.matchFormat = ['md1', 'md3', 'md5'].includes(body.matchFormat) ? body.matchFormat : t.matchFormat;
+    if (body.circuitId !== undefined) t.circuitId = body.circuitId || null;
+
+    // Only allow changing format/topCutSize if no rounds have been generated
+    const hasRounds = t.rounds && t.rounds.length > 0;
+    if (!hasRounds) {
+        if (body.format !== undefined && ['swiss', 'round_robin', 'top_cut', 'swiss_top_cut'].includes(body.format)) {
+            t.format = body.format;
+            if (body.format === 'swiss_top_cut' && !t.phase) t.phase = 'swiss';
+        }
+        if (body.topCutSize !== undefined && t.format === 'top_cut') {
+            t.topCutSize = [4, 8, 16].includes(Number(body.topCutSize)) ? Number(body.topCutSize) : t.topCutSize;
+        }
+        if (body.swissTopCutSize !== undefined && t.format === 'swiss_top_cut') {
+            t.swissTopCutSize = [4, 8, 16].includes(Number(body.swissTopCutSize)) ? Number(body.swissTopCutSize) : t.swissTopCutSize;
+        }
+    }
+
+    await putTournament(env, t);
+    return json(t, 200, cors);
+}
+
+async function handleTournamentDelete(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    await env.AUTH_KV.delete(`tournament:${id}`);
+    await removeIndex(env, 'tournament_index', id);
+    await appendAuditLog(env, { actorId: user.id, actorName: user.displayName, action: 'delete_tournament', targetId: id, targetName: t.name });
+    return json({ ok: true }, 200, cors);
+}
+
+async function handleDropPlayer(request, env, cors, id, participantId) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    const participant = (t.participants || []).find(p => p.id === participantId);
+    if (!participant) return json({ error: 'Participant not found' }, 404, cors);
+    if (participant.dropped) return json({ error: 'Participant already dropped' }, 400, cors);
+
+    participant.dropped = true;
+
+    // For round_robin: forfeit all pending pairings involving this participant
+    if (t.format === 'round_robin') {
+        for (const round of (t.rounds || [])) {
+            for (const pair of round.pairings) {
+                if (pair.result !== null) continue;
+                if (pair.p1Id === participantId || pair.p2Id === participantId) {
+                    const opponentId = pair.p1Id === participantId ? pair.p2Id : pair.p1Id;
+                    const opponentIsP1 = pair.p2Id === participantId;
+                    pair.result = {
+                        winnerId:    opponentId,
+                        p1GameWins:  opponentIsP1 ? 2 : 0,
+                        p2GameWins:  opponentIsP1 ? 0 : 2,
+                    };
+                }
+            }
+            round.complete = round.pairings.every(p => p.result !== null);
+        }
+        // Check if tournament is now complete
+        if (t.rounds.length && t.rounds.every(r => r.complete)) {
+            t.status = 'completed';
+        }
+    }
+
+    // For top_cut: same — forfeit pending pairings (opponent advances)
+    if (t.format === 'top_cut') {
+        for (const round of (t.rounds || [])) {
+            for (const pair of round.pairings) {
+                if (pair.result !== null) continue;
+                if (pair.p1Id === participantId || pair.p2Id === participantId) {
+                    const opponentId = pair.p1Id === participantId ? pair.p2Id : pair.p1Id;
+                    const opponentIsP1 = pair.p2Id === participantId;
+                    pair.result = {
+                        winnerId:    opponentId,
+                        p1GameWins:  opponentIsP1 ? 2 : 0,
+                        p2GameWins:  opponentIsP1 ? 0 : 2,
+                    };
+                }
+            }
+            round.complete = round.pairings.every(p => p.result !== null);
+        }
+        const lastRound = t.rounds[t.rounds.length - 1];
+        if (lastRound && lastRound.complete && lastRound.pairings.length === 1) {
+            t.status = 'completed';
+        }
+    }
+
+    // Swiss: dropped participant is excluded from future _swissPairings by filtering t.participants
+    // No changes to existing rounds needed
+
+    await putTournament(env, t);
+    return json(t, 200, cors);
+}
+
+async function handleTimerPut(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    const { action } = body;
+
+    if (action === 'start') {
+        t.currentTimerStart = new Date().toISOString();
+    } else if (action === 'stop' || action === 'reset') {
+        t.currentTimerStart = null;
+    } else {
+        return json({ error: 'action must be start|stop|reset' }, 400, cors);
+    }
+
+    await putTournament(env, t);
+    return json(t, 200, cors);
+}
+
+async function handlePlacements(request, env, cors, id) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const t = await getTournament(env, id);
+    if (!t) return json({ error: 'Not found' }, 404, cors);
+
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    const { placements } = body;
+    if (!Array.isArray(placements)) return json({ error: 'placements array required' }, 400, cors);
+
+    t.placements = placements.map(p => ({
+        participantId: String(p.participantId || '').slice(0, 64),
+        place:         Number(p.place) || 0,
+        prize:         String(p.prize || '').slice(0, 128),
+    }));
+    t.status = 'completed';
+
+    // Auto-assign badges to registered (non-guest) players in top 4
+    const badgesRaw = await env.AUTH_KV.get('player_badges');
+    const badgesMap = badgesRaw ? JSON.parse(badgesRaw) : {};
+    const allIds    = JSON.parse((await env.AUTH_KV.get('user_index')) || '[]');
+    const allUsers  = (await Promise.all(allIds.map(uid => getUser(env, uid)))).filter(Boolean);
+
+    const placeLabel = { 1: 'Campeão', 2: '2º Lugar', 3: '3º/4º Lugar', 4: '3º/4º Lugar' };
+    for (const pl of t.placements) {
+        if (pl.place > 4) continue;
+        const participant = (t.participants || []).find(p => p.id === pl.participantId);
+        if (!participant || participant.isGuest) continue;
+        // Match by participant.id (which equals bandaiName for registered players)
+        const regUser = allUsers.find(u => u.profile?.bandaiName?.toLowerCase() === participant.id.toLowerCase());
+        if (!regUser) continue;
+        const badgeKey = regUser.profile.bandaiName;
+        badgesMap[badgeKey] = badgesMap[badgeKey] || [];
+        const badge = `${placeLabel[pl.place] || `Top ${pl.place}`} · ${t.name} · ${t.date}`;
+        if (!badgesMap[badgeKey].includes(badge)) badgesMap[badgeKey].push(badge);
+    }
+    await env.AUTH_KV.put('player_badges', JSON.stringify(badgesMap));
+
+    await putTournament(env, t);
+    return json(t, 200, cors);
+}
+
+async function handleCircuitConfigGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const raw = await env.AUTH_KV.get('circuit_config');
+    return json(raw ? JSON.parse(raw) : null, 200, cors);
+}
+
+async function handleCircuitConfigPut(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user || user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    await env.AUTH_KV.put('circuit_config', JSON.stringify(body));
+    return json({ ok: true }, 200, cors);
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
@@ -705,8 +1753,42 @@ export default {
             const publicDecksMatch = path.match(/^\/decks\/public\/(.+)$/);
             if (publicDecksMatch && method === 'GET') return handlePublicDecks(request, env, cors, decodeURIComponent(publicDecksMatch[1]));
 
+            if (path === '/push/subscribe'  && method === 'POST')   return handlePushSubscribe(request, env, cors);
+            if (path === '/push/subscribe'  && method === 'DELETE') return handlePushUnsubscribe(request, env, cors);
+
+            if (path === '/banner'          && method === 'GET') return handleBannerGet(request, env, cors);
+            if (path === '/admin/banner'    && method === 'PUT') return handleBannerPut(request, env, cors);
+            if (path === '/admin/audit-log' && method === 'GET') return handleAuditLog(request, env, cors);
+            if (path === '/admin/decks'     && method === 'GET') return handleAdminDecksGet(request, env, cors);
+            if (path === '/inbox'           && method === 'GET') return handleInboxGet(request, env, cors);
+
+            const inboxReadMatch = path.match(/^\/inbox\/([^/]+)\/read$/);
+            if (inboxReadMatch && method === 'POST') return handleInboxRead(request, env, cors, inboxReadMatch[1]);
+
+            const sendMsgMatch = path.match(/^\/admin\/message\/(.+)$/);
+            if (sendMsgMatch && method === 'POST') return handleSendMessage(request, env, cors, sendMsgMatch[1]);
+
+            const suspendMatch = path.match(/^\/admin\/suspend\/(.+)$/);
+            if (suspendMatch && method === 'POST') return handleSuspend(request, env, cors, suspendMatch[1]);
+
+            const unsuspendMatch = path.match(/^\/admin\/unsuspend\/(.+)$/);
+            if (unsuspendMatch && method === 'POST') return handleUnsuspend(request, env, cors, unsuspendMatch[1]);
+
+            const adminEditUserMatch = path.match(/^\/admin\/users\/(.+)$/);
+            if (adminEditUserMatch && method === 'PUT')    return handleAdminEditUser(request, env, cors, adminEditUserMatch[1]);
+            if (adminEditUserMatch && method === 'DELETE') return handleDeleteUser(request, env, cors, adminEditUserMatch[1]);
+
+            const adminProfileMatch = path.match(/^\/admin\/profile\/(.+)$/);
+            if (adminProfileMatch && method === 'PUT') return handleAdminProfileEdit(request, env, cors, adminProfileMatch[1]);
+
+            const adminDeckDeleteMatch = path.match(/^\/admin\/decks\/([^/]+)\/([^/]+)$/);
+            if (adminDeckDeleteMatch && method === 'DELETE') return handleAdminDeckDelete(request, env, cors, adminDeckDeleteMatch[1], adminDeckDeleteMatch[2]);
+
             const approveMatch = path.match(/^\/admin\/approve\/(.+)$/);
             if (approveMatch && method === 'POST') return handleApprove(request, env, cors, approveMatch[1]);
+
+            const setRoleMatch = path.match(/^\/admin\/set-role\/(.+)$/);
+            if (setRoleMatch && method === 'POST') return handleSetRole(request, env, cors, setRoleMatch[1]);
 
             const rejectMatch = path.match(/^\/admin\/reject\/(.+)$/);
             if (rejectMatch  && method === 'POST') return handleReject(request, env, cors, rejectMatch[1]);
@@ -715,6 +1797,56 @@ export default {
             if (profileByNameMatch && method === 'GET') return handleProfileByName(request, env, cors, decodeURIComponent(profileByNameMatch[1]));
 
             if (path === '/optcg-proxy' && method === 'GET') return handleOptcgProxy(request, env, cors);
+
+            if (path === '/tournaments' && method === 'GET')  return handleTournamentsGet(request, env, cors);
+            if (path === '/tournaments' && method === 'POST') return handleTournamentsPost(request, env, cors);
+
+            const trnMatch = path.match(/^\/tournaments\/([^/]+)$/);
+            if (trnMatch && method === 'GET')    return handleTournamentGet(request, env, cors, trnMatch[1]);
+            if (trnMatch && method === 'PUT')    return handleTournamentPut(request, env, cors, trnMatch[1]);
+            if (trnMatch && method === 'DELETE') return handleTournamentDelete(request, env, cors, trnMatch[1]);
+
+            const dropMatch = path.match(/^\/tournaments\/([^/]+)\/drop\/([^/]+)$/);
+            if (dropMatch && method === 'POST') return handleDropPlayer(request, env, cors, dropMatch[1], dropMatch[2]);
+
+            const participantMatch = path.match(/^\/tournaments\/([^/]+)\/participant\/([^/]+)$/);
+            if (participantMatch && method === 'PUT') return handleParticipantPut(request, env, cors, participantMatch[1], participantMatch[2]);
+
+            const trnGenMatch = path.match(/^\/tournaments\/([^/]+)\/generate-round$/);
+            if (trnGenMatch && method === 'POST') return handleGenerateRound(request, env, cors, trnGenMatch[1]);
+
+            const trnResMatch = path.match(/^\/tournaments\/([^/]+)\/result$/);
+            if (trnResMatch && method === 'POST') return handleRecordResult(request, env, cors, trnResMatch[1]);
+
+            const trnTimerMatch = path.match(/^\/tournaments\/([^/]+)\/timer$/);
+            if (trnTimerMatch && method === 'PUT') return handleTimerPut(request, env, cors, trnTimerMatch[1]);
+
+            const trnPlacementsMatch = path.match(/^\/tournaments\/([^/]+)\/placements$/);
+            if (trnPlacementsMatch && method === 'POST') return handlePlacements(request, env, cors, trnPlacementsMatch[1]);
+
+            const trnCloneMatch = path.match(/^\/tournaments\/([^/]+)\/clone$/);
+            if (trnCloneMatch && method === 'POST') return handleTournamentClone(request, env, cors, trnCloneMatch[1]);
+
+            const trnReopenMatch = path.match(/^\/tournaments\/([^/]+)\/reopen-round$/);
+            if (trnReopenMatch && method === 'POST') return handleReopenRound(request, env, cors, trnReopenMatch[1]);
+
+            const trnExportMatch = path.match(/^\/tournaments\/([^/]+)\/export$/);
+            if (trnExportMatch && method === 'GET') return handleTournamentExport(request, env, cors, trnExportMatch[1]);
+
+            if (path === '/circuits' && method === 'GET')  return handleCircuitsGet(request, env, cors);
+            if (path === '/circuits' && method === 'POST') return handleCircuitsPost(request, env, cors);
+            const circuitIdMatch = path.match(/^\/circuits\/([^/]+)$/);
+            if (circuitIdMatch && method === 'PUT')    return handleCircuitPut(request, env, cors, circuitIdMatch[1]);
+            if (circuitIdMatch && method === 'DELETE') return handleCircuitDelete(request, env, cors, circuitIdMatch[1]);
+
+            const circuitManualPtsMatch = path.match(/^\/circuits\/([^/]+)\/manual-points$/);
+            if (circuitManualPtsMatch && method === 'POST') return handleCircuitManualPoints(request, env, cors, circuitManualPtsMatch[1]);
+
+            const circuitCloseMatch = path.match(/^\/circuits\/([^/]+)\/close$/);
+            if (circuitCloseMatch && method === 'POST') return handleCircuitClose(request, env, cors, circuitCloseMatch[1]);
+
+            if (path === '/circuit-config' && method === 'GET') return handleCircuitConfigGet(request, env, cors);
+            if (path === '/circuit-config' && method === 'PUT') return handleCircuitConfigPut(request, env, cors);
 
             const cacheMatch = path.match(/^\/cache\/(.+)$/);
             if (cacheMatch && method === 'GET') return handleCacheGet(request, env, cors, cacheMatch[1]);
