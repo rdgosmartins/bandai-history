@@ -588,6 +588,86 @@ async function handleDeckDelete(request, env, cors, deckId) {
     return json({ ok: true }, 200, cors);
 }
 
+// ── Personal Match Log ────────────────────────────────────────────────────────
+
+async function getMatches(env, userId) {
+    const raw = await env.AUTH_KV.get('matches:' + userId);
+    return raw ? JSON.parse(raw) : [];
+}
+async function putMatches(env, userId, matches) {
+    await env.AUTH_KV.put('matches:' + userId, JSON.stringify(matches));
+}
+function newMatchId() { return 'mtch_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+async function handleMatchesGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    return json(await getMatches(env, user.id), 200, cors);
+}
+
+async function handleMatchesPost(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const body = await request.json();
+    const { name, leaderId, date, set, type } = body;
+    if (!name || !date) return json({ error: 'name and date are required' }, 400, cors);
+    const match = {
+        id:        newMatchId(),
+        name:      String(name).slice(0, 80),
+        leaderId:  leaderId || null,
+        date:      String(date).slice(0, 10),
+        set:       set   ? String(set).slice(0, 10)  : null,
+        type:      type  ? String(type).slice(0, 30) : null,
+        rounds:    [],
+        createdAt: new Date().toISOString(),
+    };
+    const matches = await getMatches(env, user.id);
+    matches.unshift(match);
+    await putMatches(env, user.id, matches);
+    return json(match, 201, cors);
+}
+
+async function handleMatchPut(request, env, cors, matchId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const body = await request.json();
+    const matches = await getMatches(env, user.id);
+    const idx = matches.findIndex(m => m.id === matchId);
+    if (idx === -1) return json({ error: 'Match not found' }, 404, cors);
+    const m = matches[idx];
+    if (body.name     !== undefined) m.name     = String(body.name).slice(0, 80);
+    if (body.leaderId !== undefined) m.leaderId = body.leaderId;
+    if (body.date     !== undefined) m.date     = String(body.date).slice(0, 10);
+    if (body.set      !== undefined) m.set      = body.set ? String(body.set).slice(0, 10) : null;
+    if (body.type     !== undefined) m.type     = body.type ? String(body.type).slice(0, 30) : null;
+    if (body.rounds   !== undefined) m.rounds   = Array.isArray(body.rounds) ? body.rounds : m.rounds;
+    matches[idx] = m;
+    await putMatches(env, user.id, matches);
+    return json(m, 200, cors);
+}
+
+async function handleMatchDelete(request, env, cors, matchId) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const matches = await getMatches(env, user.id);
+    const filtered = matches.filter(m => m.id !== matchId);
+    if (filtered.length === matches.length) return json({ error: 'Match not found' }, 404, cors);
+    await putMatches(env, user.id, filtered);
+    return json({ ok: true }, 200, cors);
+}
+
+async function handlePublicMatches(request, env, cors, bandaiName) {
+    const raw = await env.AUTH_KV.get('user_index');
+    if (!raw) return json([], 200, cors);
+    const ids = JSON.parse(raw);
+    const users = await Promise.all(ids.map(id => getUser(env, id)));
+    const target = users.find(u =>
+        u?.profile?.bandaiName?.toLowerCase() === bandaiName.toLowerCase()
+    );
+    if (!target) return json([], 200, cors);
+    return json(await getMatches(env, target.id), 200, cors);
+}
+
 // Public decks for a given bandaiName (used in view mode)
 async function handlePublicDecks(request, env, cors, bandaiName) {
     const user = await authenticate(request, env);
@@ -1752,6 +1832,16 @@ export default {
 
             const publicDecksMatch = path.match(/^\/decks\/public\/(.+)$/);
             if (publicDecksMatch && method === 'GET') return handlePublicDecks(request, env, cors, decodeURIComponent(publicDecksMatch[1]));
+
+            if (path === '/my-matches'           && method === 'GET')  return handleMatchesGet(request, env, cors);
+            if (path === '/my-matches'           && method === 'POST') return handleMatchesPost(request, env, cors);
+
+            const matchIdMatch = path.match(/^\/my-matches\/([^/]+)$/);
+            if (matchIdMatch && method === 'PUT')    return handleMatchPut(request, env, cors, matchIdMatch[1]);
+            if (matchIdMatch && method === 'DELETE') return handleMatchDelete(request, env, cors, matchIdMatch[1]);
+
+            const publicMatchesMatch = path.match(/^\/matches-by-name\/(.+)$/);
+            if (publicMatchesMatch && method === 'GET') return handlePublicMatches(request, env, cors, decodeURIComponent(publicMatchesMatch[1]));
 
             if (path === '/push/subscribe'  && method === 'POST')   return handlePushSubscribe(request, env, cors);
             if (path === '/push/subscribe'  && method === 'DELETE') return handlePushUnsubscribe(request, env, cors);

@@ -62,6 +62,8 @@
     </style>
     <script src="js/auth.js"></script>
     <script>
+        const VAPID_PUBLIC_KEY = 'BDRM95EN0TRY7A4qRTVqiIUV10k_0sBRCwzeV2BNI_7h6NcMJTlulFh_8h5JxWDqYdH-LyNgoRI1mxYd8Z5yPeY';
+
         // Expose auth user to body scripts via a promise
         let _resolveAuthUser;
         window._authUserPromise = new Promise(r => { _resolveAuthUser = r; });
@@ -70,20 +72,50 @@
             if (!user) return;
             document.getElementById('signOutBtn').style.display = '';
             document.getElementById('profileBtn').style.display = '';
+            document.getElementById('inboxBtn').style.display = '';
+            document.getElementById('tabResults').style.display = '';
+            document.getElementById('tabCircuito').style.display = '';
+            document.getElementById('tabNav').style.display = 'flex';
             if (user.role === 'admin') {
                 document.getElementById('adminPanelBtn').style.display = '';
+                document.getElementById('tabTournaments').style.display = '';
+                document.getElementById('inspectorBtn').style.display = '';
             }
             _resolveAuthUser(user);
+            // Register push notifications
+            if ('serviceWorker' in navigator && 'PushManager' in window) _initPush();
+            // Load inbox
+            fetch(`${AUTH_BASE}/inbox`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(msgs => {
+                const unread = msgs.filter(m => !m.read).length;
+                const countEl = document.getElementById('inboxCount');
+                if (countEl) countEl.textContent = unread ? `(${unread})` : '';
+                window._inboxMsgs = msgs;
+            });
         })();
+
+        // Load global banner (no auth required)
+        fetch(`${AUTH_BASE}/banner`).then(r => r.ok ? r.json() : null).then(b => {
+            if (b?.message) {
+                const el = document.getElementById('globalBanner');
+                el.textContent = b.message;
+                el.className = `global-banner banner-${b.type || 'info'}`;
+                el.style.display = 'block';
+            }
+        }).catch(() => {});
     </script>
 </head>
 <body>
 
+<div id="globalBanner" style="display:none;"></div>
+
 <header>
-    <button class="theme-toggle" onclick="toggleTheme()" id="themeToggleBtn">&#127775; Light</button>
-    <button class="theme-toggle" id="signOutBtn" onclick="logout()" style="display:none;right:8rem;">&#9171; Sign Out</button>
-    <button class="theme-toggle" id="profileBtn" onclick="window.location.href='/profile.html'" style="display:none;right:13rem;">&#128100; Profile</button>
-    <button class="theme-toggle" id="adminPanelBtn" onclick="window.location.href='/admin.html'" style="display:none;right:19rem;">&#9881; Admin</button>
+    <div class="header-btns">
+        <button class="theme-toggle" id="adminPanelBtn" onclick="window.location.href='/admin.html'" style="display:none;">&#9881; Admin</button>
+        <button class="theme-toggle" id="inboxBtn" onclick="openInboxModal()" style="display:none;">&#9993; <span id="inboxCount" style="font-size:.72rem;"></span></button>
+        <button class="theme-toggle" id="profileBtn" onclick="window.location.href='/profile.html'" style="display:none;">&#128100; Profile</button>
+        <button class="theme-toggle" id="signOutBtn" onclick="logout()" style="display:none;">&#9171; Sign Out</button>
+        <button class="theme-toggle" onclick="toggleTheme()" id="themeToggleBtn">&#127775; Light</button>
+    </div>
     <div class="header-inner">
         <div class="header-skull">&#9760;&#65039;</div>
         <div class="header-text">
@@ -174,6 +206,10 @@
         <button class="tab-btn" id="tabRankings"          onclick="switchTab('rankings')">&#127942; Global Rankings</button>
         <button class="tab-btn" id="tabProfile"           onclick="switchTab('profile')">&#128100; Player Profile</button>
         <button class="tab-btn" id="tabYoko"              onclick="switchTab('yoko')">&#127358; Yoko Stats</button>
+        <button class="tab-btn" id="tabMatchLog"             onclick="switchTab('match-log')">&#128211; Match Log</button>
+        <button class="tab-btn" id="tabTournaments"        onclick="switchTab('tournaments')" style="display:none">&#127941; Torneios</button>
+        <button class="tab-btn" id="tabCircuito"           onclick="switchTab('circuito')" style="display:none">&#9878; Circuito</button>
+        <button class="tab-btn" id="tabResults"            onclick="switchTab('results')" style="display:none">&#127942; Resultados</button>
     </div>
 
     <!-- Results -->
@@ -182,7 +218,7 @@
         <div class="pdf-toolbar">
             <button class="btn btn-outline" onclick="exportPDF()">&#128438; Export PDF</button>
             <button class="btn btn-outline" onclick="exportCSV()" style="margin-left:0.5rem;">&#128196; Export CSV</button>
-            <button class="btn btn-outline" onclick="toggleInspector()" id="inspectorBtn" style="margin-left:0.5rem;">&#128269; Inspect API Fields</button>
+            <button class="btn btn-outline" onclick="toggleInspector()" id="inspectorBtn" style="margin-left:0.5rem;display:none;">&#128269; Inspect API Fields</button>
         </div>
 
         <!-- API Field Inspector -->
@@ -1040,6 +1076,79 @@
         </div>
     </div>
 
+    <!-- Tournaments Tab -->
+    <div id="tournamentsTab" style="display:none;">
+
+        <!-- Sub-nav -->
+        <div class="tab-nav" style="margin-bottom:1rem;">
+            <button class="tab-btn active" id="trnTabBtn_lista"    onclick="switchTrnTab('lista')">&#128203; Lista</button>
+            <button class="tab-btn"        id="trnTabBtn_aovivo"   onclick="switchTrnTab('aovivo')">&#9654; Ao Vivo</button>
+        </div>
+
+        <!-- Lista panel -->
+        <div id="trnPanel_lista">
+
+            <!-- List card -->
+            <div class="card" id="tournamentListCard">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>&#127941; Torneios</span>
+                    <button class="btn btn-primary btn-sm" id="createTournamentBtn" onclick="openCreateTournamentModal()">+ Criar Torneio</button>
+                </div>
+                <div class="card-body" id="tournamentList" style="padding:0;">
+                    <p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>
+                </div>
+            </div>
+
+            <!-- Detail card -->
+            <div class="card" id="tournamentDetailCard" style="display:none;">
+                <div class="card-header" style="display:flex;align-items:center;gap:.75rem;">
+                    <button class="btn btn-outline btn-sm" onclick="closeTournamentDetail()">&#8592; Voltar</button>
+                    <span>Detalhes do Torneio</span>
+                </div>
+                <div class="card-body" id="tournamentDetailBody">
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Ao Vivo panel -->
+        <div id="trnPanel_aovivo" style="display:none;">
+            <div class="card">
+                <div class="card-header">
+                    <h2><span class="section-icon">&#9654;</span> Ao Vivo</h2>
+                </div>
+                <div class="card-body" id="liveContent">
+                    <p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Match Log Tab -->
+    <div id="matchLogTab" style="display:none;"></div>
+
+    <!-- Results Tab -->
+    <div id="resultsTab" style="display:none;">
+        <div class="card">
+            <div class="card-header">
+                <h2><span class="section-icon">&#127942;</span> Resultados dos Torneios</h2>
+            </div>
+            <div class="card-body" id="resultsContent">
+                <p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando resultados…</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Circuito Tab -->
+    <div id="circuitoTab" style="display:none;">
+        <div class="card">
+            <div class="card-body" id="circuitoPanelContent">
+                <p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- Opponent profile modal -->
@@ -1064,6 +1173,196 @@
         </div>
     </div>
 </div>
+
+    <!-- ── Create Tournament Modal ───────────────────── -->
+    <div id="createTournamentModal" class="modal-overlay" onclick="closeTournamentModal(event)" style="display:none;">
+        <div class="modal-box" style="max-width:540px;max-height:90vh;overflow-y:auto;">
+            <button class="modal-close" onclick="closeTournamentModal(null,true)">&#10005;</button>
+            <div class="modal-title">Novo Torneio</div>
+
+            <div style="display:grid;gap:.8rem;margin-top:1rem;">
+
+                <div>
+                    <div class="dash-label">Nome do torneio</div>
+                    <input type="text" id="tnName" placeholder="Ex: Liga Yoko — Abril"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+                    <div>
+                        <div class="dash-label">Data</div>
+                        <input type="date" id="tnDate"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <div class="dash-label">Formato</div>
+                        <select id="tnFormat" onchange="onTournamentFormatChange()"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                            <option value="swiss">Swiss</option>
+                            <option value="round_robin">Pontos Corridos</option>
+                            <option value="top_cut">Top Cut</option>
+                            <option value="swiss_top_cut">Swiss + Top Cut</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="tnSwissOptions" style="background:rgba(4,138,129,.08);border:1px solid rgba(4,138,129,.25);border-radius:8px;padding:.55rem .75rem;font-size:.8rem;color:var(--muted);">
+                    &#9432; No Swiss as rodadas s&#227;o indefinidas &#8212; os players jogam at&#233; restar somente um inv&#237;cto.
+                </div>
+
+                <div>
+                    <div class="dash-label" style="margin-bottom:.4rem;">Formato de Partida</div>
+                    <div style="display:flex;gap:1rem;">
+                        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.875rem;">
+                            <input type="radio" name="tnMatchFormat" value="md1"> MD1
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.875rem;">
+                            <input type="radio" name="tnMatchFormat" value="md3" checked> MD3
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.875rem;">
+                            <input type="radio" name="tnMatchFormat" value="md5"> MD5
+                        </label>
+                    </div>
+                </div>
+
+                <div id="tnTopCutOptions" style="display:none;">
+                    <div class="dash-label">Tamanho do Top Cut</div>
+                    <select id="tnTopCutSize"
+                        style="padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="4">Top 4</option>
+                        <option value="8" selected>Top 8</option>
+                        <option value="16">Top 16</option>
+                    </select>
+                </div>
+
+                <div id="tnSwissTopCutOpts" style="display:none;">
+                    <div class="dash-label">Tamanho do Top Cut (após Swiss)</div>
+                    <select id="tnSwissTopCutSize"
+                        style="padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="4">Top 4</option>
+                        <option value="8" selected>Top 8</option>
+                        <option value="16">Top 16</option>
+                    </select>
+                </div>
+
+                <div>
+                    <div class="dash-label">Circuito (opcional)</div>
+                    <select id="tnCircuitId"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="">— sem circuito —</option>
+                    </select>
+                </div>
+
+                <div>
+                    <div class="dash-label" style="margin-bottom:.4rem;">Participantes</div>
+
+                    <div style="position:relative;margin-bottom:.5rem;">
+                        <input type="text" id="tnPlayerSearch" placeholder="&#128269; Buscar player cadastrado&#8230;"
+                            oninput="onTournamentPlayerSearch()" autocomplete="off"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                        <div id="tnPlayerAC" class="player-autocomplete" style="display:none;position:absolute;z-index:200;width:100%;top:calc(100% + 2px);"></div>
+                    </div>
+
+                    <div style="display:flex;gap:.5rem;margin-bottom:.75rem;">
+                        <input type="text" id="tnGuestName" placeholder="Nome do convidado&#8230;"
+                            onkeydown="if(event.key==='Enter')addTournamentGuest()"
+                            style="flex:1;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;">
+                        <button class="btn btn-outline btn-sm" onclick="addTournamentGuest()">+ Convidado</button>
+                    </div>
+
+                    <div id="tnParticipantsList"
+                        style="min-height:44px;padding:.5rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);display:flex;flex-wrap:wrap;gap:.35rem;align-content:flex-start;">
+                        <span style="color:var(--muted);font-size:.8rem;align-self:center;">Nenhum participante adicionado</span>
+                    </div>
+                    <div id="tnParticipantsCount" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;">0 participantes</div>
+                </div>
+
+            </div>
+
+            <div style="display:flex;gap:.5rem;margin-top:1.25rem;justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeTournamentModal(null,true)">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitCreateTournament()">&#10003; Criar Torneio</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Edit Tournament Modal ─────────────────────── -->
+    <div id="editTournamentModal" class="modal-overlay" onclick="closeEditTournamentModal(event)" style="display:none;">
+        <div class="modal-box" style="max-width:460px;">
+            <button class="modal-close" onclick="closeEditTournamentModal(null,true)">&#10005;</button>
+            <div class="modal-title">Editar Torneio</div>
+
+            <div style="display:grid;gap:.8rem;margin-top:1rem;">
+                <div>
+                    <div class="dash-label">Nome</div>
+                    <input type="text" id="etName"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+                    <div>
+                        <div class="dash-label">Data</div>
+                        <input type="date" id="etDate"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <div class="dash-label">Formato do torneio</div>
+                        <select id="etFormat"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                            <option value="swiss">Swiss</option>
+                            <option value="round_robin">Pontos Corridos</option>
+                            <option value="top_cut">Top Cut</option>
+                            <option value="swiss_top_cut">Swiss + Top Cut</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="etTopCutWrap">
+                    <div class="dash-label">Tamanho do Top Cut</div>
+                    <select id="etTopCutSize"
+                        style="padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="4">Top 4</option>
+                        <option value="8">Top 8</option>
+                        <option value="16">Top 16</option>
+                    </select>
+                </div>
+
+                <div id="etSwissTopCutWrap" style="display:none;">
+                    <div class="dash-label">Tamanho do Top Cut (após Swiss)</div>
+                    <select id="etSwissTopCutSize"
+                        style="padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="4">Top 4</option>
+                        <option value="8">Top 8</option>
+                        <option value="16">Top 16</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="dash-label">Circuito</div>
+                    <select id="etCircuitId"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="">— sem circuito —</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="dash-label" style="margin-bottom:.4rem;">Formato de Partida</div>
+                    <div style="display:flex;gap:1rem;">
+                        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.875rem;">
+                            <input type="radio" name="etMatchFormat" value="md1"> MD1
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.875rem;">
+                            <input type="radio" name="etMatchFormat" value="md3"> MD3
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.875rem;">
+                            <input type="radio" name="etMatchFormat" value="md5"> MD5
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:.5rem;margin-top:1.25rem;justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeEditTournamentModal(null,true)">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitEditTournament()">&#10003; Salvar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ── Profile Modal ─────────────────────────────── -->
     <div id="profileModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:1rem;" onclick="if(event.target===this)closeProfileModal()">
@@ -1099,6 +1398,174 @@
 </div>
 
 
+    <!-- ── Placements Modal ─────────────────────────────────── -->
+    <div id="placementsModal" class="modal-overlay" onclick="closePlacementsModal(event)" style="display:none;">
+        <div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto;">
+            <button class="modal-close" onclick="closePlacementsModal(null,true)">&#10005;</button>
+            <div class="modal-title">&#127942; Registrar Colocações</div>
+            <p style="font-size:.8rem;color:var(--muted);margin-top:.5rem;">Registre as colocações finais. Players cadastrados no top 4 recebem badges automaticamente.</p>
+            <div id="placementsBody" style="margin-top:1rem;display:grid;gap:.5rem;"></div>
+            <div style="display:flex;gap:.5rem;margin-top:1.25rem;justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closePlacementsModal(null,true)">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitPlacements()">&#10003; Salvar Colocações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Clone Tournament Modal ───────────────────────────── -->
+    <div id="cloneTournamentModal" class="modal-overlay" onclick="closeCloneTournamentModal(event)" style="display:none;">
+        <div class="modal-box" style="max-width:380px;">
+            <button class="modal-close" onclick="closeCloneTournamentModal(null,true)">&#10005;</button>
+            <div class="modal-title">&#128203; Clonar Torneio</div>
+            <p style="font-size:.8rem;color:var(--muted);margin-top:.3rem;">Cria um novo torneio com os mesmos participantes e formato.</p>
+            <div style="display:grid;gap:.8rem;margin-top:1rem;">
+                <div>
+                    <div class="dash-label">Nome *</div>
+                    <input type="text" id="cloneTrnName" style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div>
+                    <div class="dash-label">Data *</div>
+                    <input type="date" id="cloneTrnDate" style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+            </div>
+            <div style="display:flex;gap:.5rem;margin-top:1.25rem;justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeCloneTournamentModal(null,true)">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitCloneTournament()">&#128203; Clonar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Create Circuit Modal ──────────────────────────────── -->
+    <div id="createCircuitModal" class="modal-overlay" onclick="closeCreateCircuitModal(event)" style="display:none;">
+        <div class="modal-box" style="max-width:480px;max-height:90vh;overflow-y:auto;">
+            <button class="modal-close" onclick="closeCreateCircuitModal(null,true)">&#10005;</button>
+            <div class="modal-title">+ Novo Circuito</div>
+            <div style="display:grid;gap:.8rem;margin-top:1rem;">
+                <div>
+                    <div class="dash-label">Nome do Circuito *</div>
+                    <input type="text" id="crcName" placeholder="Ex: Liga Yoko 2026"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div>
+                    <div class="dash-label">Temporada</div>
+                    <input type="text" id="crcSeason" placeholder="Ex: S1"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+                    <div>
+                        <div class="dash-label">Data de início</div>
+                        <input type="date" id="crcStartDate"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <div class="dash-label">Data de término</div>
+                        <input type="date" id="crcEndDate"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    </div>
+                </div>
+                <div>
+                    <div class="dash-label">Bônus por vitória (pontos)</div>
+                    <input type="number" id="crcWinBonus" value="0" step="0.1" min="0"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div>
+                    <div class="dash-label" style="margin-bottom:.5rem;">Pontos por colocação</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem;">
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">1°:</span><input type="number" id="crcPt1" value="10" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">2°:</span><input type="number" id="crcPt2" value="7" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">3-4°:</span><input type="number" id="crcPt34" value="5" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">5-8°:</span><input type="number" id="crcPt58" value="3" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">Outros:</span><input type="number" id="crcPtDef" value="1" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="dash-label" style="margin-bottom:.4rem;">Participantes</div>
+                    <input type="text" id="crcParticipantSearch" placeholder="&#128269; Filtrar jogadores…" oninput="onCrcParticipantSearch()"
+                        style="width:100%;padding:.4rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;margin-bottom:.4rem;">
+                    <div id="crcParticipantsList"
+                        style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:.25rem 0;background:var(--bg);">
+                    </div>
+                    <div id="crcSelectedChips" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem;min-height:24px;"></div>
+                </div>
+            </div>
+            <div style="display:flex;gap:.5rem;margin-top:1.25rem;justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeCreateCircuitModal(null,true)">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitCreateCircuit()">&#10003; Criar Circuito</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Edit Circuit Modal ────────────────────────────────── -->
+    <div id="editCircuitModal" class="modal-overlay" onclick="closeEditCircuitModal(event)" style="display:none;">
+        <div class="modal-box" style="max-width:480px;max-height:90vh;overflow-y:auto;">
+            <input type="hidden" id="editCircuitId">
+            <button class="modal-close" onclick="closeEditCircuitModal(null,true)">&#10005;</button>
+            <div class="modal-title">&#9998; Editar Circuito</div>
+            <div style="display:grid;gap:.8rem;margin-top:1rem;">
+                <div>
+                    <div class="dash-label">Nome do Circuito *</div>
+                    <input type="text" id="ecrcName"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div>
+                    <div class="dash-label">Temporada</div>
+                    <input type="text" id="ecrcSeason"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+                    <div>
+                        <div class="dash-label">Data de início</div>
+                        <input type="date" id="ecrcStartDate"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <div class="dash-label">Data de término</div>
+                        <input type="date" id="ecrcEndDate"
+                            style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    </div>
+                </div>
+                <div>
+                    <div class="dash-label">Bônus por vitória (pontos)</div>
+                    <input type="number" id="ecrcWinBonus" value="0" step="0.1" min="0"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div>
+                    <div class="dash-label" style="margin-bottom:.5rem;">Pontos por colocação</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.82rem;">
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">1°:</span><input type="number" id="ecrcPt1" value="10" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">2°:</span><input type="number" id="ecrcPt2" value="7" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">3-4°:</span><input type="number" id="ecrcPt34" value="5" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">5-8°:</span><input type="number" id="ecrcPt58" value="3" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                        <div style="display:flex;align-items:center;gap:.4rem;"><span style="min-width:55px;">Outros:</span><input type="number" id="ecrcPtDef" value="1" min="0" style="width:55px;padding:.3rem .45rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="dash-label" style="margin-bottom:.4rem;">Participantes</div>
+                    <input type="text" id="ecrcParticipantSearch" placeholder="&#128269; Filtrar jogadores…" oninput="onEcrcParticipantSearch()"
+                        style="width:100%;padding:.4rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;margin-bottom:.4rem;">
+                    <div id="ecrcParticipantsList"
+                        style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:.25rem 0;background:var(--bg);">
+                    </div>
+                    <div id="ecrcSelectedChips" style="display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem;min-height:24px;"></div>
+                </div>
+            </div>
+            <div style="display:flex;gap:.5rem;margin-top:1.25rem;align-items:center;">
+                <button class="btn btn-danger btn-sm" onclick="deleteCircuit(document.getElementById('editCircuitId').value)" style="margin-right:auto;background:rgba(220,53,69,.1);border-color:var(--loss);color:var(--loss);">&#128465; Excluir</button>
+                <button class="btn btn-outline" onclick="closeEditCircuitModal(null,true)">Cancelar</button>
+                <button class="btn btn-primary" onclick="submitEditCircuit()">&#10003; Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Inbox Modal ───────────────────────────────────────── -->
+    <div id="inboxModal" class="modal-overlay" onclick="if(event.target===this)closeInboxModal()" style="display:none;">
+        <div class="modal-box" style="max-width:480px;max-height:85vh;overflow-y:auto;">
+            <button class="modal-close" onclick="closeInboxModal()">&#10005;</button>
+            <div class="modal-title">&#9993; Mensagens</div>
+            <div id="inboxModalBody" style="margin-top:1rem;display:grid;gap:.6rem;"></div>
+        </div>
+    </div>
+
 <script src="js/state.js"></script>
 <script src="js/constants.js"></script>
 <script src="js/utils.js"></script>
@@ -1114,8 +1581,91 @@
 <script src="js/inspector.js"></script>
 <script src="js/yoko.js"></script>
 <script src="js/player-profile.js"></script>
+<script src="js/tournaments.js?v=2"></script>
+<script src="js/match-tracker.js"></script>
 <script src="js/theme.js"></script>
 <script>
+// ── Inbox modal ───────────────────────────────────────────────────────────────
+function _renderInboxBody(msgs) {
+    const body = document.getElementById('inboxModalBody');
+    if (!msgs.length) {
+        body.innerHTML = '<p style="color:var(--muted);font-size:.85rem;text-align:center;padding:1rem 0;">Nenhuma mensagem.</p>';
+    } else {
+        body.innerHTML = msgs.map(m => `
+            <div style="background:var(--bg);border:1px solid ${m.read ? 'var(--border)' : 'var(--accent)'};border-radius:8px;padding:.7rem .85rem;font-size:.85rem;cursor:pointer;" onclick="markInboxRead('${m.id}',this)" id="imsg-${m.id}">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.3rem;">
+                    <span style="font-weight:700;color:var(--accent);">&#9993; ${m.fromName || 'Admin'}</span>
+                    <span style="font-size:.72rem;color:var(--muted);">${new Date(m.createdAt).toLocaleString('pt-BR')}</span>
+                </div>
+                <div style="line-height:1.5;color:var(--text);">${m.message}</div>
+                ${!m.read ? '<div style="font-size:.7rem;color:var(--accent);margin-top:.3rem;font-weight:600;">● Nova</div>' : ''}
+            </div>`).join('');
+    }
+}
+function openInboxModal() {
+    const body = document.getElementById('inboxModalBody');
+    body.innerHTML = '<p style="color:var(--muted);font-size:.85rem;text-align:center;padding:1rem 0;">Carregando…</p>';
+    document.getElementById('inboxModal').style.display = 'flex';
+    fetch(`${AUTH_BASE}/inbox`, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : [])
+        .then(msgs => {
+            window._inboxMsgs = msgs;
+            const unread = msgs.filter(m => !m.read).length;
+            const countEl = document.getElementById('inboxCount');
+            if (countEl) countEl.textContent = unread ? `(${unread})` : '';
+            _renderInboxBody(msgs);
+        })
+        .catch(() => { body.innerHTML = '<p style="color:var(--loss);font-size:.85rem;text-align:center;">Erro ao carregar.</p>'; });
+}
+function closeInboxModal() { document.getElementById('inboxModal').style.display = 'none'; }
+function markInboxRead(msgId, el) {
+    fetch(`${AUTH_BASE}/inbox/${msgId}/read`, { method: 'POST', credentials: 'include' });
+    if (window._inboxMsgs) {
+        const m = window._inboxMsgs.find(x => x.id === msgId);
+        if (m) m.read = true;
+    }
+    el.style.borderColor = 'var(--border)';
+    const badge = el.querySelector('[style*="Nova"]');
+    if (badge) badge.remove();
+    const unread = (window._inboxMsgs || []).filter(m => !m.read).length;
+    const countEl = document.getElementById('inboxCount');
+    if (countEl) countEl.textContent = unread ? `(${unread})` : '';
+}
+
+// ── Push notifications ────────────────────────────────────────────────────────
+function _b64uToUint8(b64u) {
+    const s = (b64u + '==='.slice((b64u.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+async function _initPush() {
+    try {
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+            // Keepalive: ensure server has current subscription
+            fetch(`${AUTH_BASE}/push/subscribe`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(existing.toJSON()),
+            }).catch(() => {});
+            return;
+        }
+        if (Notification.permission === 'denied') return;
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') return;
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _b64uToUint8(VAPID_PUBLIC_KEY),
+        });
+        fetch(`${AUTH_BASE}/push/subscribe`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sub.toJSON()),
+        }).catch(() => {});
+    } catch (e) { console.warn('Push registration failed:', e); }
+}
+
 // ── Player profile directory & modal ──────────────────────────────────────
 // App.profileDirectory: { 'name_lower' → publicProfile }
 
@@ -1385,6 +1935,13 @@ function loadFromCache() {
         dotEl.className = 'dash-dot ok';
         const statusEl = document.getElementById('fileStatus');
         statusEl.textContent = statusEl.textContent.replace(' loaded', ' loaded · server');
+
+        // Non-admins: hide only the player selector (locked to own player)
+        if (user.role !== 'admin') {
+            const playerRow = document.querySelector('.dash-player');
+            if (playerRow) playerRow.style.display = 'none';
+        }
+
         if (user.bandaiName) {
             const idx = App.usersWithToken.findIndex(
                 u => u.name.toLowerCase() === user.bandaiName.toLowerCase()
@@ -1392,6 +1949,8 @@ function loadFromCache() {
             if (idx !== -1) {
                 document.getElementById('userSelect').value = idx;
                 onUserChange();
+                // Auto-fetch for non-admins so their stats load immediately
+                if (user.role !== 'admin') fetchAndAnalyze();
             }
         }
     } catch {

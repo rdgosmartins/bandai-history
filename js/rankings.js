@@ -1,17 +1,29 @@
 // ── Global Rankings ────────────────────────────────────────────────────────
 
 function switchTab(tab) {
-    document.getElementById('results').style.display      = tab === 'my-stats' ? '' : 'none';
-    document.getElementById('rankingsTab').style.display  = tab === 'rankings' ? '' : 'none';
-    document.getElementById('profileTab').style.display   = tab === 'profile'  ? '' : 'none';
-    document.getElementById('yokoTab').style.display      = tab === 'yoko'     ? '' : 'none';
-    document.getElementById('tabMyStats').classList.toggle('active',  tab === 'my-stats');
-    document.getElementById('tabRankings').classList.toggle('active', tab === 'rankings');
-    document.getElementById('tabProfile').classList.toggle('active',  tab === 'profile');
-    document.getElementById('tabYoko').classList.toggle('active',     tab === 'yoko');
-    if (tab === 'rankings') buildGlobalRankings();
-    if (tab === 'profile')  { buildProfileSelect(); loadPlayerProfile(); }
-    if (tab === 'yoko')     { renderYokoBadges(); loadYokoTab(); }
+    document.getElementById('results').style.display          = tab === 'my-stats'    ? '' : 'none';
+    document.getElementById('rankingsTab').style.display      = tab === 'rankings'    ? '' : 'none';
+    document.getElementById('profileTab').style.display       = tab === 'profile'     ? '' : 'none';
+    document.getElementById('yokoTab').style.display          = tab === 'yoko'        ? '' : 'none';
+    document.getElementById('matchLogTab').style.display      = tab === 'match-log'   ? '' : 'none';
+    document.getElementById('tournamentsTab').style.display   = tab === 'tournaments' ? '' : 'none';
+    document.getElementById('resultsTab').style.display       = tab === 'results'     ? '' : 'none';
+    document.getElementById('circuitoTab').style.display      = tab === 'circuito'    ? '' : 'none';
+    document.getElementById('tabMyStats').classList.toggle('active',      tab === 'my-stats');
+    document.getElementById('tabRankings').classList.toggle('active',     tab === 'rankings');
+    document.getElementById('tabProfile').classList.toggle('active',      tab === 'profile');
+    document.getElementById('tabYoko').classList.toggle('active',         tab === 'yoko');
+    document.getElementById('tabMatchLog').classList.toggle('active',     tab === 'match-log');
+    document.getElementById('tabTournaments').classList.toggle('active',  tab === 'tournaments');
+    document.getElementById('tabResults').classList.toggle('active',      tab === 'results');
+    document.getElementById('tabCircuito').classList.toggle('active',     tab === 'circuito');
+    if (tab === 'rankings')    buildGlobalRankings();
+    if (tab === 'profile')     { buildProfileSelect(); loadPlayerProfile(); }
+    if (tab === 'yoko')        { renderYokoBadges(); loadYokoTab(); }
+    if (tab === 'match-log')   loadMatchLog();
+    if (tab === 'tournaments') loadTournaments();
+    if (tab === 'results')     loadCircuitStandings();
+    if (tab === 'circuito')    loadCircuitStandings();
 }
 
 
@@ -82,6 +94,7 @@ function _applyRankFilter(events) {
         if (!ev?.rounds) return false;
         if (ev._start_datetime) {
             const dateStr = ev._start_datetime.slice(0, 10);
+            if (EXCLUDED_DATES.includes(dateStr)) return false;
             const year    = dateStr.slice(0, 4);
             if (years.size > 0 && !years.has(year)) return false;
             // Only filter by period if the event's period has a chip — unknown periods pass through
@@ -861,7 +874,7 @@ function computeCompetitiveBadges() {
     // Build per-player event lists from cache
     const players = App.usersWithToken.map(user => {
         const evs = Object.values(loadCache(user.bandaiId))
-            .filter(ev => ev?.rounds && ev._start_datetime);
+            .filter(ev => ev?.rounds && ev._start_datetime && !EXCLUDED_DATES.includes(ev._start_datetime.slice(0, 10)));
         return { user, evs };
     }).filter(p => p.evs.length > 0);
 
