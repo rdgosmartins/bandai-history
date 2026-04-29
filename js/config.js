@@ -125,8 +125,11 @@ function saveCache(bandaiId, cache) {
 // Pulls KV cache for a bandaiId and merges into localStorage.
 // Local entries win in case of conflict (most recently fetched device wins).
 async function pullServerCache(bandaiId) {
+    const ac = new AbortController();
+    const t  = setTimeout(() => ac.abort(), 10_000);
     try {
-        const r = await fetch(`${AUTH_BASE}/cache/${bandaiId}`, { credentials: 'include' });
+        const r = await fetch(`${AUTH_BASE}/cache/${bandaiId}`, { credentials: 'include', signal: ac.signal });
+        clearTimeout(t);
         if (!r.ok) return;
         const serverCache = await r.json();
         if (!serverCache || !Object.keys(serverCache).length) return;
@@ -135,7 +138,8 @@ async function pullServerCache(bandaiId) {
         localStorage.setItem(cacheKey(bandaiId), JSON.stringify(merged));
         console.log(`[Cache] Merged ${Object.keys(serverCache).length} server events for ${bandaiId} (local: ${Object.keys(localCache).length}, merged: ${Object.keys(merged).length})`);
     } catch (e) {
-        console.warn('[Cache] Could not pull server cache:', e);
+        clearTimeout(t);
+        if (e.name !== 'AbortError') console.warn('[Cache] Could not pull server cache:', e);
     }
 }
 

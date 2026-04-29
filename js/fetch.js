@@ -16,11 +16,13 @@ async function fetchUserEvents(user, onProgress) {
         `${BASE}&past_event_display_flg=1&selected_tab=2`,
     ];
     const tabResults = await Promise.all(
-        tabCombos.map((url, i) =>
-            fetch(url, { headers: { 'X-Authentication': token } })
+        tabCombos.map((url, i) => {
+            const ac = new AbortController();
+            setTimeout(() => ac.abort(), 15_000);
+            return fetch(url, { headers: { 'X-Authentication': token }, signal: ac.signal })
                 .then(r => r.ok ? r.json().then(j => ({ tab: i + 1, url, count: j?.success?.events?.length ?? 0, events: j?.success?.events ?? [] })) : { tab: i + 1, url, count: 0, events: [] })
-                .catch(() => ({ tab: i + 1, url, count: 0, events: [] }))
-        )
+                .catch(() => ({ tab: i + 1, url, count: 0, events: [] }));
+        })
     );
     console.log('[BandaiTabs]', tabResults.map(r => `tab${r.tab}(${r.url.split('selected_tab=')[1]}): ${r.count} events`));
     const eventMap = new Map();
@@ -68,11 +70,14 @@ async function fetchUserEvents(user, onProgress) {
 
     // Helper: fetch event detail from /api/user/my/event/{id}
     async function fetchEventDetail(eventId) {
+        const ac = new AbortController();
+        const t  = setTimeout(() => ac.abort(), 10_000);
         try {
             const r = await fetch(
                 `${BANDAI_API_BASE}/api/user/my/event/${eventId}`,
-                { headers: baseHeaders }
+                { headers: baseHeaders, signal: ac.signal }
             );
+            clearTimeout(t);
             if (!r.ok) return null;
             const ev = (await r.json())?.success?.event;
             if (!ev) return null;
@@ -83,7 +88,10 @@ async function fetchUserEvents(user, onProgress) {
                 entry_fee_currency: ev.entry_fee_currency_code ?? null,
                 status:             ev.status_name             ?? null,
             };
-        } catch { return null; }
+        } catch (e) {
+            clearTimeout(t);
+            return null;
+        }
     }
 
     if (newEvents.length > 0) {
@@ -93,10 +101,13 @@ async function fetchUserEvents(user, onProgress) {
                 `${user.name}: fetching ${i + 1}/${newEvents.length} new events (${cachedCount} cached)…`,
                 Math.round((i / newEvents.length) * 100)
             );
+            const evAc   = new AbortController();
+            const evT    = setTimeout(() => evAc.abort(), 15_000);
             const evResp = await fetch(
                 `${BANDAI_API_BASE}/api/user/event/${ev.id}/history`,
-                { headers: baseHeaders }
+                { headers: baseHeaders, signal: evAc.signal }
             );
+            clearTimeout(evT);
             if (evResp.ok) {
                 const evData = (await evResp.json()).success;
                 evData._start_datetime  = ev.start_datetime;
@@ -189,10 +200,14 @@ async function syncAllUsers() {
             const pctNext = Math.round(((u + 1) / App.usersWithToken.length) * 90);
             setProgress(`Syncing ${u + 1}/${App.usersWithToken.length}: ${user.name}…`, pctBase);
             try {
-                const { newCount, totalCount } = await fetchUserEvents(user, (text, pct) => {
+                const fetchPromise = fetchUserEvents(user, (text, pct) => {
                     const scaled = pctBase + Math.round(pct / 100 * (pctNext - pctBase));
                     setProgress(text, scaled);
                 });
+                const timeoutPromise = new Promise((_, rej) =>
+                    setTimeout(() => rej(new Error(`Timeout — ${user.name} levou mais de 3 min`)), 180_000)
+                );
+                const { newCount, totalCount } = await Promise.race([fetchPromise, timeoutPromise]);
                 results.push({ name: user.name, newCount, totalCount, error: null });
             } catch (err) {
                 results.push({ name: user.name, newCount: 0, totalCount: 0, error: err.message });

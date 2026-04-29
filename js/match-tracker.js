@@ -18,12 +18,16 @@ async function loadMatchLog() {
     el.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
             <h2 style="margin:0;font-size:1.15rem;">&#129527; Log Pose</h2>
-            <button class="btn btn-primary btn-sm" onclick="openCreateMatchModal()">+ Add Tournament</button>
+            <div style="display:flex;gap:.5rem;align-items:center;">
+                <button class="btn btn-outline btn-sm" onclick="openLogPoseHelp()" style="font-size:.8rem;padding:.22rem .6rem;">? Como usar</button>
+                <button class="btn btn-primary btn-sm" onclick="openCreateMatchModal()">+ Add Tournament</button>
+            </div>
         </div>
         <div id="mlList"><p style="color:var(--muted);text-align:center;padding:3rem 0;">Carregando…</p></div>
         ${_mlCreateModalHtml()}
         ${_mlRoundTypeModalHtml()}
         ${_mlRoundDetailModalHtml()}
+        ${_mlHelpModalHtml()}
     `;
     try {
         const [matchRes, authUser] = await Promise.all([
@@ -48,7 +52,7 @@ function _renderMatchList() {
         return;
     }
     const sorted = [..._mlMatches].sort((a, b) => (a.closed ? 1 : 0) - (b.closed ? 1 : 0));
-    el.innerHTML = sorted.map(m => _mlCardHtml(m)).join('');
+    el.innerHTML = _mlGlobalStatsHtml() + sorted.map(m => _mlCardHtml(m)).join('');
 }
 
 function _mlCardHtml(m) {
@@ -68,7 +72,7 @@ function _mlCardHtml(m) {
             <thead>
                 <tr style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;">
                     <th style="text-align:left;padding:.2rem .4rem;">Round</th>
-                    <th style="text-align:left;padding:.2rem .4rem;">Deck</th>
+                    <th style="text-align:left;padding:.2rem .4rem;">Oponente</th>
                     <th style="text-align:center;padding:.2rem .4rem;">Dice</th>
                     <th style="text-align:center;padding:.2rem .4rem;">Order</th>
                     <th style="text-align:center;padding:.2rem .4rem;">Result</th>
@@ -95,11 +99,12 @@ function _mlCardHtml(m) {
     <div class="card" style="margin-bottom:1rem;${cardBorder}">
         <div class="card-body" style="padding:.9rem 1rem;">
             <div style="display:flex;gap:.9rem;align-items:flex-start;">
-                <div style="position:relative;flex-shrink:0;">
+                <div style="position:relative;flex-shrink:0;text-align:center;">
                     ${imgSrc
                         ? `<img src="${imgSrc}" alt="${leaderName}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;display:block;" onerror="this.style.display='none'">`
                         : `<div style="width:60px;height:60px;background:var(--card-bg,#e9ecef);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">🃏</div>`}
                     <span style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:${scoreColor};color:#fff;font-weight:700;font-size:.72rem;padding:.1rem .38rem;border-radius:8px;white-space:nowrap;">${w}–${l}</span>
+                    <div style="margin-top:14px;font-size:.6rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62px;" title="${leaderName}">${m.leaderId ? leaderName.split(' ')[0] : ''}</div>
                 </div>
                 <div style="flex:1;min-width:0;">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
@@ -117,6 +122,73 @@ function _mlCardHtml(m) {
             ${m.bandaiEventId ? _mlStandingsHtml(m) : ''}
             ${bottomButtons}
         </div>
+    </div>`;
+}
+
+function _mlGlobalStatsHtml() {
+    const allRounds = [];
+    for (const m of _mlMatches) {
+        for (const r of (m.rounds || [])) {
+            if (r.type !== 'bye' && r.won != null) allRounds.push({ m, r });
+        }
+    }
+    if (allRounds.length < 3) return '';
+
+    const myDecks  = {};
+    const oppDecks = {};
+    for (const { m, r } of allRounds) {
+        if (m.leaderId) {
+            if (!myDecks[m.leaderId]) myDecks[m.leaderId] = { w: 0, l: 0 };
+            r.won ? myDecks[m.leaderId].w++ : myDecks[m.leaderId].l++;
+        }
+        if (r.opponentLeaderId) {
+            if (!oppDecks[r.opponentLeaderId]) oppDecks[r.opponentLeaderId] = { w: 0, l: 0 };
+            r.won ? oppDecks[r.opponentLeaderId].w++ : oppDecks[r.opponentLeaderId].l++;
+        }
+    }
+
+    function deckCards(map) {
+        return Object.entries(map)
+            .sort(([, a], [, b]) => {
+                const ta = a.w + a.l, tb = b.w + b.l;
+                return (b.w / tb) - (a.w / ta) || tb - ta;
+            })
+            .map(([id, { w, l }]) => {
+                const total = w + l;
+                const pct   = Math.round(w / total * 100);
+                const c     = pct >= 60 ? 'var(--win,#28a745)' : (pct <= 40 ? 'var(--loss,#dc3545)' : 'var(--text,#555)');
+                const name  = TRN_LEADERS.find(x => x.id === id)?.name ?? id;
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:.15rem;min-width:50px;" title="${_esc(name)}">
+                    <img src="${_leaderImgUrl(id)}" style="width:34px;height:34px;object-fit:cover;border-radius:5px;border:2px solid ${c};" onerror="this.style.display='none'">
+                    <span style="font-size:.63rem;color:var(--muted);">${w}V ${l}D</span>
+                    <span style="font-size:.67rem;font-weight:700;color:${c};">${pct}%</span>
+                </div>`;
+            }).join('');
+    }
+
+    const myHtml  = Object.keys(myDecks).length  ? deckCards(myDecks)  : '';
+    const oppHtml = Object.keys(oppDecks).length ? deckCards(oppDecks) : '';
+    if (!myHtml && !oppHtml) return '';
+
+    const totalW = allRounds.filter(x => x.r.won).length;
+    const totalL = allRounds.filter(x => !x.r.won).length;
+    const gPct   = Math.round(totalW / (totalW + totalL) * 100);
+    const gColor = gPct >= 60 ? 'var(--win,#28a745)' : (gPct <= 40 ? 'var(--loss,#dc3545)' : 'var(--text,#555)');
+
+    return `
+    <div style="margin-bottom:1.1rem;padding:.65rem .85rem;background:var(--card,#fff);border:1px solid var(--border,#dee2e6);border-radius:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.55rem;">
+            <span style="font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;">Estatísticas globais</span>
+            <span style="font-size:.78rem;font-weight:700;color:${gColor};">${totalW}V ${totalL}D &nbsp;<span style="font-size:.72rem;">(${gPct}%)</span></span>
+        </div>
+        ${myHtml ? `<div style="margin-bottom:.55rem;">
+            <div style="font-size:.7rem;color:var(--muted);margin-bottom:.3rem;">Meu deck</div>
+            <div style="display:flex;gap:.45rem;flex-wrap:wrap;">${myHtml}</div>
+        </div>` : ''}
+        ${oppHtml ? `<div>
+            <div style="font-size:.7rem;color:var(--muted);margin-bottom:.3rem;">Vs. oponentes</div>
+            <div style="display:flex;gap:.45rem;flex-wrap:wrap;">${oppHtml}</div>
+        </div>` : ''}
     </div>`;
 }
 
@@ -346,13 +418,16 @@ function _mlRoundRowHtml(r, num) {
         : (r.won === false ? `<span style="color:var(--loss,#dc3545);font-size:1.1rem;">❌</span>` : '—');
     const rowBg = r.won === true ? 'rgba(40,167,69,.06)' : (r.won === false ? 'rgba(220,53,69,.06)' : '');
 
+    const noteRow = r.note
+        ? `<tr style="background:${rowBg};"><td style="padding:0 .4rem .3rem;"></td><td colspan="4" style="padding:0 .4rem .3rem;font-size:.71rem;color:var(--muted);font-style:italic;">"${_esc(r.note)}"</td></tr>`
+        : '';
     return `<tr style="background:${rowBg};">
         <td style="padding:.3rem .4rem;"><strong style="color:${r.won === true ? 'var(--win,#28a745)' : (r.won === false ? 'var(--loss,#dc3545)' : 'var(--muted)')};">${num}</strong>${topCutBadge}</td>
         <td style="padding:.3rem .4rem;">${oppImg}${oppNameHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${diceHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${orderHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${resultHtml}</td>
-    </tr>`;
+    </tr>${noteRow}`;
 }
 
 // ── Create Tournament Modal ────────────────────────────────────────────────────
@@ -573,6 +648,10 @@ function _mlRoundDetailModalHtml() {
             <div style="margin-bottom:1.25rem;">
                 <button id="mlResultBtn" onclick="mlToggle('result')" class="ml-toggle-btn ml-toggle-lost" style="width:100%;">✕ &nbsp;Lost Match</button>
             </div>
+            <div style="margin-bottom:1.25rem;">
+                <label style="display:block;font-weight:700;margin-bottom:.45rem;">Nota <span style="font-weight:400;color:var(--muted);font-size:.8rem;">(opcional)</span></label>
+                <textarea id="mlRoundNote" rows="2" style="width:100%;box-sizing:border-box;padding:.55rem .75rem;border:1.5px solid var(--border,#dee2e6);border-radius:8px;font-size:.85rem;background:var(--bg,#f8f9fa);color:var(--text,#1a1a2e);resize:vertical;" placeholder="Jogada decisiva, misplay, observação…"></textarea>
+            </div>
             <button onclick="submitAddRound()" style="display:block;width:100%;background:#6c757d;color:#fff;border:none;border-radius:8px;padding:.75rem;font-size:.95rem;font-weight:600;cursor:pointer;">Add Round</button>
         </div>
     </div>
@@ -625,6 +704,7 @@ async function openRoundDetailModal() {
     document.getElementById('mlRoundOppLeaderId').value = '';
     document.getElementById('mlRoundOppName').value = '';
     document.getElementById('mlOppNameHint').style.display = 'none';
+    document.getElementById('mlRoundNote').value = '';
 
     // Auto-suggest opponent name + result from Bandai cache
     if (m?.bandaiEventId) {
@@ -669,7 +749,8 @@ async function submitAddRound() {
     const wonDice   = document.getElementById('mlDiceBtn').dataset.won   === '1';
     const wentFirst = document.getElementById('mlOrderBtn').dataset.first === '1';
     const won       = document.getElementById('mlResultBtn').dataset.won  === '1';
-    const round = { type, opponentLeaderId, opponentName, wonDice, wentFirst, won };
+    const note      = document.getElementById('mlRoundNote').value.trim() || null;
+    const round = { type, opponentLeaderId, opponentName, wonDice, wentFirst, won, note };
     const rounds = [...m.rounds, round];
     closeRoundDetailModal();
     await _mlSaveRounds(matchId, rounds);
@@ -717,6 +798,95 @@ async function deleteMatch(matchId) {
         _renderMatchList();
     } catch (e) { alert('Erro: ' + e.message); }
 }
+
+// ── Help Modal ────────────────────────────────────────────────────────────────
+
+function _mlHelpModalHtml() {
+    return `
+    <div id="mlHelpModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:3100;overflow-y:auto;" onclick="if(event.target===this)closeLogPoseHelp()">
+        <div style="background:var(--card,#fff);border-radius:14px;max-width:540px;margin:2rem auto 3rem;overflow:hidden;">
+            <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:1.25rem 1.5rem;display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <div style="font-size:1.3rem;font-weight:700;color:#fff;">&#129527; Log Pose</div>
+                    <div style="font-size:.8rem;color:rgba(255,255,255,.6);margin-top:.15rem;">Registro de desempenho em torneios</div>
+                </div>
+                <button onclick="closeLogPoseHelp()" style="background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:8px;padding:.4rem .7rem;cursor:pointer;font-size:.9rem;">✕</button>
+            </div>
+            <div style="padding:1.4rem 1.5rem;font-size:.88rem;line-height:1.65;color:var(--text,#1a1a2e);">
+
+                <p style="margin:0 0 1rem;">O <strong>Log Pose</strong> é o diário de bordo dos seus torneios. Registre cada evento, round a round, e acompanhe sua evolução com estatísticas detalhadas — tudo sincronizado automaticamente com o aplicativo da Bandai.</p>
+
+                <div style="height:1px;background:var(--border,#dee2e6);margin:1rem 0;"></div>
+
+                <div style="margin-bottom:1.1rem;">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent,#048A81);margin-bottom:.45rem;">1. Criar um torneio</div>
+                    <p style="margin:0 0 .4rem;">Clique em <strong>+ Add Tournament</strong> e preencha:</p>
+                    <ul style="margin:.3rem 0 .4rem;padding-left:1.2rem;">
+                        <li><strong>Nome</strong> — nome do evento</li>
+                        <li><strong>Deck</strong> — o líder que você jogou</li>
+                        <li><strong>Data</strong> — ao selecionar, o app busca automaticamente eventos da Bandai nessa data e sugere o torneio correto</li>
+                        <li><strong>Set / Tipo</strong> — opcionais, usados para filtros futuros</li>
+                    </ul>
+                    <p style="margin:0;font-size:.82rem;background:rgba(4,138,129,.07);border-left:3px solid var(--accent,#048A81);padding:.4rem .65rem;border-radius:0 6px 6px 0;">&#128279; Se vincular a um evento Bandai, o Log Pose usa o cache do app para sugerir nomes de oponentes e resultados automaticamente.</p>
+                </div>
+
+                <div style="margin-bottom:1.1rem;">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent,#048A81);margin-bottom:.45rem;">2. Adicionar rounds</div>
+                    <p style="margin:0 0 .4rem;">Clique em <strong>+ Add Round</strong> no card do torneio e escolha o tipo:</p>
+                    <ul style="margin:.3rem 0 .4rem;padding-left:1.2rem;">
+                        <li><strong>Bye</strong> — rodada livre, não conta para estatísticas</li>
+                        <li><strong>Swiss</strong> — rodada de chave</li>
+                        <li><strong>Top Cut</strong> — fase eliminatória</li>
+                    </ul>
+                    <p style="margin:0 0 .4rem;">No detalhe do round, registre:</p>
+                    <ul style="margin:.3rem 0 .4rem;padding-left:1.2rem;">
+                        <li>Líder e nome do oponente</li>
+                        <li>Resultado do dado (🎲 Won / Lost Dice)</li>
+                        <li>Quem foi primeiro (1 / 2)</li>
+                        <li>Resultado da partida (✔ Won / ✕ Lost)</li>
+                        <li><strong>Nota</strong> — campo livre para anotar jogadas decisivas, misplays ou observações táticas</li>
+                    </ul>
+                </div>
+
+                <div style="margin-bottom:1.1rem;">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent,#048A81);margin-bottom:.45rem;">3. Estatísticas do torneio</div>
+                    <p style="margin:0 0 .4rem;">Cada card exibe automaticamente (após ≥ 2 rounds):</p>
+                    <ul style="margin:.3rem 0;padding-left:1.2rem;">
+                        <li>🎲 Win rate do dado</li>
+                        <li>🃏 Decks distintos enfrentados</li>
+                        <li>Win rate jogando em 1º e em 2º</li>
+                        <li>Win rate com e sem dado</li>
+                        <li>🏆 Rounds de top cut</li>
+                        <li>OWR (resistência) e GWR — se vinculado à Bandai</li>
+                        <li>Colocação atual no torneio (ao vivo)</li>
+                    </ul>
+                </div>
+
+                <div style="margin-bottom:1.1rem;">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent,#048A81);margin-bottom:.45rem;">4. Sincronizar resultado final</div>
+                    <p style="margin:0;">Ao fim do torneio, clique em <strong>↻ Sync</strong> no card para buscar diretamente da API Bandai: colocação final, pontos de match e status do evento (ex: "Finished"). Os dados são salvos e exibidos permanentemente no card.</p>
+                </div>
+
+                <div style="margin-bottom:1.1rem;">
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent,#048A81);margin-bottom:.45rem;">5. Encerrar torneio</div>
+                    <p style="margin:0;">Clique em <strong>🏁 Encerrar</strong> para marcar o torneio como finalizado. O card recebe borda verde e badge <em>Finalizado</em>, e é movido para o fim da lista. Use <strong>↩ Reabrir</strong> para reverter.</p>
+                </div>
+
+                <div>
+                    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent,#048A81);margin-bottom:.45rem;">6. Estatísticas globais</div>
+                    <p style="margin:0;">No topo da lista aparece um painel consolidando todos os torneios: win rate por <strong>deck que você jogou</strong> e win rate contra cada <strong>deck adversário</strong>. Os thumbnails são ordenados por performance e a borda colorida indica resultado (verde ≥ 60%, vermelho ≤ 40%).</p>
+                </div>
+
+            </div>
+            <div style="padding:.9rem 1.5rem 1.25rem;border-top:1px solid var(--border,#dee2e6);text-align:right;">
+                <button onclick="closeLogPoseHelp()" style="background:var(--accent,#048A81);color:#fff;border:none;border-radius:8px;padding:.6rem 1.4rem;font-size:.9rem;font-weight:600;cursor:pointer;">Entendido</button>
+            </div>
+        </div>
+    </div>`;
+}
+
+function openLogPoseHelp()  { document.getElementById('mlHelpModal').style.display = ''; }
+function closeLogPoseHelp() { document.getElementById('mlHelpModal').style.display = 'none'; }
 
 // ── Leader Select (reuses TRN_LEADERS from tournaments.js) ────────────────────
 
