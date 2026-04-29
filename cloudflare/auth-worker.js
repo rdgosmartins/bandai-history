@@ -624,6 +624,7 @@ async function handleMatchesPost(request, env, cors) {
         finalStatus:      null,
         opponentWinRate:  null,
         gameWinRate:      null,
+        closed:           false,
         rounds:           [],
         createdAt:    new Date().toISOString(),
     };
@@ -653,6 +654,7 @@ async function handleMatchPut(request, env, cors, matchId) {
     if (body.finalStatus      !== undefined) m.finalStatus      = body.finalStatus ? String(body.finalStatus).slice(0, 40) : null;
     if (body.opponentWinRate  !== undefined) m.opponentWinRate  = body.opponentWinRate  != null ? Number(body.opponentWinRate)  : null;
     if (body.gameWinRate      !== undefined) m.gameWinRate      = body.gameWinRate      != null ? Number(body.gameWinRate)      : null;
+    if (body.closed           !== undefined) m.closed           = !!body.closed;
     matches[idx] = m;
     await putMatches(env, user.id, matches);
     return json(m, 200, cors);

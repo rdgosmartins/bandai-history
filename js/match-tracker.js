@@ -47,7 +47,8 @@ function _renderMatchList() {
         el.innerHTML = `<p style="color:var(--muted);text-align:center;padding:3rem 0;">Nenhum torneio registrado ainda.<br>Clique em <strong>+ Add Tournament</strong> para começar.</p>`;
         return;
     }
-    el.innerHTML = _mlMatches.map(m => _mlCardHtml(m)).join('');
+    const sorted = [..._mlMatches].sort((a, b) => (a.closed ? 1 : 0) - (b.closed ? 1 : 0));
+    el.innerHTML = sorted.map(m => _mlCardHtml(m)).join('');
 }
 
 function _mlCardHtml(m) {
@@ -78,8 +79,20 @@ function _mlCardHtml(m) {
             </tbody>
           </table>`;
 
+    const isClosed   = !!m.closed;
+    const cardBorder = isClosed ? 'border:1.5px solid var(--win,#28a745);opacity:.82;' : '';
+    const closedBadge = isClosed
+        ? `<span style="font-size:.67rem;font-weight:700;background:rgba(40,167,69,.13);color:var(--win,#28a745);border:1px solid var(--win,#28a745);border-radius:10px;padding:.1rem .42rem;margin-left:.45rem;vertical-align:middle;">Finalizado</span>`
+        : '';
+    const bottomButtons = isClosed
+        ? `<button class="btn btn-outline btn-sm" style="margin-top:.75rem;width:100%;color:var(--muted);" onclick="toggleCloseMatch('${m.id}')">&#8617; Reabrir torneio</button>`
+        : `<div style="display:flex;gap:.5rem;margin-top:.75rem;">
+               <button class="btn btn-outline btn-sm" style="flex:1;" onclick="openAddRoundModal('${m.id}')">+ Add round</button>
+               <button class="btn btn-outline btn-sm" style="color:var(--win,#28a745);border-color:var(--win,#28a745);padding-left:.8rem;padding-right:.8rem;" onclick="toggleCloseMatch('${m.id}')">&#127937; Encerrar</button>
+           </div>`;
+
     return `
-    <div class="card" style="margin-bottom:1rem;">
+    <div class="card" style="margin-bottom:1rem;${cardBorder}">
         <div class="card-body" style="padding:.9rem 1rem;">
             <div style="display:flex;gap:.9rem;align-items:flex-start;">
                 <div style="position:relative;flex-shrink:0;">
@@ -90,7 +103,9 @@ function _mlCardHtml(m) {
                 </div>
                 <div style="flex:1;min-width:0;">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
-                        <strong style="font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(m.name)}</strong>
+                        <div style="min-width:0;overflow:hidden;">
+                            <strong style="font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(m.name)}</strong>${closedBadge}
+                        </div>
                         <button class="btn btn-outline btn-sm" style="font-size:.7rem;padding:.18rem .45rem;flex-shrink:0;color:var(--loss,#dc3545);border-color:var(--loss,#dc3545);"
                             onclick="deleteMatch('${m.id}')">&#128465;</button>
                     </div>
@@ -100,7 +115,7 @@ function _mlCardHtml(m) {
             </div>
             ${_mlTournamentStatsHtml(m)}
             ${m.bandaiEventId ? _mlStandingsHtml(m) : ''}
-            <button class="btn btn-outline btn-sm" style="margin-top:.75rem;width:100%;" onclick="openAddRoundModal('${m.id}')">+ Add round</button>
+            ${bottomButtons}
         </div>
     </div>`;
 }
@@ -676,6 +691,22 @@ async function _mlSaveRounds(matchId, rounds) {
 }
 
 // ── Delete ─────────────────────────────────────────────────────────────────────
+
+async function toggleCloseMatch(matchId) {
+    const m = _mlMatches.find(x => x.id === matchId);
+    if (!m) return;
+    const closed = !m.closed;
+    try {
+        const r = await fetch(`${AUTH_BASE}/my-matches/${matchId}`, {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ closed }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        m.closed = closed;
+        _renderMatchList();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
 
 async function deleteMatch(matchId) {
     if (!confirm('Remover este torneio do histórico?')) return;
