@@ -1128,7 +1128,8 @@ function displayRegionals(eventData) {
         let resultStr = '—';
         let rankStr = '—';
 
-        if (ev?.rounds) {
+        const hasRounds = ev?.rounds?.length > 0;
+        if (hasRounds) {
             for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
             resultStr = `${evW}-${evL}`;
         }
@@ -1139,14 +1140,14 @@ function displayRegionals(eventData) {
         const eventId = ev?._event_id ?? ev?.event?.id ?? ev?.code ?? null;
 
         const tr = document.createElement('tr');
-        if (!ev?.rounds) tr.style.opacity = '0.5';
-        else tr.style.cursor = 'pointer';
+        if (!ev) tr.style.opacity = '0.5';       // not in cache at all
+        else if (hasRounds) tr.style.cursor = 'pointer';
         tr.innerHTML = `<td>${fmtDate(reg.date)}</td>
             <td>${displayName}</td>
             <td class="td-num">${resultStr}</td>
             <td class="td-num">${rankStr}</td>`;
 
-        if (ev?.rounds && eventId) {
+        if (hasRounds && eventId) {
             tr.addEventListener('click', async () => {
                 const isExpanded = tr.classList.toggle('expanded');
                 const next = tr.nextElementSibling;
