@@ -1063,23 +1063,41 @@ window._regStandingsCache = window._regStandingsCache || {};
 async function _fetchStandings(eventId) {
     if (window._regStandingsCache[eventId]) return window._regStandingsCache[eventId];
     const rankMap = {};
+    // Try to pass the current user's token in case the endpoint requires auth
+    const selIdx = document.getElementById('userSelect')?.value;
+    const token  = selIdx !== '' && App.usersWithToken[parseInt(selIdx)]?.token || null;
+    const headers = token ? { 'X-Authentication': token } : {};
     try {
         let offset = 0;
-        const limit = 200;
+        const limit = 500;
         while (true) {
-            const r = await fetch(`${BANDAI_API_BASE}/api/event/${eventId}/standing?limit=${limit}&offset=${offset}`);
-            if (!r.ok) break;
+            const r = await fetch(
+                `${BANDAI_API_BASE}/api/event/${eventId}/standing?limit=${limit}&offset=${offset}`,
+                { headers }
+            );
+            if (!r.ok) { console.warn('[Standings] HTTP', r.status, 'for event', eventId); break; }
             const data = await r.json();
-            const list = data?.success?.ranking ?? data?.success ?? [];
-            if (!Array.isArray(list) || list.length === 0) break;
+            const list = data?.success?.ranking
+                ?? (Array.isArray(data?.success) ? data.success : null)
+                ?? data?.success?.standings
+                ?? data?.success?.list
+                ?? [];
+            if (!Array.isArray(list) || list.length === 0) {
+                console.warn('[Standings] empty/unexpected response for', eventId, JSON.stringify(data).slice(0, 300));
+                break;
+            }
             for (const entry of list) {
-                const uid = entry.user?.bandai_id ?? entry.user?.id ?? entry.user_id ?? entry.bandai_id;
-                const rank = entry.rank ?? entry.ranking;
+                // membership_number is the primary player ID used throughout the app
+                const uid  = entry.user?.membership_number
+                          ?? entry.user?.bandai_id ?? entry.user?.id
+                          ?? entry.membership_number ?? entry.bandai_id ?? entry.user_id;
+                const rank = entry.rank ?? entry.ranking ?? entry.standing_rank;
                 if (uid != null && rank != null) rankMap[String(uid)] = rank;
             }
             if (list.length < limit) break;
             offset += limit;
         }
+        console.log('[Standings] event', eventId, '→', Object.keys(rankMap).length, 'entries');
     } catch (e) {
         console.warn('[Standings] fetch failed:', e);
     }
@@ -1116,15 +1134,19 @@ function displayRegionals(eventData) {
         }
         if (ev?._rank != null) rankStr = `#${ev._rank}`;
 
+        // Prefer actual event name from cache over the REGIONALS constant label
+        const displayName = ev?._event_name || reg.name;
+        const eventId = ev?._event_id ?? ev?.event?.id ?? ev?.code ?? null;
+
         const tr = document.createElement('tr');
         if (!ev?.rounds) tr.style.opacity = '0.5';
         else tr.style.cursor = 'pointer';
         tr.innerHTML = `<td>${fmtDate(reg.date)}</td>
-            <td>${reg.name}</td>
+            <td>${displayName}</td>
             <td class="td-num">${resultStr}</td>
             <td class="td-num">${rankStr}</td>`;
 
-        if (ev?.rounds && ev.code) {
+        if (ev?.rounds && eventId) {
             tr.addEventListener('click', async () => {
                 const isExpanded = tr.classList.toggle('expanded');
                 const next = tr.nextElementSibling;
@@ -1139,7 +1161,7 @@ function displayRegionals(eventData) {
                 expandTr.innerHTML = `<td colspan="4"><div class="tourney-rounds-wrap"><em style="color:var(--muted);font-size:.85rem">Loading standings…</em></div></td>`;
                 tr.after(expandTr);
 
-                const rankMap = await _fetchStandings(ev.code);
+                const rankMap = await _fetchStandings(eventId);
 
                 let roundsHtml = `<div class="tourney-rounds-wrap">
                     <table class="tourney-rounds-table">
@@ -1148,7 +1170,14 @@ function displayRegionals(eventData) {
                         </tr></thead><tbody>`;
                 ev.rounds.forEach((r, i) => {
                     const oppName = r.opponent_users?.[0]?.player_name?.trim() || '—';
-                    const oppId   = String(r.opponent_users?.[0]?.bandai_id ?? r.opponent_users?.[0]?.user_id ?? r.opponent_users?.[0]?.id ?? '');
+                    // membership_number is the primary player ID used throughout the app
+                    const oppId   = String(
+                        r.opponent_users?.[0]?.membership_number
+                        ?? r.opponent_users?.[0]?.bandai_id
+                        ?? r.opponent_users?.[0]?.user_id
+                        ?? r.opponent_users?.[0]?.id
+                        ?? ''
+                    );
                     const gw = r.win_count  ?? (r.is_win ? 1 : 0);
                     const gl = r.lose_count ?? (r.is_win ? 0 : 1);
                     const rColor  = r.is_win ? 'var(--win)' : 'var(--loss)';

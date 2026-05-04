@@ -45,6 +45,7 @@ async function fetchUserEvents(user, onProgress) {
     for (const ev of events) {
         if (cache[String(ev.id)]) {
             const entry = cache[String(ev.id)];
+            entry._event_id        = ev.id;
             entry._start_datetime  = ev.start_datetime;
             entry._event_name      = ev.name ?? ev.event_name ?? ev.title
                 ?? entry.event?.series_title ?? null;
@@ -110,6 +111,7 @@ async function fetchUserEvents(user, onProgress) {
             clearTimeout(evT);
             if (evResp.ok) {
                 const evData = (await evResp.json()).success;
+                evData._event_id        = ev.id;
                 evData._start_datetime  = ev.start_datetime;
                 evData._event_name      = ev.name ?? ev.event_name ?? ev.title
                     ?? evData.event?.name ?? evData.event?.event_name
