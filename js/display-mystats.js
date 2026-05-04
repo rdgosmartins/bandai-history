@@ -1071,11 +1071,14 @@ async function _fetchStandings(eventId) {
         let offset = 0;
         const limit = 500;
         while (true) {
+            const ac = new AbortController();
+            const t  = setTimeout(() => ac.abort(), 12_000);
             // Endpoint: /api/user/event/{id}/standing — response: success.event.rankings[]
             const r = await fetch(
                 `${BANDAI_API_BASE}/api/user/event/${eventId}/standing?limit=${limit}&offset=${offset}`,
-                { headers }
+                { headers, signal: ac.signal }
             );
+            clearTimeout(t);
             if (!r.ok) { console.warn('[Standings] HTTP', r.status, 'for event', eventId); break; }
             const data = await r.json();
             const list = data?.success?.event?.rankings ?? [];
@@ -1089,7 +1092,8 @@ async function _fetchStandings(eventId) {
             offset += limit;
         }
     } catch (e) {
-        console.warn('[Standings] fetch failed:', e);
+        if (e.name !== 'AbortError') console.warn('[Standings] fetch failed:', e);
+        else console.warn('[Standings] timeout for event', eventId);
     }
     window._regStandingsCache[eventId] = rankMap;
     return rankMap;
