@@ -1061,6 +1061,7 @@ function displayPersonalBests(eventData, streaks) {
 window._regStandingsCache = window._regStandingsCache || {};
 
 async function _fetchStandings(eventId) {
+    if (HARDCODED_STANDINGS[eventId]) return HARDCODED_STANDINGS[eventId];
     if (window._regStandingsCache[eventId]) return window._regStandingsCache[eventId];
     const rankMap = {};
     const selIdx = document.getElementById('userSelect')?.value;
