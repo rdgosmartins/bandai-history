@@ -1,4 +1,4 @@
-const CACHE = 'yoko-v1';
+const CACHE = 'yoko-v2';
 
 const STATIC_ASSETS = [
     '/analyzer.html',
@@ -28,7 +28,9 @@ const STATIC_ASSETS = [
     '/js/yoko.js',
     '/js/player-profile.js',
     '/js/inspector.js',
-    '/icons/icon.svg',
+    '/icons/icon-192.png',
+    '/icons/icon-512.png',
+    '/icons/apple-touch-icon.png',
     '/manifest.json',
 ];
 
@@ -90,8 +92,8 @@ self.addEventListener('push', event => {
     try { if (event.data) Object.assign(data, JSON.parse(event.data.text())); } catch {}
     event.waitUntil(self.registration.showNotification(data.title, {
         body:     data.body,
-        icon:     '/icons/icon.svg',
-        badge:    '/icons/icon.svg',
+        icon:     '/icons/icon-192.png',
+        badge:    '/icons/icon-192.png',
         data:     { url: data.url || '/' },
         tag:      data.tag || 'yoko-push',
         renotify: true,
