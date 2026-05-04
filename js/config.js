@@ -134,7 +134,9 @@ async function pullServerCache(bandaiId) {
         const serverCache = await r.json();
         if (!serverCache || !Object.keys(serverCache).length) return;
         const localCache = loadCache(bandaiId);
-        const merged = { ...serverCache, ...localCache };
+        // Server wins: server has the most recently synced data (saveCache always pushes).
+        // This also propagates server-side deletions (stale events removed from KV) to local.
+        const merged = { ...localCache, ...serverCache };
         localStorage.setItem(cacheKey(bandaiId), JSON.stringify(merged));
         console.log(`[Cache] Merged ${Object.keys(serverCache).length} server events for ${bandaiId} (local: ${Object.keys(localCache).length}, merged: ${Object.keys(merged).length})`);
     } catch (e) {
