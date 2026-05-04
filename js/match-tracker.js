@@ -76,10 +76,11 @@ function _mlCardHtml(m) {
                     <th style="text-align:center;padding:.2rem .4rem;">Dice</th>
                     <th style="text-align:center;padding:.2rem .4rem;">Order</th>
                     <th style="text-align:center;padding:.2rem .4rem;">Result</th>
+                    <th style="width:20px;padding:.2rem .2rem;"></th>
                 </tr>
             </thead>
             <tbody>
-                ${m.rounds.map((r, i) => _mlRoundRowHtml(r, i + 1)).join('')}
+                ${m.rounds.map((r, i) => _mlRoundRowHtml(r, i + 1, m.id, i)).join('')}
             </tbody>
           </table>`;
 
@@ -393,11 +394,13 @@ function _mlShowSyncError(matchId, msg) {
     btn.textContent = '✕ Erro';
 }
 
-function _mlRoundRowHtml(r, num) {
+function _mlRoundRowHtml(r, num, matchId, idx) {
+    const delBtn = `<button onclick="deleteRound('${matchId}',${idx})" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--muted);padding:.1rem .15rem;line-height:1;" title="Remover">🗑️</button>`;
     if (r.type === 'bye') {
         return `<tr style="background:var(--bg,#f8f9fa);">
             <td style="padding:.3rem .4rem;"><strong style="color:var(--muted);">${num}</strong></td>
             <td colspan="4" style="padding:.3rem .4rem;color:var(--muted);font-style:italic;">Bye</td>
+            <td style="text-align:center;padding:.2rem .2rem;">${delBtn}</td>
         </tr>`;
     }
     const topCutBadge = r.type === 'topcut' ? `<span style="font-size:.65rem;background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:10px;padding:.08rem .3rem;margin-left:.3rem;">TC</span>` : '';
@@ -418,8 +421,9 @@ function _mlRoundRowHtml(r, num) {
         : (r.won === false ? `<span style="color:var(--loss,#dc3545);font-size:1.1rem;">❌</span>` : '—');
     const rowBg = r.won === true ? 'rgba(40,167,69,.06)' : (r.won === false ? 'rgba(220,53,69,.06)' : '');
 
+    const editBtn = `<button onclick="openEditRoundModal('${matchId}',${idx})" style="background:none;border:none;cursor:pointer;font-size:.78rem;color:var(--muted);padding:.1rem .15rem;line-height:1;" title="Editar">✏️</button>`;
     const noteRow = r.note
-        ? `<tr style="background:${rowBg};"><td style="padding:0 .4rem .3rem;"></td><td colspan="4" style="padding:0 .4rem .3rem;font-size:.71rem;color:var(--muted);font-style:italic;">"${_esc(r.note)}"</td></tr>`
+        ? `<tr style="background:${rowBg};"><td style="padding:0 .4rem .3rem;"></td><td colspan="4" style="padding:0 .4rem .3rem;font-size:.71rem;color:var(--muted);font-style:italic;">"${_esc(r.note)}"</td><td></td></tr>`
         : '';
     return `<tr style="background:${rowBg};">
         <td style="padding:.3rem .4rem;"><strong style="color:${r.won === true ? 'var(--win,#28a745)' : (r.won === false ? 'var(--loss,#dc3545)' : 'var(--muted)')};">${num}</strong>${topCutBadge}</td>
@@ -427,6 +431,7 @@ function _mlRoundRowHtml(r, num) {
         <td style="text-align:center;padding:.3rem .4rem;">${diceHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${orderHtml}</td>
         <td style="text-align:center;padding:.3rem .4rem;">${resultHtml}</td>
+        <td style="text-align:center;padding:.2rem .2rem;">${editBtn}</td>
     </tr>${noteRow}`;
 }
 
@@ -687,13 +692,23 @@ function mlToggle(which) {
     }
 }
 
-async function openRoundDetailModal() {
-    if (!_mlRoundCtx) return;
-    const { matchId, type } = _mlRoundCtx;
+function openEditRoundModal(matchId, roundIdx) {
     const m = _mlMatches.find(x => x.id === matchId);
-    const roundNum = (m?.rounds?.length ?? 0) + 1;
-    const label = type === 'topcut' ? 'Top Cut' : 'Swiss';
-    document.getElementById('mlRoundDetailTitle').textContent = `Round ${roundNum} – ${label}`;
+    if (!m) return;
+    const r = m.rounds[roundIdx];
+    if (!r || r.type === 'bye') return;
+    _mlRoundCtx = { matchId, type: r.type, editIdx: roundIdx };
+    openRoundDetailModal(r);
+}
+
+async function openRoundDetailModal(prefill) {
+    if (!_mlRoundCtx) return;
+    const { matchId, type, editIdx } = _mlRoundCtx;
+    const m = _mlMatches.find(x => x.id === matchId);
+    const isEdit   = editIdx != null;
+    const roundNum = isEdit ? editIdx + 1 : (m?.rounds?.length ?? 0) + 1;
+    const label    = type === 'topcut' ? 'Top Cut' : 'Swiss';
+    document.getElementById('mlRoundDetailTitle').textContent = `${isEdit ? 'Editar ' : ''}Round ${roundNum} – ${label}`;
     // reset toggles
     const diceBtn   = document.getElementById('mlDiceBtn');
     const orderBtn  = document.getElementById('mlOrderBtn');
@@ -701,13 +716,31 @@ async function openRoundDetailModal() {
     diceBtn.dataset.won     = '0'; diceBtn.className   = 'ml-toggle-btn ml-toggle-lost';   diceBtn.innerHTML   = '🎲 &nbsp;Lost Dice';
     orderBtn.dataset.first  = '0'; orderBtn.className  = 'ml-toggle-btn ml-toggle-second'; orderBtn.innerHTML  = '2 &nbsp;Went Second';
     resultBtn.dataset.won   = '0'; resultBtn.className = 'ml-toggle-btn ml-toggle-lost';   resultBtn.innerHTML = '✕ &nbsp;Lost Match';
-    document.getElementById('mlRoundOppLeaderId').value = '';
-    document.getElementById('mlRoundOppName').value = '';
+    document.getElementById('mlRoundOppLeaderId').value = prefill?.opponentLeaderId ?? '';
+    document.getElementById('mlRoundOppName').value     = prefill?.opponentName     ?? '';
     document.getElementById('mlOppNameHint').style.display = 'none';
-    document.getElementById('mlRoundNote').value = '';
+    document.getElementById('mlRoundNote').value        = prefill?.note             ?? '';
 
-    // Auto-suggest opponent name + result from Bandai cache
-    if (m?.bandaiEventId) {
+    if (prefill) {
+        if (prefill.wonDice != null) {
+            diceBtn.dataset.won  = prefill.wonDice ? '1' : '0';
+            diceBtn.className    = 'ml-toggle-btn ' + (prefill.wonDice ? 'ml-toggle-won' : 'ml-toggle-lost');
+            diceBtn.innerHTML    = prefill.wonDice ? '🎲 &nbsp;Won Dice' : '🎲 &nbsp;Lost Dice';
+        }
+        if (prefill.wentFirst != null) {
+            orderBtn.dataset.first = prefill.wentFirst ? '1' : '0';
+            orderBtn.className     = 'ml-toggle-btn ' + (prefill.wentFirst ? 'ml-toggle-first' : 'ml-toggle-second');
+            orderBtn.innerHTML     = prefill.wentFirst ? '1 &nbsp;Went First' : '2 &nbsp;Went Second';
+        }
+        if (prefill.won != null) {
+            resultBtn.dataset.won = prefill.won ? '1' : '0';
+            resultBtn.className   = 'ml-toggle-btn ' + (prefill.won ? 'ml-toggle-won' : 'ml-toggle-lost');
+            resultBtn.innerHTML   = prefill.won ? '✔ &nbsp;Won Match' : '✕ &nbsp;Lost Match';
+        }
+    }
+
+    // Auto-suggest opponent name + result from Bandai cache (skip on edit — data already prefilled)
+    if (!isEdit && m?.bandaiEventId) {
         try {
             const user = await _authUserPromise;
             const me   = (App.usersWithToken || []).find(u => u.name.toLowerCase() === (user?.bandaiName || '').toLowerCase());
@@ -741,7 +774,7 @@ function closeRoundDetailModal() {
 
 async function submitAddRound() {
     if (!_mlRoundCtx) return;
-    const { matchId, type } = _mlRoundCtx;
+    const { matchId, type, editIdx } = _mlRoundCtx;
     const m = _mlMatches.find(x => x.id === matchId);
     if (!m) return;
     const opponentLeaderId = document.getElementById('mlRoundOppLeaderId').value || null;
@@ -750,9 +783,20 @@ async function submitAddRound() {
     const wentFirst = document.getElementById('mlOrderBtn').dataset.first === '1';
     const won       = document.getElementById('mlResultBtn').dataset.won  === '1';
     const note      = document.getElementById('mlRoundNote').value.trim() || null;
-    const round = { type, opponentLeaderId, opponentName, wonDice, wentFirst, won, note };
-    const rounds = [...m.rounds, round];
+    const round  = { type, opponentLeaderId, opponentName, wonDice, wentFirst, won, note };
+    const rounds = editIdx != null
+        ? m.rounds.map((r, i) => i === editIdx ? round : r)
+        : [...m.rounds, round];
     closeRoundDetailModal();
+    await _mlSaveRounds(matchId, rounds);
+}
+
+async function deleteRound(matchId, roundIdx) {
+    const m = _mlMatches.find(x => x.id === matchId);
+    if (!m) return;
+    const label = m.rounds[roundIdx]?.type === 'bye' ? 'Bye' : `Round ${roundIdx + 1}`;
+    if (!confirm(`Remover ${label}?`)) return;
+    const rounds = m.rounds.filter((_, i) => i !== roundIdx);
     await _mlSaveRounds(matchId, rounds);
 }
 
