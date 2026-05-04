@@ -1057,6 +1057,36 @@ function displayPersonalBests(eventData, streaks) {
 }
 
 // ── Regionals ──────────────────────────────────────────────────────────────
+// Standings cache: eventId → Map<bandaiId, rank>
+window._regStandingsCache = window._regStandingsCache || {};
+
+async function _fetchStandings(eventId) {
+    if (window._regStandingsCache[eventId]) return window._regStandingsCache[eventId];
+    const rankMap = {};
+    try {
+        let offset = 0;
+        const limit = 200;
+        while (true) {
+            const r = await fetch(`${BANDAI_API_BASE}/api/event/${eventId}/standing?limit=${limit}&offset=${offset}`);
+            if (!r.ok) break;
+            const data = await r.json();
+            const list = data?.success?.ranking ?? data?.success ?? [];
+            if (!Array.isArray(list) || list.length === 0) break;
+            for (const entry of list) {
+                const uid = entry.user?.bandai_id ?? entry.user?.id ?? entry.user_id ?? entry.bandai_id;
+                const rank = entry.rank ?? entry.ranking;
+                if (uid != null && rank != null) rankMap[String(uid)] = rank;
+            }
+            if (list.length < limit) break;
+            offset += limit;
+        }
+    } catch (e) {
+        console.warn('[Standings] fetch failed:', e);
+    }
+    window._regStandingsCache[eventId] = rankMap;
+    return rankMap;
+}
+
 function displayRegionals(eventData) {
     // Build a map of date → event data for quick lookup
     const byDate = {};
@@ -1076,19 +1106,67 @@ function displayRegionals(eventData) {
 
     for (const reg of REGIONALS) {
         const ev = byDate[reg.date];
+        let evW = 0, evL = 0;
         let resultStr = '—';
+        let rankStr = '—';
 
         if (ev?.rounds) {
-            let evW = 0, evL = 0;
             for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
             resultStr = `${evW}-${evL}`;
         }
+        if (ev?._rank != null) rankStr = `#${ev._rank}`;
 
         const tr = document.createElement('tr');
-        if (!ev?.rounds) tr.style.opacity = '0.5'; // not yet attended
+        if (!ev?.rounds) tr.style.opacity = '0.5';
+        else tr.style.cursor = 'pointer';
         tr.innerHTML = `<td>${fmtDate(reg.date)}</td>
             <td>${reg.name}</td>
-            <td class="td-num">${resultStr}</td>`;
+            <td class="td-num">${resultStr}</td>
+            <td class="td-num">${rankStr}</td>`;
+
+        if (ev?.rounds && ev.code) {
+            tr.addEventListener('click', async () => {
+                const isExpanded = tr.classList.toggle('expanded');
+                const next = tr.nextElementSibling;
+                if (!isExpanded) {
+                    if (next?.classList.contains('tourney-expand-row')) next.remove();
+                    return;
+                }
+
+                // Insert loading row immediately
+                const expandTr = document.createElement('tr');
+                expandTr.className = 'tourney-expand-row';
+                expandTr.innerHTML = `<td colspan="4"><div class="tourney-rounds-wrap"><em style="color:var(--muted);font-size:.85rem">Loading standings…</em></div></td>`;
+                tr.after(expandTr);
+
+                const rankMap = await _fetchStandings(ev.code);
+
+                let roundsHtml = `<div class="tourney-rounds-wrap">
+                    <table class="tourney-rounds-table">
+                        <thead><tr>
+                            <th>Round</th><th>Opponent</th><th>Result</th><th>Games</th><th>Opp. Rank</th>
+                        </tr></thead><tbody>`;
+                ev.rounds.forEach((r, i) => {
+                    const oppName = r.opponent_users?.[0]?.player_name?.trim() || '—';
+                    const oppId   = String(r.opponent_users?.[0]?.bandai_id ?? r.opponent_users?.[0]?.user_id ?? r.opponent_users?.[0]?.id ?? '');
+                    const gw = r.win_count  ?? (r.is_win ? 1 : 0);
+                    const gl = r.lose_count ?? (r.is_win ? 0 : 1);
+                    const rColor  = r.is_win ? 'var(--win)' : 'var(--loss)';
+                    const oppRank = oppId && rankMap[oppId] != null ? `#${rankMap[oppId]}` : '—';
+                    roundsHtml += `<tr>
+                        <td style="color:var(--muted)">R${i + 1}</td>
+                        <td>${oppName}</td>
+                        <td style="color:${rColor};font-weight:600">${r.is_win ? 'Win' : 'Loss'}</td>
+                        <td class="td-num">${gw}-${gl}</td>
+                        <td class="td-num" style="color:var(--muted)">${oppRank}</td>
+                    </tr>`;
+                });
+                roundsHtml += '</tbody></table></div>';
+
+                expandTr.innerHTML = `<td colspan="4">${roundsHtml}</td>`;
+            });
+        }
+
         body.appendChild(tr);
     }
 
