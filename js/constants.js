@@ -29,7 +29,7 @@ const REGIONALS = [
     { date: "2025-11-08", name: "Latam TCG One Piece Regional - Brazil" },
     { date: "2025-11-09", name: "Offline Treasure Cup - Brazil Day 2" },
     { date: "2026-05-02", name: "CCG Eventos - Regionals" },
-    { date: "2026-05-03", name: "CCG Eventos - Treasure Cup" },
+    { date: "2026-05-03", name: "CCG Eventos - Treasure Cup May 2026" },
 ];
 
 // Dates to exclude from all rankings and badge calculations (format: 'YYYY-MM-DD').
