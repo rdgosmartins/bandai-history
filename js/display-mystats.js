@@ -298,7 +298,9 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
             const rankStr   = ev._rank   != null ? `#${ev._rank}`   : '—';
             const ptsStr    = ev._match_points != null ? ev._match_points : '—';
             const appStr    = ev._applicant_count != null ? ev._applicant_count : '—';
-            const isLive    = ev._status === 'running' || ev._status === 'open';
+            const eventAge  = Date.now() - new Date(ev._start_datetime).getTime();
+            const isLive    = (ev._status === 'running' || ev._status === 'open')
+                           && eventAge < 2 * 24 * 60 * 60 * 1000;
             const liveBadge = isLive ? ' <span class="live-badge">LIVE</span>' : '';
             const resultColor = evW > evL ? 'var(--win)' : evW < evL ? 'var(--loss)' : 'var(--muted)';
             const cols = 8; // total column count

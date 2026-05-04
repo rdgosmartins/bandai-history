@@ -153,7 +153,9 @@ async function fetchUserEvents(user, onProgress) {
             && entry._entry_fee > 150
             && (entry._entry_fee_currency ?? '').toUpperCase() !== 'USD';
         if (suspiciousFee) entry._entry_fee = null; // force re-fetch
-        return entry._applicant_count == null || entry._entry_fee == null;
+        const staleStatus = (entry._status === 'open' || entry._status === 'running')
+            && new Date(entry._start_datetime) < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+        return entry._applicant_count == null || entry._entry_fee == null || staleStatus;
     });
     if (missingDetail.length > 0) {
         for (let i = 0; i < missingDetail.length; i++) {
