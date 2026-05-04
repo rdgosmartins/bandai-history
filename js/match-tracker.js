@@ -3,7 +3,7 @@
 
 const ML_SETS = ['OP15','OP14','EB04','OP13','EB03','OP12','EB02','OP11','EB01',
                  'OP10','OP09','OP08','OP07','OP06','OP05','OP04','OP03','OP02','OP01'];
-const ML_TYPES = ['Testing','Local','Store CS','Treasure Cup','Flagship','Regional','National','World'];
+const ML_TYPES = ['Testing','Local','Store CS','Treasure Cup','Flagship','Regional','National','World','CCG Eventos - Regionals','CCG Eventos - Treasure Cup'];
 
 let _mlMatches              = [];   // cached list
 let _mlRoundCtx             = null; // { matchId, type } while the round detail modal is open
@@ -956,7 +956,7 @@ function _mlScore(rounds) {
 }
 
 function _mlTypeShort(type) {
-    const map = { 'Store CS': 'CS', 'Treasure Cup': 'TC', 'Flagship': 'FLAG', 'Regional': 'REG', 'National': 'NAT', 'World': 'WLD' };
+    const map = { 'Store CS': 'CS', 'Treasure Cup': 'TC', 'Flagship': 'FLAG', 'Regional': 'REG', 'National': 'NAT', 'World': 'WLD', 'CCG Eventos - Regionals': 'CCG-REG', 'CCG Eventos - Treasure Cup': 'CCG-TC' };
     return map[type] || type?.slice(0, 5).toUpperCase() || '?';
 }
 
