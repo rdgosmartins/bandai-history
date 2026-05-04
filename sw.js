@@ -1,49 +1,13 @@
-const CACHE = 'yoko-v2';
+const CACHE = 'yoko-v3';
 
-const STATIC_ASSETS = [
-    '/analyzer.html',
-    '/login.html',
-    '/css/variables.css',
-    '/css/layout.css',
-    '/css/components.css',
-    '/css/print.css',
-    '/css/yoko.css',
-    '/css/mobile.css',
-    '/js/auth.js',
-    '/js/state.js',
-    '/js/constants.js',
-    '/js/config.js',
-    '/js/rankings.js',
-    '/js/match-tracker.js',
-    '/js/fetch.js',
-    '/js/display-mystats.js',
-    '/js/display-charts.js',
-    '/js/tournaments.js',
-    '/js/filter.js',
-    '/js/compare.js',
-    '/js/export.js',
-    '/js/modal.js',
-    '/js/theme.js',
-    '/js/utils.js',
-    '/js/yoko.js',
-    '/js/player-profile.js',
-    '/js/inspector.js',
-    '/icons/icon-192.png',
-    '/icons/icon-512.png',
-    '/icons/apple-touch-icon.png',
-    '/manifest.json',
-];
-
-// ── Install: pre-cache all static assets ─────────────────────────────────────
+// ── Install: activate immediately, sem pré-cache ──────────────────────────────
+// cache.addAll() falha atomicamente se qualquer arquivo retornar erro;
+// preferimos lazy caching via fetch handler, que é resiliente a falhas.
 self.addEventListener('install', event => {
-    event.waitUntil(
-        caches.open(CACHE)
-            .then(cache => cache.addAll(STATIC_ASSETS))
-            .then(() => self.skipWaiting())
-    );
+    event.waitUntil(self.skipWaiting());
 });
 
-// ── Activate: clean up old caches ─────────────────────────────────────────────
+// ── Activate: limpar caches antigos ──────────────────────────────────────────
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys()
@@ -52,41 +16,34 @@ self.addEventListener('activate', event => {
     );
 });
 
-// ── Fetch: cache-first for static, network-only for API ───────────────────────
+// ── Fetch: cache-first APENAS para assets da mesma origem ────────────────────
+// Requests cross-origin (CDN, auth worker, Bandai proxy) ficam com o browser.
 self.addEventListener('fetch', event => {
-    const { request } = event;
-    const url = new URL(request.url);
+    const url = new URL(event.request.url);
 
-    // Network-only: auth worker, Bandai proxy, Google Fonts (dynamic)
-    if (
-        url.hostname.includes('workers.dev') ||
-        url.hostname.includes('bandai') ||
-        url.hostname.includes('fonts.googleapis') ||
-        url.hostname.includes('fonts.gstatic') ||
-        url.pathname.startsWith('/my-matches') ||
-        url.pathname.startsWith('/cache/') ||
-        url.pathname.startsWith('/inbox') ||
-        url.pathname.startsWith('/banner')
-    ) {
-        return; // Let browser handle normally
-    }
+    // Só intercepta same-origin, método GET
+    if (url.origin !== self.location.origin || event.request.method !== 'GET') return;
 
-    // Cache-first with network fallback for everything else
+    // Rotas dinâmicas/auth — sem cache, sempre rede
+    const noCachePaths = ['/my-matches', '/cache/', '/inbox', '/banner', '/auth', '/login'];
+    if (noCachePaths.some(p => url.pathname.startsWith(p))) return;
+
+    // Cache-first com fallback para rede
     event.respondWith(
-        caches.match(request).then(cached => {
+        caches.match(event.request).then(cached => {
             if (cached) return cached;
-            return fetch(request).then(response => {
-                if (response.ok && request.method === 'GET') {
+            return fetch(event.request).then(response => {
+                if (response.ok) {
                     const clone = response.clone();
-                    caches.open(CACHE).then(cache => cache.put(request, clone));
+                    caches.open(CACHE).then(c => c.put(event.request, clone));
                 }
                 return response;
-            });
+            }).catch(() => cached); // offline: retorna cache se disponível
         })
     );
 });
 
-// ── Push notifications (existing) ─────────────────────────────────────────────
+// ── Push notifications ────────────────────────────────────────────────────────
 self.addEventListener('push', event => {
     let data = { title: '[YOKO] One Piece TCG', body: 'Nova notificação' };
     try { if (event.data) Object.assign(data, JSON.parse(event.data.text())); } catch {}
