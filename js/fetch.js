@@ -38,7 +38,16 @@ async function fetchUserEvents(user, onProgress) {
     await pullServerCache(user.bandaiId);
 
     const cache       = loadCache(user.bandaiId);
+    // Events with 0 rounds that are >2 days old should be re-fetched — Bandai sometimes
+    // publishes results after the event ends, and cached 0-round entries block re-fetch.
+    const staleZeroRounds = events.filter(ev => {
+        const entry = cache[String(ev.id)];
+        if (!entry || !Array.isArray(entry.rounds) || entry.rounds.length > 0) return false;
+        const age = Date.now() - new Date(entry._start_datetime ?? 0).getTime();
+        return age > 2 * 24 * 60 * 60 * 1000;
+    });
     const newEvents   = events.filter(ev => !cache[String(ev.id)]);
+    const eventsToFetch = [...newEvents, ...staleZeroRounds];
     const cachedCount = events.length - newEvents.length;
 
     // Patch metadata on cached entries
@@ -95,12 +104,12 @@ async function fetchUserEvents(user, onProgress) {
         }
     }
 
-    if (newEvents.length > 0) {
-        for (let i = 0; i < newEvents.length; i++) {
-            const ev = newEvents[i];
+    if (eventsToFetch.length > 0) {
+        for (let i = 0; i < eventsToFetch.length; i++) {
+            const ev = eventsToFetch[i];
             onProgress(
-                `${user.name}: fetching ${i + 1}/${newEvents.length} new events (${cachedCount} cached)…`,
-                Math.round((i / newEvents.length) * 100)
+                `${user.name}: fetching ${i + 1}/${eventsToFetch.length} events (${cachedCount} cached)…`,
+                Math.round((i / eventsToFetch.length) * 100)
             );
             const evAc   = new AbortController();
             const evT    = setTimeout(() => evAc.abort(), 15_000);
