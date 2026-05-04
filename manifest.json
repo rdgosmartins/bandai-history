@@ -1,0 +1,30 @@
+{
+  "name": "YOKO — One Piece TCG",
+  "short_name": "YOKO",
+  "description": "One Piece TCG tournament history tracker e Log Pose",
+  "start_url": "/analyzer.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "lang": "pt-BR",
+  "categories": ["games", "sports"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log Pose",
+      "short_name": "Log Pose",
+      "description": "Abrir diário de torneios",
+      "url": "/analyzer.html",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

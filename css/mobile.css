@@ -1,0 +1,182 @@
+/* ── Mobile / PWA overrides ───────────────────────────────────────────────────
+   Applied on top of layout.css + components.css for small screens.
+   Breakpoint: ≤ 600px (portrait phone).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+
+    /* ── Container ──────────────────────────────────────────────────────────── */
+    .container {
+        padding: 0 .65rem;
+        margin: .75rem auto;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    header { padding: 1rem .75rem 0; }
+
+    .header-inner {
+        padding: 0 .25rem 1rem;
+        gap: .65rem;
+    }
+
+    .header-skull { font-size: 2rem; }
+
+    .header-text h1 { font-size: 1.2rem; }
+    .header-text p  { font-size: .72rem; }
+
+    .header-btns {
+        top: .65rem;
+        right: .75rem;
+        gap: .3rem;
+    }
+
+    .theme-toggle {
+        padding: .22rem .55rem;
+        font-size: .7rem;
+    }
+
+    /* ── Tab navigation — horizontal scroll ─────────────────────────────────── */
+    .tab-nav {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        padding-bottom: 0;
+    }
+    .tab-nav::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+        padding: .5rem .85rem;
+        font-size: .7rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+        letter-spacing: .03em;
+        gap: .28rem;
+    }
+
+    /* ── Dashboard config bar ───────────────────────────────────────────────── */
+    .dash-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: .65rem;
+    }
+
+    .dash-identity { justify-content: flex-start; }
+
+    .dash-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+
+    .dash-actions .btn { flex: 1; min-width: 120px; }
+
+    /* ── Cards ──────────────────────────────────────────────────────────────── */
+    .card-body { padding: .75rem !important; }
+
+    /* ── Log Pose modals — bottom sheet ─────────────────────────────────────── */
+
+    /* Outer overlay: becomes a flex column that pushes content to the bottom */
+    #mlCreateModal,
+    #mlRoundTypeModal,
+    #mlRoundDetailModal,
+    #mlHelpModal {
+        display: flex;           /* overridden by inline display:none when closed */
+        flex-direction: column;
+        justify-content: flex-end;
+        overflow-y: hidden !important;
+    }
+
+    /* Inner panel: bottom sheet */
+    #mlCreateModal > div,
+    #mlRoundTypeModal > div,
+    #mlRoundDetailModal > div,
+    #mlHelpModal > div {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        border-radius: 20px 20px 0 0 !important;
+        max-height: 90vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Drag handle hint */
+    #mlCreateModal > div::before,
+    #mlRoundTypeModal > div::before,
+    #mlRoundDetailModal > div::before,
+    #mlHelpModal > div::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: var(--border, #dee2e6);
+        border-radius: 2px;
+        margin: .75rem auto .25rem;
+        flex-shrink: 0;
+    }
+
+    /* ── Log Pose card — round table ────────────────────────────────────────── */
+
+    /* Make the round table horizontally scrollable if needed */
+    #mlList table {
+        font-size: .76rem;
+    }
+
+    #mlList table th,
+    #mlList table td {
+        padding: .25rem .3rem;
+    }
+
+    /* Edit/delete icon column — tighter */
+    #mlList table th:last-child,
+    #mlList table td:last-child {
+        padding: .2rem .1rem;
+    }
+
+    /* Opponent name under thumbnail — allow a bit more width */
+    #mlList .card div[style*="max-width:72px"] {
+        max-width: 60px !important;
+    }
+
+    /* ── Log Pose global stats thumbnails ───────────────────────────────────── */
+    #mlList > div[style*="Estatísticas globais"] {
+        padding: .55rem .65rem;
+    }
+
+    /* ── Log Pose — bottom action buttons ───────────────────────────────────── */
+    #mlList .btn { touch-action: manipulation; }
+
+    /* ── General: larger touch targets ─────────────────────────────────────── */
+    .btn, button { min-height: 36px; }
+
+    /* ── Statistics grids (My Stats tab) ───────────────────────────────────── */
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+
+    .charts-grid { grid-template-columns: 1fr; }
+
+    .compare-cols { grid-template-columns: 1fr; }
+
+    .rivalry-grid { grid-template-columns: 1fr; }
+
+    /* ── Rankings table — horizontal scroll ─────────────────────────────────── */
+    #rankingsTab .card-body { overflow-x: auto; }
+
+    /* ── Safe area insets (notch / home bar) ───────────────────────────────── */
+    body {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    header {
+        padding-top: max(1rem, env(safe-area-inset-top));
+    }
+
+}
+
+/* ── Standalone PWA — extra padding for home bar ───────────────────────────── */
+@media (display-mode: standalone) {
+    body { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+
+    /* Slightly larger tap targets in standalone mode */
+    .tab-btn { padding: .6rem 1rem; }
+}
