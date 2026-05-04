@@ -16,7 +16,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="css/variables.css">
@@ -39,10 +39,10 @@
         .dash-identity { display: flex; align-items: center; gap: .7rem; flex-shrink: 0; }
         .dash-avatar {
             width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
-            background: linear-gradient(135deg, var(--accent,#048A81), var(--gold,#c9a84c));
+            background: linear-gradient(135deg, var(--primary,#1D4F88), var(--gold,#C8BD3C));
             display: flex; align-items: center; justify-content: center;
-            font-family: 'Cinzel', serif; font-size: .95rem; font-weight: 700; color: #fff;
-            box-shadow: 0 2px 8px rgba(4,138,129,.25); overflow: hidden;
+            font-family: 'Montserrat', sans-serif; font-size: .95rem; font-weight: 700; color: #fff;
+            box-shadow: 0 2px 8px rgba(29,79,136,.25); overflow: hidden;
         }
         .dash-avatar img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
         .dash-id-text { display: flex; flex-direction: column; gap: .1rem; }
@@ -319,7 +319,7 @@
                 <div id="streakStats"></div>
                 <div id="bogeymanStats"></div>
                 <div id="placementsInline" style="display:none; margin-top:1.5rem;">
-                    <h3 style="font-family:'Cinzel',serif;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--primary);font-weight:700;margin-bottom:1rem;">&#127942; Placement History</h3>
+                    <h3 style="font-family:'Montserrat',sans-serif;font-size:0.76rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--primary);font-weight:700;margin-bottom:1rem;">&#127942; Placement History</h3>
                     <div class="stat-grid" id="placementsStats" style="margin-bottom:1.25rem;"></div>
                     <div id="placementsTiers"></div>
                 </div>
@@ -1387,10 +1387,10 @@
         <div style="background:var(--card,#fff);border-radius:20px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;position:relative;max-height:90vh;overflow-y:auto;">
             <button onclick="closeProfileModal()" style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted,#888);line-height:1;z-index:1;">&times;</button>
             <!-- Header -->
-            <div id="pmHeader" style="background:linear-gradient(135deg,var(--accent,#048A81),#035f5a);padding:1.5rem 1.25rem 1rem;color:#fff;display:flex;align-items:center;gap:1rem;">
-                <div id="pmAvatar" style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:1.2rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;"></div>
+            <div id="pmHeader" style="background:linear-gradient(135deg,var(--primary,#1D4F88),#154080);padding:1.5rem 1.25rem 1rem;color:#fff;display:flex;align-items:center;gap:1rem;">
+                <div id="pmAvatar" style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-size:1.2rem;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;"></div>
                 <div>
-                    <div id="pmName" style="font-family:'Cinzel',serif;font-size:1.1rem;font-weight:700;"></div>
+                    <div id="pmName" style="font-family:'Montserrat',sans-serif;font-size:1.1rem;font-weight:700;"></div>
                     <div id="pmCity" style="font-size:.78rem;opacity:.8;margin-top:.2rem;"></div>
                 </div>
             </div>
