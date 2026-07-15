@@ -103,7 +103,7 @@ function _renderFullProfile(bandaiId, name, eventData) {
     }
 
     const total    = totalW + totalL;
-    const winPct   = total > 0 ? (totalW / total * 100).toFixed(1) : '0.0';
+    const winPct   = calcWinPct(totalW, total, 1);
     const bestRank = ranks.length ? Math.min(...ranks) : null;
     const avgRank  = ranks.length ? (ranks.reduce((a, b) => a + b, 0) / ranks.length).toFixed(1) : null;
 
@@ -304,7 +304,7 @@ function _renderOpponentProfile(bandaiId, name) {
     }
 
     const total  = wins + losses;
-    const winPct = total > 0 ? (wins / total * 100).toFixed(1) : '0.0';
+    const winPct = calcWinPct(wins, total, 1);
 
     if (total === 0) {
         return `

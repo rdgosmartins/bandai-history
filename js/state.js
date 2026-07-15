@@ -16,7 +16,6 @@ window.App = {
     podiumSort: 'pct',
     lastLeaderboardUsers: null,
     storeH2HUsers: [],
-    yokoLoading: false,
     competitiveBadges: null,   // { reiDosPiratas: {year: {bandaiId,name,winRate}}, yonkou: [], shichibukai: [], month }
     profileDirectory: {},      // { 'bandainame_lower' → publicProfile }
 };

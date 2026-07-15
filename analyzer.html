@@ -103,7 +103,7 @@
             // Register push notifications
             if ('serviceWorker' in navigator && 'PushManager' in window) _initPush();
             // Load inbox
-            fetch(`${AUTH_BASE}/inbox`, { credentials: 'include' }).then(r => r.ok ? r.json() : []).then(msgs => {
+            apiFetch(`/inbox`).then(r => r.ok ? r.json() : []).then(msgs => {
                 const unread = msgs.filter(m => !m.read).length;
                 const countEl = document.getElementById('inboxCount');
                 if (countEl) countEl.textContent = unread ? `(${unread})` : '';
@@ -225,6 +225,9 @@
         <button class="tab-btn" id="tabProfile"           onclick="switchTab('profile')">&#128100; Player Profile</button>
         <button class="tab-btn" id="tabYoko"              onclick="switchTab('yoko')">&#127358; Yoko Stats</button>
         <button class="tab-btn" id="tabMatchLog"             onclick="switchTab('match-log')">&#129527; Log Pose</button>
+        <button class="tab-btn" id="tabAgent"                onclick="switchTab('agent')">&#129504; OPTCG Agent</button>
+        <button class="tab-btn" id="tabDeckMap"              onclick="switchTab('deckmap')">&#128506; Deck Mapping</button>
+        <button class="tab-btn" id="tabMatchmaker"            onclick="switchTab('matchmaker')">&#127988; Matchmaker</button>
         <button class="tab-btn" id="tabTournaments"        onclick="switchTab('tournaments')" style="display:none">&#127941; Torneios</button>
         <button class="tab-btn" id="tabCircuito"           onclick="switchTab('circuito')" style="display:none">&#9878; Circuito</button>
         <button class="tab-btn" id="tabResults"            onclick="switchTab('results')" style="display:none">&#127942; Resultados</button>
@@ -1078,21 +1081,6 @@
                 <div id="yokoBadgesGrid"></div>
             </div>
         </div>
-
-        <!-- Live Events -->
-        <div class="card">
-            <div class="card-header">
-                <h2><span class="section-icon">&#127358;</span> Yoko Team — Live Events</h2>
-                <button class="btn btn-outline btn-sm" onclick="loadYokoTab()" style="margin-left:auto;font-size:0.78rem;">&#8635; Refresh</button>
-            </div>
-            <div class="card-body" id="yokoBody" style="max-height:9999px;">
-                <p style="color:var(--muted);font-size:0.82rem;margin-bottom:1rem;">
-                    Showing live/open events for Yoko team members. Data is fetched fresh each time you open this tab.
-                </p>
-                <div id="yokoStatus" class="yoko-status-bar" style="display:none"></div>
-                <div id="yokoGrid" class="yoko-grid"></div>
-            </div>
-        </div>
     </div>
 
     <!-- Tournaments Tab -->
@@ -1146,6 +1134,214 @@
 
     <!-- Match Log Tab -->
     <div id="matchLogTab" style="display:none;"></div>
+    <div id="agentTab"   style="display:none;"></div>
+    <div id="matchmakerTab" style="display:none;"></div>
+
+<!-- Deck Mapping Tab -->
+<div id="deckMapTab" style="display:none;">
+
+    <!-- LIST VIEW -->
+    <div id="dmListView">
+
+        <!-- Filters -->
+        <div class="card" style="margin-bottom:1rem;">
+            <div class="card-header">&#128269; Filtros</div>
+            <div class="card-body">
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem;">
+                    <div>
+                        <div class="dash-label">Loja</div>
+                        <select id="dmFilterStore" onchange="dmApplyFilters()"
+                            style="width:100%;padding:.4rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;cursor:pointer;">
+                            <option value="">Todas as lojas</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="dash-label">Coleção (Leader)</div>
+                        <select id="dmFilterSet" onchange="dmApplyFilters()"
+                            style="width:100%;padding:.4rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;cursor:pointer;">
+                            <option value="">Todas as coleções</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="dash-label">Formato</div>
+                        <select id="dmFilterFormat" onchange="dmApplyFilters()"
+                            style="width:100%;padding:.4rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;cursor:pointer;">
+                            <option value="">Todos os formatos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="dash-label">De</div>
+                        <input type="date" id="dmFilterDateFrom" onchange="dmApplyFilters()"
+                            style="width:100%;padding:.4rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;">
+                    </div>
+                    <div>
+                        <div class="dash-label">Até</div>
+                        <input type="date" id="dmFilterDateTo" onchange="dmApplyFilters()"
+                            style="width:100%;padding:.4rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;">
+                    </div>
+                </div>
+                <div style="margin-top:.6rem;">
+                    <button class="btn btn-outline btn-sm" onclick="dmClearFilters()">&#8635; Limpar filtros</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats cards -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1rem;">
+            <div class="card" style="padding:.9rem 1rem;">
+                <div class="dash-label">Eventos</div>
+                <div style="font-size:1.6rem;font-weight:700;color:var(--primary);" id="dmStatEvents">—</div>
+            </div>
+            <div class="card" style="padding:.9rem 1rem;">
+                <div class="dash-label">Players</div>
+                <div style="font-size:1.6rem;font-weight:700;color:var(--primary);" id="dmStatPlayers">—</div>
+            </div>
+            <div class="card" style="padding:.9rem 1rem;">
+                <div class="dash-label">Decks registrados</div>
+                <div style="font-size:1.6rem;font-weight:700;color:var(--primary);" id="dmStatDecks">—</div>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start;">
+
+            <!-- Meta (acumulado de líderes) -->
+            <div class="card">
+                <div class="card-header">&#127942; Meta de Líderes</div>
+                <div class="card-body" id="dmMetaList" style="padding:.5rem 1rem;">
+                    <p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>
+                </div>
+            </div>
+
+            <!-- Event list -->
+            <div class="card">
+                <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>&#128203; Eventos</span>
+                    <div id="dmAdminControls" style="display:none;display:flex;gap:.4rem;">
+                        <button class="btn btn-outline btn-sm" onclick="openManageStoresModal()">&#127970; Lojas</button>
+                        <button class="btn btn-primary btn-sm" onclick="openCreateDeckMapModal()">+ Registrar Evento</button>
+                    </div>
+                </div>
+                <div class="card-body" id="dmEventList" style="padding:0;">
+                    <p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- DETAIL VIEW -->
+    <div id="dmDetailView" style="display:none;">
+        <div class="card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;">
+                <div style="display:flex;align-items:center;gap:.75rem;">
+                    <button class="btn btn-outline btn-sm" onclick="backToDmList()">&#8592; Voltar</button>
+                    <div>
+                        <div id="dmDetailTitle" style="font-weight:700;"></div>
+                        <div id="dmDetailSub" style="font-size:.78rem;color:var(--muted);"></div>
+                    </div>
+                </div>
+                <div id="dmDetailAdminBtns" style="display:none;gap:.4rem;">
+                    <button class="btn btn-outline btn-sm" onclick="editDmEvent()">&#9998; Editar</button>
+                    <button class="btn btn-outline btn-sm" style="color:var(--loss);" onclick="deleteDmEvent()">&#128465; Excluir</button>
+                </div>
+            </div>
+            <div class="card-body" id="dmDetailTable"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Create/Edit DeckMap Event Modal ──────────────────────────── -->
+<div id="dmCreateModal" class="modal-overlay" onclick="closeDmCreateModal(event)" style="display:none;">
+    <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+        <button class="modal-close" onclick="closeDmCreateModal(null,true)">&#10005;</button>
+        <div class="modal-title" id="dmModalTitle">Novo Evento</div>
+
+        <div style="display:grid;gap:.8rem;margin-top:1rem;">
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+                <div>
+                    <div class="dash-label">Loja</div>
+                    <select id="dmStoreId"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;cursor:pointer;">
+                        <option value="">— selecione a loja —</option>
+                    </select>
+                </div>
+                <div>
+                    <div class="dash-label">Data</div>
+                    <input type="date" id="dmDate"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                </div>
+            </div>
+
+            <div>
+                <div class="dash-label">Formato do torneio</div>
+                <input type="text" id="dmFormat" placeholder="Ex: Swiss, Liga Semanal, Regional…"
+                    style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+            </div>
+
+            <div>
+                <div class="dash-label" style="margin-bottom:.4rem;">Jogadores e Decks</div>
+
+                <div style="position:relative;margin-bottom:.5rem;">
+                    <input type="text" id="dmPlayerSearch" placeholder="&#128269; Buscar player cadastrado…"
+                        oninput="onDmPlayerSearch()" autocomplete="off"
+                        style="width:100%;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;box-sizing:border-box;">
+                    <div id="dmPlayerAC" class="player-autocomplete" style="display:none;position:absolute;z-index:200;width:100%;top:calc(100% + 2px);"></div>
+                </div>
+
+                <div style="display:flex;gap:.5rem;margin-bottom:.75rem;">
+                    <input type="text" id="dmGuestName" placeholder="Nome do convidado…"
+                        onkeydown="if(event.key==='Enter')addDmGuest()"
+                        style="flex:1;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;">
+                    <button class="btn btn-outline btn-sm" onclick="addDmGuest()">+ Convidado</button>
+                </div>
+
+                <div id="dmEntriesList"
+                    style="min-height:44px;max-height:260px;overflow-y:auto;padding:.5rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);">
+                    <p style="color:var(--muted);font-size:.8rem;text-align:center;padding:1rem 0;">Nenhum jogador adicionado.</p>
+                </div>
+                <div id="dmEntriesCount" style="font-size:.72rem;color:var(--muted);margin-top:.3rem;">0 jogadores</div>
+            </div>
+
+        </div>
+
+        <div style="display:flex;gap:.5rem;margin-top:1.25rem;justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeDmCreateModal(null,true)">Cancelar</button>
+            <button class="btn btn-primary" id="dmSaveBtn" onclick="saveDmEvent()">&#10003; Salvar Evento</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Manage Stores Modal ──────────────────────────────────────── -->
+<div id="dmStoreModal" class="modal-overlay" onclick="closeManageStoresModal(event)" style="display:none;">
+    <div class="modal-box" style="max-width:420px;">
+        <button class="modal-close" onclick="closeManageStoresModal(null,true)">&#10005;</button>
+        <div class="modal-title">&#127970; Gerenciar Lojas</div>
+
+        <div style="display:flex;gap:.5rem;margin-top:1rem;">
+            <input type="text" id="dmNewStoreName" placeholder="Nome da loja"
+                style="flex:1;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;">
+            <input type="text" id="dmNewStoreCity" placeholder="Cidade (opcional)"
+                style="flex:1;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;">
+        </div>
+        <button class="btn btn-primary btn-sm" style="width:100%;margin-top:.5rem;justify-content:center;" onclick="addStore()">+ Adicionar Loja</button>
+
+        <div id="dmStoreList" style="margin-top:1rem;max-height:280px;overflow-y:auto;">
+            <p style="color:var(--muted);font-size:.85rem;text-align:center;padding:1rem 0;">Carregando…</p>
+        </div>
+    </div>
+</div>
+
+<!-- ── Leader Decks Modal (lista de decks de um líder específico) ── -->
+<div id="dmLeaderDecksModal" class="modal-overlay" onclick="closeDmLeaderDecksModal(event)" style="display:none;">
+    <div class="modal-box" style="max-width:440px;max-height:80vh;overflow-y:auto;">
+        <button class="modal-close" onclick="closeDmLeaderDecksModal(null,true)">&#10005;</button>
+        <div class="modal-title" id="dmLeaderDecksTitle"></div>
+        <div id="dmLeaderDecksBody" style="margin-top:1rem;"></div>
+    </div>
+</div>
+
 
     <!-- Results Tab -->
     <div id="resultsTab" style="display:none;">
@@ -1602,6 +1798,9 @@
 <script src="js/player-profile.js"></script>
 <script src="js/tournaments.js?v=2"></script>
 <script src="js/match-tracker.js"></script>
+<script src="js/agent.js"></script>
+<script src="js/deckmap.js"></script>
+<script src="js/matchmaker.js"></script>
 <script src="js/theme.js"></script>
 <script>
 // ── Inbox modal ───────────────────────────────────────────────────────────────
@@ -1625,7 +1824,7 @@ function openInboxModal() {
     const body = document.getElementById('inboxModalBody');
     body.innerHTML = '<p style="color:var(--muted);font-size:.85rem;text-align:center;padding:1rem 0;">Carregando…</p>';
     document.getElementById('inboxModal').style.display = 'flex';
-    fetch(`${AUTH_BASE}/inbox`, { credentials: 'include' })
+    apiFetch(`/inbox`)
         .then(r => r.ok ? r.json() : [])
         .then(msgs => {
             window._inboxMsgs = msgs;
@@ -1638,7 +1837,7 @@ function openInboxModal() {
 }
 function closeInboxModal() { document.getElementById('inboxModal').style.display = 'none'; }
 function markInboxRead(msgId, el) {
-    fetch(`${AUTH_BASE}/inbox/${msgId}/read`, { method: 'POST', credentials: 'include' });
+    apiFetch(`/inbox/${msgId}/read`, { method: 'POST' });
     if (window._inboxMsgs) {
         const m = window._inboxMsgs.find(x => x.id === msgId);
         if (m) m.read = true;
@@ -1934,8 +2133,9 @@ function loadFromCache() {
         dotEl.className = 'dash-dot warn';
         document.getElementById('fileStatus').textContent = 'Loading map…';
         const [dirRes, mapRes] = await Promise.all([
-            fetch(AUTH_BASE + '/directory', { credentials: 'include' }),
-            fetch(AUTH_BASE + '/bandai-map', { credentials: 'include' }),
+            apiFetch('/directory'),
+            apiFetch('/bandai-map'),
+            loadAllCachesFromServer(),
         ]);
         if (dirRes.ok) {
             const dir = await dirRes.json();

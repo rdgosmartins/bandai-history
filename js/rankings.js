@@ -9,6 +9,9 @@ function switchTab(tab) {
     document.getElementById('tournamentsTab').style.display   = tab === 'tournaments' ? '' : 'none';
     document.getElementById('resultsTab').style.display       = tab === 'results'     ? '' : 'none';
     document.getElementById('circuitoTab').style.display      = tab === 'circuito'    ? '' : 'none';
+    const _agTab = document.getElementById('agentTab'); if (_agTab) _agTab.style.display = tab === 'agent' ? '' : 'none';
+    const _dmTab = document.getElementById('deckMapTab'); if (_dmTab) _dmTab.style.display = tab === 'deckmap' ? '' : 'none';
+    const _mmTab = document.getElementById('matchmakerTab'); if (_mmTab) _mmTab.style.display = tab === 'matchmaker' ? '' : 'none';
     document.getElementById('tabMyStats').classList.toggle('active',      tab === 'my-stats');
     document.getElementById('tabRankings').classList.toggle('active',     tab === 'rankings');
     document.getElementById('tabProfile').classList.toggle('active',      tab === 'profile');
@@ -17,13 +20,19 @@ function switchTab(tab) {
     document.getElementById('tabTournaments').classList.toggle('active',  tab === 'tournaments');
     document.getElementById('tabResults').classList.toggle('active',      tab === 'results');
     document.getElementById('tabCircuito').classList.toggle('active',     tab === 'circuito');
+    document.getElementById('tabAgent')?.classList.toggle('active',       tab === 'agent');
+    document.getElementById('tabDeckMap')?.classList.toggle('active',     tab === 'deckmap');
+    document.getElementById('tabMatchmaker')?.classList.toggle('active', tab === 'matchmaker');
     if (tab === 'rankings')    buildGlobalRankings();
     if (tab === 'profile')     { buildProfileSelect(); loadPlayerProfile(); }
-    if (tab === 'yoko')        { renderYokoBadges(); loadYokoTab(); }
+    if (tab === 'yoko')        { renderYokoBadges(); }
     if (tab === 'match-log')   loadMatchLog();
     if (tab === 'tournaments') loadTournaments();
     if (tab === 'results')     loadCircuitStandings();
     if (tab === 'circuito')    loadCircuitStandings();
+    if (tab === 'agent')       loadAgentTab();
+    if (tab === 'deckmap')     loadDeckMapTab();
+    if (tab === 'matchmaker')  loadMatchmakerTab();
 }
 
 
@@ -275,7 +284,12 @@ function applyRankingsFilter() {
     if (storeH2HCard) storeH2HCard.style.display = finalUsers.length > 0 ? 'block' : 'none';
 }
 
-function buildGlobalRankings() {
+async function buildGlobalRankings() {
+    // Garante que o cache compartilhado (sincronizado por qualquer pessoa do time)
+    // já foi mesclado no localStorage antes de montar o ranking — resolve na hora
+    // se o boot já tiver terminado, ou aguarda se ainda estiver em andamento.
+    await loadAllCachesFromServer();
+
     const allUsers = App.usersWithToken.map(u => ({
         ...u,
         events: Object.values(loadCache(u.bandaiId) || {})

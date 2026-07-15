@@ -96,6 +96,35 @@ function onUserChange() {
     updateCacheBar(user.bandaiId);
 }
 
+// Puxa o cache de eventos de TODOS os bandaiIds já sincronizados por qualquer
+// pessoa do time (endpoint /cache-all) e mescla no localStorage deste navegador.
+// Isso é o que faz o Global Rankings (e qualquer outra tela que use loadCache())
+// mostrar dados de todo mundo, mesmo em um dispositivo que nunca rodou "Sync All" —
+// antes disso, cada navegador só via os players que ELE MESMO tinha sincronizado.
+let _allCachePromise = null;
+async function loadAllCachesFromServer({ force = false } = {}) {
+    if (_allCachePromise && !force) return _allCachePromise;
+    _allCachePromise = (async () => {
+        try {
+            const r = await apiFetch(`/cache-all`);
+            if (!r.ok) return;
+            const all = await r.json(); // { bandaiId: { eventId: eventData, ... }, ... }
+            for (const [bandaiId, serverCache] of Object.entries(all || {})) {
+                if (!serverCache || !Object.keys(serverCache).length) continue;
+                const localCache = loadCache(bandaiId);
+                // Servidor é a fonte compartilhada mais atual; local só preenche o que
+                // porventura ainda não tenha sido enviado ao servidor por este navegador.
+                const merged = { ...localCache, ...serverCache };
+                localStorage.setItem(cacheKey(bandaiId), JSON.stringify(merged));
+            }
+            console.log(`[Cache] cache-all mesclado: ${Object.keys(all || {}).length} jogadores.`);
+        } catch (e) {
+            console.warn('[Cache] Falha ao carregar /cache-all do servidor:', e);
+        }
+    })();
+    return _allCachePromise;
+}
+
 // ── Cache (localStorage, keyed per Bandai ID) ──────────────────────────────
 
 function cacheKey(bandaiId) { return CACHE_PREFIX + bandaiId; }
@@ -128,7 +157,7 @@ async function pullServerCache(bandaiId) {
     const ac = new AbortController();
     const t  = setTimeout(() => ac.abort(), 10_000);
     try {
-        const r = await fetch(`${AUTH_BASE}/cache/${bandaiId}`, { credentials: 'include', signal: ac.signal });
+        const r = await apiFetch(`/cache/${bandaiId}`, { signal: ac.signal });
         clearTimeout(t);
         if (!r.ok) return;
         const serverCache = await r.json();

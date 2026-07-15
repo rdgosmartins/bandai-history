@@ -1,8 +1,9 @@
 // ── Match Tracker ─────────────────────────────────────────────────────────────
 // Requires: auth.js (AUTH_BASE), tournaments.js (TRN_LEADERS, _leaderImgUrl)
 
-const ML_SETS = ['OP15','OP14','EB04','OP13','EB03','OP12','EB02','OP11','EB01',
-                 'OP10','OP09','OP08','OP07','OP06','OP05','OP04','OP03','OP02','OP01'];
+// Derivado dinamicamente de TRN_LEADERS (tournaments.js), que por sua vez vem de
+// /cards.json — sets novos (OP16, OP17...) aparecem aqui sem precisar editar nada.
+let ML_SETS = [];
 const ML_TYPES = ['Testing','Local','Store CS','Treasure Cup','Flagship','Regional','National','World','CCG Eventos - Regionals','CCG Eventos - Treasure Cup'];
 
 let _mlMatches              = [];   // cached list
@@ -15,6 +16,8 @@ let _mlCurrentBandaiId      = null; // resolved bandaiId of the logged-in user
 async function loadMatchLog() {
     const el = document.getElementById('matchLogTab');
     if (!el) return;
+    await _trnLoadLeaders();
+    ML_SETS = _trnSetCodesDesc();
     el.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
             <h2 style="margin:0;font-size:1.15rem;">&#129527; Log Pose</h2>
@@ -31,7 +34,7 @@ async function loadMatchLog() {
     `;
     try {
         const [matchRes, authUser] = await Promise.all([
-            fetch(`${AUTH_BASE}/my-matches`, { credentials: 'include' }),
+            apiFetch(`/my-matches`),
             _authUserPromise,
         ]);
         _mlMatches = matchRes.ok ? await matchRes.json() : [];
@@ -156,7 +159,7 @@ function _mlGlobalStatsHtml() {
             })
             .map(([id, { w, l }]) => {
                 const total = w + l;
-                const pct   = Math.round(w / total * 100);
+                const pct   = calcWinPct(w, total, 0);
                 const c     = pct >= 60 ? 'var(--win,#28a745)' : (pct <= 40 ? 'var(--loss,#dc3545)' : 'var(--text,#555)');
                 const name  = TRN_LEADERS.find(x => x.id === id)?.name ?? id;
                 return `<div style="display:flex;flex-direction:column;align-items:center;gap:.15rem;min-width:50px;" title="${_esc(name)}">
@@ -836,7 +839,7 @@ async function toggleCloseMatch(matchId) {
 async function deleteMatch(matchId) {
     if (!confirm('Remover este torneio do histórico?')) return;
     try {
-        const r = await fetch(`${AUTH_BASE}/my-matches/${matchId}`, { method: 'DELETE', credentials: 'include' });
+        const r = await apiFetch(`/my-matches/${matchId}`, { method: 'DELETE' });
         if (!r.ok) throw new Error(await r.text());
         _mlMatches = _mlMatches.filter(m => m.id !== matchId);
         _renderMatchList();
@@ -960,6 +963,4 @@ function _mlTypeShort(type) {
     return map[type] || type?.slice(0, 5).toUpperCase() || '?';
 }
 
-function _esc(str) {
-    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// _esc() foi movida para js/utils.js (era duplicada aqui e em profile.html)

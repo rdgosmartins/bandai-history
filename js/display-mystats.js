@@ -111,7 +111,7 @@ function displayStreaks(streaks) {
 
 function displayResults(userName, totalW, totalL, periodMap, playerMap, eventData) {
     const total  = totalW + totalL;
-    const winPct = total > 0 ? (totalW / total * 100).toFixed(1) : '0.0';
+    const winPct = calcWinPct(totalW, total, 1);
 
     document.getElementById('overallStats').innerHTML = `
         <div class="stat-box"><div class="val w-val">${totalW}</div><div class="lbl">Wins</div></div>

@@ -75,3 +75,34 @@ function sortTable(tableId, col) {
     });
     rows.forEach(r => tbody.appendChild(r));
 }
+
+// ── Shared win-rate helper ───────────────────────────────────────────────────
+// Consolidado aqui porque a mesma conta (wins/total*100) estava reimplementada
+// em display-mystats.js, match-tracker.js, player-profile.js e rankings.js.
+// decimals=1 dá "62.5", decimals=0 dá "63" (arredondado) — cada call site usava
+// uma das duas variações, então isso preserva o comportamento de cada um.
+function calcWinPct(wins, total, decimals = 1) {
+    if (!total) return decimals === 0 ? 0 : '0.0';
+    const pct = (wins / total) * 100;
+    return decimals === 0 ? Math.round(pct) : pct.toFixed(decimals);
+}
+
+// ── Shared HTML-escape helper ────────────────────────────────────────────────
+// Centralizado aqui — antes existia uma cópia quase idêntica em match-tracker.js
+// (removida) e em profile.html (mantida lá, já que profile.html é uma página
+// separada que não carrega utils.js).
+function _esc(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+}
+
+// ── Shared authenticated fetch helper ────────────────────────────────────────
+// O padrão `fetch(AUTH_BASE + path, { credentials: 'include', ...opts })` estava
+// repetido dezenas de vezes pelo código. apiFetch() centraliza isso — mesmo
+// comportamento, só sem repetir `credentials: 'include'` toda vez. Retorna a
+// Response crua (não faz .json() automaticamente), pra não mudar como cada
+// call site já trata erro/parsing.
+function apiFetch(path, options = {}) {
+    return fetch(AUTH_BASE + path, { credentials: 'include', ...options });
+}

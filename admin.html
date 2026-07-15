@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin — [YOKO] One Piece TCG - History Dashboard</title>
+    <title>Admin — [YOKO] One Piece TCG</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
@@ -11,258 +11,753 @@
     <link rel="stylesheet" href="css/auth.css">
     <script src="js/auth.js"></script>
     <script>
-        let currentAdmin;
+        let currentAdmin, _adminAllUsers = [], _adminTournaments = [], _adminCircuits = [];
         (async () => {
             currentAdmin = await requireAuth({ requireAdmin: true });
             if (!currentAdmin) return;
             document.getElementById('adminName').textContent = currentAdmin.displayName || currentAdmin.email;
-            loadUsers();
-            loadMap();
+            adminTab('pendentes');
         })();
     </script>
+    <style>
+        .adm-tab-nav { display:flex; flex-wrap:wrap; gap:0; border-bottom:2px solid var(--border,#eee); margin-bottom:1.5rem; }
+        .adm-tab-btn { padding:.55rem 1.1rem; border:none; background:none; font-family:'Cinzel',serif; font-size:.75rem; letter-spacing:.06em; color:var(--text-muted,#888); cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; transition:color .2s,border-color .2s; white-space:nowrap; }
+        .adm-tab-btn.active { color:var(--primary,#048A81); border-bottom-color:var(--primary,#048A81); font-weight:700; }
+        .adm-tab-btn:hover:not(.active) { color:var(--text,#1a1a2e); }
+        .adm-section { display:none; }
+        .adm-section.active { display:block; }
+        .user-row2 { display:flex; align-items:center; gap:.65rem; padding:.6rem .75rem; border-bottom:1px solid var(--border,#eee); flex-wrap:wrap; }
+        .user-row2:last-child { border-bottom:none; }
+        .user-row2 .u-avatar { width:36px; height:36px; border-radius:50%; object-fit:cover; background:var(--primary,#048A81); display:flex; align-items:center; justify-content:center; color:#fff; font-size:.8rem; font-weight:700; flex-shrink:0; overflow:hidden; }
+        .user-row2 .u-avatar img { width:100%; height:100%; object-fit:cover; }
+        .user-row2 .u-info { flex:1; min-width:0; }
+        .user-row2 .u-name { font-weight:700; font-size:.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .user-row2 .u-email { font-size:.75rem; color:var(--text-muted,#888); }
+        .user-row2 .u-badges { display:flex; gap:.3rem; flex-wrap:wrap; align-items:center; }
+        .user-row2 .u-actions { display:flex; gap:.3rem; flex-wrap:wrap; }
+        .adm-table { width:100%; border-collapse:collapse; font-size:.83rem; }
+        .adm-table th { text-align:left; padding:.45rem .6rem; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted,#888); border-bottom:2px solid var(--border,#eee); }
+        .adm-table td { padding:.5rem .6rem; border-bottom:1px solid var(--border,#eee); vertical-align:middle; }
+        .adm-table tr:last-child td { border-bottom:none; }
+        .adm-input { width:100%; padding:.4rem .65rem; border-radius:7px; border:1px solid var(--border,#dee2e6); background:var(--bg,#f0f4f8); color:var(--text,#1a1a2e); font-size:.85rem; box-sizing:border-box; }
+        .adm-label { font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted,#888); display:block; margin-bottom:.3rem; }
+        .adm-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; padding:1rem; }
+        .adm-modal-overlay.open { display:flex; }
+        .adm-modal-box { background:var(--card,#fff); border-radius:14px; padding:1.5rem; max-width:440px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:0 12px 50px rgba(0,0,0,.3); position:relative; border-top:3px solid var(--primary,#048A81); }
+        .adm-modal-close { position:absolute; top:.75rem; right:1rem; background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-muted,#888); }
+        .adm-status { font-size:.82rem; }
+        .badge2 { display:inline-block; font-size:.7rem; font-weight:700; border-radius:20px; padding:.1rem .45rem; }
+        .badge-approved  { color:#00b478; background:rgba(0,180,120,.1); }
+        .badge-suspended { color:var(--loss,#dc3545); background:rgba(220,53,69,.1); }
+        .badge-pending   { color:#b87e00; background:rgba(240,173,78,.12); }
+        .badge-rejected  { color:#888; background:#eee; }
+        .badge-admin-r   { color:var(--gold,#c9a84c); background:rgba(201,168,76,.12); }
+        .badge-user-r    { color:#888; background:#eee; }
+        .badge-closed    { color:#888; background:#eee; font-size:.7rem; font-weight:700; border-radius:20px; padding:.1rem .45rem; }
+    </style>
 </head>
 <body class="admin-body">
 <div class="admin-container">
 
     <div class="admin-header">
         <h1>&#9881; Admin Panel</h1>
-        <a href="/analyzer.html" style="font-size:0.85rem;color:var(--primary,#048A81);font-weight:600;text-decoration:none;">&#9875; Go to History Dashboard →</a>
-        <div style="display:flex; align-items:center; gap:1rem;">
-            <span style="font-size:0.85rem; color:var(--text-muted,#888)">
-                Signed in as <strong id="adminName">…</strong>
-            </span>
-            <a href="/profile.html" style="font-size:0.85rem;color:var(--accent,#c9a84c);font-weight:600;text-decoration:none;">&#128100; My Profile</a>
+        <a href="/analyzer.html" style="font-size:.85rem;color:var(--primary,#048A81);font-weight:600;text-decoration:none;">&#9875; Dashboard →</a>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <span style="font-size:.85rem;color:var(--text-muted,#888)">Signed in as <strong id="adminName">…</strong></span>
             <button class="btn-logout" onclick="logout()">Sign Out</button>
         </div>
     </div>
 
-    <!-- Pending approvals -->
-    <div class="admin-card">
-        <h2>⏳ Pending Approvals</h2>
-        <div id="pendingList"><div class="empty-state">Loading…</div></div>
+    <!-- Tab navigation -->
+    <div class="adm-tab-nav">
+        <button class="adm-tab-btn active" id="adm-btn-pendentes"   onclick="adminTab('pendentes')">⏳ Pendentes <span id="pendingBadge"></span></button>
+        <button class="adm-tab-btn"        id="adm-btn-usuarios"    onclick="adminTab('usuarios')">&#128101; Usuários</button>
+        <button class="adm-tab-btn"        id="adm-btn-torneios"    onclick="adminTab('torneios')">&#127941; Torneios</button>
+        <button class="adm-tab-btn"        id="adm-btn-circuitos"   onclick="adminTab('circuitos')">&#9878; Circuitos</button>
+        <button class="adm-tab-btn"        id="adm-btn-conteudo"    onclick="adminTab('conteudo')">&#128193; Conteúdo</button>
+        <button class="adm-tab-btn"        id="adm-btn-comunicacao" onclick="adminTab('comunicacao')">&#128226; Comunicação</button>
+        <button class="adm-tab-btn"        id="adm-btn-auditoria"   onclick="adminTab('auditoria')">&#128203; Auditoria</button>
     </div>
 
-    <!-- All users -->
-    <div class="admin-card">
-        <h2>&#128101; All Users</h2>
-        <div id="allUsersList"><div class="empty-state">Loading…</div></div>
+    <!-- ── Pendentes ── -->
+    <div id="adm-pendentes" class="adm-section admin-card">
+        <h2>⏳ Aprovações Pendentes</h2>
+        <div id="pendingList"><div class="empty-state">Carregando…</div></div>
     </div>
 
-    <!-- Bandai Map -->
-    <div class="admin-card">
-        <h2>&#128196; Bandai Player Map</h2>
-        <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">
-            Paste the contents of <code>bandai_username_map.txt</code> here. All users will load this map automatically on login — no file upload needed.
-        </p>
-        <textarea id="bandaiMapText" rows="10" style="width:100%;font-family:monospace;font-size:.78rem;background:var(--bg,#f0f4f8);border:1px solid var(--border,#dee2e6);border-radius:8px;padding:.6rem .8rem;color:var(--text,#1a1a2e);resize:vertical;" placeholder="Name:BandaiID:eyJ0eXAiOi...&#10;Rodrigo:0000416920:eyJ0eXAiOi...&#10;Mori:0000235357:eyJ0eXAiOi..."></textarea>
-        <div style="display:flex;align-items:center;gap:1rem;margin-top:.6rem;justify-content:flex-end;">
-            <span id="mapSaveStatus" style="font-size:.82rem;"></span>
-            <button class="btn-approve" onclick="saveMap()">&#128190; Save Map</button>
+    <!-- ── Usuários ── -->
+    <div id="adm-usuarios" class="adm-section">
+        <div class="admin-card" style="margin-bottom:1rem;border-left:3px solid var(--primary,#048A81);">
+            <h2 style="margin:0 0 .5rem;">&#128273; Gestão de Permissões</h2>
+            <p style="font-size:.82rem;color:var(--text-muted,#888);margin:0 0 .75rem;">
+                Conceda privilégios de admin a qualquer usuário já cadastrado, informando o email — sem precisar localizá-lo na lista abaixo.
+            </p>
+            <div style="display:flex;gap:.5rem;">
+                <input type="email" id="promoteEmailInput" placeholder="email@exemplo.com"
+                    class="adm-input" style="flex:1;" onkeydown="if(event.key==='Enter')promoteByEmail()">
+                <button class="btn-approve" onclick="promoteByEmail()">&#11014; Tornar Admin</button>
+            </div>
+            <div id="promoteEmailStatus" style="font-size:.8rem;margin-top:.5rem;"></div>
+        </div>
+        <div class="admin-card" style="margin-bottom:1rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                <h2 style="margin:0;">&#128101; Usuários</h2>
+                <input type="text" id="userSearchInput" placeholder="&#128269; Buscar..." oninput="filterUsers()" class="adm-input" style="max-width:200px;">
+            </div>
+            <div id="allUsersList"><div class="empty-state">Carregando…</div></div>
+        </div>
+        <div class="admin-card">
+            <h2>&#128279; Associar Player → Usuário</h2>
+            <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">Vincule um usuário registrado ao seu nome Bandai.</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;">
+                <div><label class="adm-label">Usuário</label><select id="assocUser" class="adm-input"><option value="">— carregando —</option></select></div>
+                <div><label class="adm-label">Nome Bandai</label><select id="assocPlayer" class="adm-input"><option value="">— salve o mapa primeiro —</option></select></div>
+                <button class="btn-approve" onclick="saveAssociation()" style="white-space:nowrap;">&#128279; Associar</button>
+            </div>
+            <div id="assocStatus" class="adm-status" style="margin-top:.5rem;text-align:right;"></div>
+        </div>
+        <div class="admin-card" style="margin-top:1rem;">
+            <h2>&#128196; Mapa Bandai</h2>
+            <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">Cole o conteúdo do <code>bandai_username_map.txt</code>.</p>
+            <textarea id="bandaiMapText" rows="8" class="adm-input" style="font-family:monospace;font-size:.78rem;resize:vertical;" placeholder="Name:BandaiID:eyJ0eXAiOi..."></textarea>
+            <div style="display:flex;align-items:center;gap:1rem;margin-top:.6rem;justify-content:flex-end;">
+                <span id="mapSaveStatus" class="adm-status"></span>
+                <button class="btn-approve" onclick="saveMap()">&#128190; Salvar Mapa</button>
+            </div>
         </div>
     </div>
 
-    <!-- Player Association -->
-    <div class="admin-card">
-        <h2>&#128279; Associate Player → User</h2>
-        <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">
-            Link a registered user account to their Bandai player name so they are auto-selected on the dashboard.
-        </p>
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;">
-            <div>
-                <label style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted,#888);display:block;margin-bottom:.3rem;">Registered User</label>
-                <select id="assocUser" style="width:100%;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--border,#dee2e6);background:var(--bg,#f0f4f8);color:var(--text,#1a1a2e);font-size:.85rem;">
-                    <option value="">— loading users —</option>
-                </select>
-            </div>
-            <div>
-                <label style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted,#888);display:block;margin-bottom:.3rem;">Bandai Player Name</label>
-                <select id="assocPlayer" style="width:100%;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--border,#dee2e6);background:var(--bg,#f0f4f8);color:var(--text,#1a1a2e);font-size:.85rem;">
-                    <option value="">— save map first —</option>
-                </select>
-            </div>
-            <button class="btn-approve" onclick="saveAssociation()" style="white-space:nowrap;">&#128279; Associate</button>
+    <!-- ── Torneios ── -->
+    <div id="adm-torneios" class="adm-section admin-card">
+        <h2>&#127941; Torneios</h2>
+        <div id="adminTournamentsList"><div class="empty-state">Carregando…</div></div>
+    </div>
+
+    <!-- ── Circuitos ── -->
+    <div id="adm-circuitos" class="adm-section admin-card">
+        <h2>&#9878; Circuitos</h2>
+        <div id="adminCircuitsList"><div class="empty-state">Carregando…</div></div>
+    </div>
+
+    <!-- ── Conteúdo ── -->
+    <div id="adm-conteudo" class="adm-section">
+        <div class="admin-card" style="margin-bottom:1rem;">
+            <h2>&#127918; Decks Públicos</h2>
+            <div id="adminDecksList"><div class="empty-state">Carregando…</div></div>
         </div>
-        <div id="assocStatus" style="font-size:.82rem;margin-top:.5rem;text-align:right;"></div>
+        <div class="admin-card">
+            <h2>&#128100; Perfis de Usuários</h2>
+            <div id="adminProfilesList"><div class="empty-state">Carregando…</div></div>
+        </div>
+    </div>
+
+    <!-- ── Comunicação ── -->
+    <div id="adm-comunicacao" class="adm-section">
+        <div class="admin-card" style="margin-bottom:1rem;">
+            <h2>&#128226; Aviso Global</h2>
+            <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">Exibido para todos os usuários no topo do Dashboard.</p>
+            <div id="currentBannerPreview" style="margin-bottom:.75rem;"></div>
+            <div style="display:grid;gap:.65rem;">
+                <div><label class="adm-label">Mensagem</label><textarea id="bannerMessage" rows="2" class="adm-input" style="resize:vertical;" placeholder="Ex: Torneio amanhã às 14h!"></textarea></div>
+                <div><label class="adm-label">Tipo</label>
+                    <select id="bannerType" class="adm-input" style="max-width:160px;">
+                        <option value="info">ℹ Info</option>
+                        <option value="warning">⚠ Aviso</option>
+                        <option value="success">✓ Sucesso</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:.5rem;">
+                    <button class="btn-approve" onclick="publishBanner()">&#128226; Publicar</button>
+                    <button class="btn-reject"  onclick="clearBanner()">&#128465; Limpar</button>
+                </div>
+                <span id="bannerStatus" class="adm-status"></span>
+            </div>
+        </div>
+        <div class="admin-card">
+            <h2>&#9993; Mensagem Direta</h2>
+            <p style="font-size:.82rem;color:var(--text-muted,#888);margin-bottom:.75rem;">Envie uma mensagem que aparecerá na inbox do usuário.</p>
+            <div style="display:grid;gap:.65rem;">
+                <div><label class="adm-label">Destinatário</label><select id="msgTargetUser" class="adm-input"><option value="">— selecione —</option></select></div>
+                <div><label class="adm-label">Mensagem</label><textarea id="msgText" rows="3" class="adm-input" style="resize:vertical;" placeholder="Digite sua mensagem…"></textarea></div>
+                <div style="display:flex;gap:.5rem;align-items:center;">
+                    <button class="btn-approve" onclick="sendDirectMessage()">&#9993; Enviar</button>
+                    <span id="msgStatus" class="adm-status"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Auditoria ── -->
+    <div id="adm-auditoria" class="adm-section admin-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+            <h2 style="margin:0;">&#128203; Log de Auditoria</h2>
+            <select id="auditFilter" class="adm-input" style="max-width:180px;" onchange="renderAuditLog()">
+                <option value="">Todas as ações</option>
+                <option value="approve">Aprovar</option>
+                <option value="reject">Rejeitar</option>
+                <option value="suspend">Suspender</option>
+                <option value="unsuspend">Reativar</option>
+                <option value="set_role">Trocar role</option>
+                <option value="edit_user">Editar usuário</option>
+                <option value="delete_user">Excluir usuário</option>
+                <option value="create_tournament">Criar torneio</option>
+                <option value="delete_tournament">Excluir torneio</option>
+                <option value="clone_tournament">Clonar torneio</option>
+                <option value="create_circuit">Criar circuito</option>
+                <option value="delete_circuit">Excluir circuito</option>
+                <option value="close_circuit">Encerrar circuito</option>
+            </select>
+        </div>
+        <div id="auditLogBody"><div class="empty-state">Carregando…</div></div>
     </div>
 
 </div>
 
+<!-- ── Edit User Modal ── -->
+<div id="editUserModal" class="adm-modal-overlay" onclick="if(event.target===this)closeEditUserModal()">
+    <div class="adm-modal-box">
+        <button class="adm-modal-close" onclick="closeEditUserModal()">&#10005;</button>
+        <div style="font-size:1rem;font-weight:700;color:var(--primary,#048A81);margin-bottom:1rem;">&#9998; Editar Usuário</div>
+        <input type="hidden" id="editUserId">
+        <div style="display:grid;gap:.7rem;">
+            <div><label class="adm-label">Nome</label><input type="text" id="editUserName" class="adm-input"></div>
+            <div><label class="adm-label">Email</label><input type="email" id="editUserEmail" class="adm-input"></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1.1rem;justify-content:flex-end;">
+            <button class="btn-reject" onclick="closeEditUserModal()">Cancelar</button>
+            <button class="btn-approve" onclick="submitEditUser()">&#10003; Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Manual Points Modal ── -->
+<div id="manualPtsModal" class="adm-modal-overlay" onclick="if(event.target===this)closeManualPtsModal()">
+    <div class="adm-modal-box">
+        <button class="adm-modal-close" onclick="closeManualPtsModal()">&#10005;</button>
+        <div style="font-size:1rem;font-weight:700;color:var(--primary,#048A81);margin-bottom:1rem;">&#43; Pontos Manuais</div>
+        <input type="hidden" id="manualPtsCircuitId">
+        <div style="display:grid;gap:.7rem;">
+            <div><label class="adm-label">Participante</label><select id="manualPtsPlayer" class="adm-input"><option value="">— selecione —</option></select></div>
+            <div><label class="adm-label">Pontos</label><input type="number" id="manualPtsValue" class="adm-input" step="0.1" value="0"></div>
+            <div><label class="adm-label">Motivo</label><input type="text" id="manualPtsReason" class="adm-input" placeholder="Ex: bônus de presença"></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1.1rem;justify-content:flex-end;">
+            <button class="btn-reject" onclick="closeManualPtsModal()">Cancelar</button>
+            <button class="btn-approve" onclick="submitManualPoints()">&#10003; Adicionar</button>
+        </div>
+    </div>
+</div>
+
 <script>
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function avatarEl(user) {
+    if (user.avatarUrl) return `<div class="u-avatar"><img src="${esc(user.avatarUrl)}" alt="" onerror="this.parentElement.textContent='${(user.displayName||user.email||'?').slice(0,2).toUpperCase()}'"></div>`;
+    return `<div class="u-avatar">${(user.displayName||user.email||'?').slice(0,2).toUpperCase()}</div>`;
+}
+function statusBadge(s) {
+    const map = { approved:'badge-approved', suspended:'badge-suspended', pending:'badge-pending', rejected:'badge-rejected' };
+    const label = { approved:'aprovado', suspended:'suspenso', pending:'pendente', rejected:'rejeitado' };
+    return `<span class="badge2 ${map[s]||''}">${label[s]||s}</span>`;
+}
+function roleBadge(r) { return r === 'admin' ? `<span class="badge2 badge-admin-r">admin</span>` : `<span class="badge2 badge-user-r">user</span>`; }
+function methodBadge(m) { const map={google:'badge-google',email:'badge-email',both:'badge-both'}; return `<span class="badge ${map[m]||'badge-email'}">${m}</span>`; }
+function setStatus(elId, msg, ok) { const el=document.getElementById(elId); el.textContent=msg; el.style.color=ok?'var(--win,#28a745)':'var(--loss,#dc3545)'; if(ok)setTimeout(()=>{el.textContent='';},3000); }
+
+// ── Tab management ─────────────────────────────────────────────────────────────
+const ADM_TABS = ['pendentes','usuarios','torneios','circuitos','conteudo','comunicacao','auditoria'];
+function adminTab(name) {
+    ADM_TABS.forEach(t => {
+        document.getElementById(`adm-${t}`).classList.toggle('active', t === name);
+        document.getElementById(`adm-btn-${t}`).classList.toggle('active', t === name);
+    });
+    const loaders = {
+        pendentes:   () => loadUsers(),
+        usuarios:    () => { loadUsers(); loadMap(); },
+        torneios:    () => loadAdminTournaments(),
+        circuitos:   () => loadAdminCircuits(),
+        conteudo:    () => { loadAdminDecks(); loadAdminProfiles(); },
+        comunicacao: () => { loadBanner(); loadMsgUsers(); },
+        auditoria:   () => loadAuditLog(),
+    };
+    loaders[name]?.();
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
 async function loadUsers() {
     try {
         const res = await fetch(`${AUTH_BASE}/admin/users`, { credentials: 'include' });
         if (!res.ok) throw new Error();
         const { pending, all } = await res.json();
+        _adminAllUsers = all;
         renderPending(pending);
         renderAll(all);
         populateAssocUsers(all);
+        populateMsgUsers(all);
+        const badge = document.getElementById('pendingBadge');
+        if (badge) badge.textContent = pending.length ? `(${pending.length})` : '';
     } catch {
-        document.getElementById('pendingList').innerHTML = '<div class="empty-state">Failed to load users.</div>';
+        document.getElementById('pendingList').innerHTML = '<div class="empty-state">Erro ao carregar.</div>';
     }
 }
 
-async function loadMap() {
-    try {
-        const res = await fetch(`${AUTH_BASE}/bandai-map`, { credentials: 'include' });
-        if (!res.ok) return;
-        const { map } = await res.json();
-        if (map) {
-            document.getElementById('bandaiMapText').value = map;
-            populateAssocPlayers(map);
-        }
-    } catch {}
-}
-
-function populateAssocUsers(users) {
-    const sel = document.getElementById('assocUser');
-    sel.innerHTML = '<option value="">— select a user —</option>';
-    for (const u of users) {
-        const opt = document.createElement('option');
-        opt.value = u.id;
-        opt.textContent = `${u.displayName || u.email} (${u.email})`;
-        if (u.profile?.bandaiName) opt.textContent += ` · ${u.profile.bandaiName}`;
-        sel.appendChild(opt);
-    }
-}
-
-function populateAssocPlayers(mapText) {
-    const sel = document.getElementById('assocPlayer');
-    sel.innerHTML = '<option value="">— select a player —</option>';
-    for (const line of mapText.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        const name = trimmed.split(':')[0].trim();
-        if (!name) continue;
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        sel.appendChild(opt);
-    }
-}
-
-async function saveMap() {
-    const btn = document.querySelector('.admin-card button[onclick="saveMap()"]');
-    const status = document.getElementById('mapSaveStatus');
-    const map = document.getElementById('bandaiMapText').value.trim();
-    if (!map) { status.textContent = 'Map is empty.'; status.style.color = 'var(--loss,#dc3545)'; return; }
-    if (btn) btn.disabled = true;
-    status.textContent = 'Saving…'; status.style.color = 'var(--text-muted,#888)';
-    try {
-        const res = await fetch(`${AUTH_BASE}/bandai-map`, {
-            method: 'PUT', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ map }),
-        });
-        if (res.ok) {
-            status.textContent = '✓ Saved!'; status.style.color = 'var(--win,#28a745)';
-            populateAssocPlayers(map);
-            setTimeout(() => { status.textContent = ''; }, 3000);
-        } else {
-            status.textContent = 'Error saving map.'; status.style.color = 'var(--loss,#dc3545)';
-        }
-    } catch {
-        status.textContent = 'Network error.'; status.style.color = 'var(--loss,#dc3545)';
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-async function saveAssociation() {
-    const userId     = document.getElementById('assocUser').value;
-    const bandaiName = document.getElementById('assocPlayer').value;
-    const status     = document.getElementById('assocStatus');
-    if (!userId || !bandaiName) { status.textContent = 'Select both a user and a player.'; status.style.color = 'var(--loss,#dc3545)'; return; }
-    status.textContent = 'Saving…'; status.style.color = 'var(--text-muted,#888)';
-    try {
-        const res = await fetch(`${AUTH_BASE}/admin/associate`, {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, bandaiName }),
-        });
-        if (res.ok) {
-            status.textContent = `✓ Associated!`; status.style.color = 'var(--win,#28a745)';
-            loadUsers(); // refresh user list to show updated bandaiName
-            setTimeout(() => { status.textContent = ''; }, 3000);
-        } else {
-            status.textContent = 'Error saving.'; status.style.color = 'var(--loss,#dc3545)';
-        }
-    } catch {
-        status.textContent = 'Network error.'; status.style.color = 'var(--loss,#dc3545)';
-    }
-}
-
-function avatarEl(user) {
-    if (user.avatarUrl) return `<div class="user-avatar"><img src="${user.avatarUrl}" alt=""></div>`;
-    const initials = (user.displayName || user.email).slice(0,2).toUpperCase();
-    return `<div class="user-avatar">${initials}</div>`;
-}
-
-function methodBadge(m) {
-    const map = { google: 'badge-google', email: 'badge-email', both: 'badge-both' };
-    return `<span class="badge ${map[m] || 'badge-email'}">${m}</span>`;
-}
-
-function statusBadge(s) {
-    const map = { pending: 'badge-pending', approved: 'badge-approved', rejected: 'badge-rejected' };
-    return `<span class="badge ${map[s] || ''}">${s}</span>`;
+function filterUsers() {
+    const q = document.getElementById('userSearchInput')?.value?.toLowerCase() || '';
+    const filtered = _adminAllUsers.filter(u =>
+        !q || (u.displayName||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q)
+    );
+    renderAll(filtered);
 }
 
 function renderPending(users) {
     const el = document.getElementById('pendingList');
-    if (!users.length) { el.innerHTML = '<div class="empty-state">No pending approvals.</div>'; return; }
+    if (!users.length) { el.innerHTML = '<div class="empty-state">Nenhuma aprovação pendente.</div>'; return; }
     el.innerHTML = users.map(u => `
-        <div class="user-row" id="row-${u.id}">
+        <div class="user-row2" id="row-${u.id}">
             ${avatarEl(u)}
-            <div class="user-info">
-                <strong>${u.displayName || '—'}</strong>
-                <span>${u.email}</span>
+            <div class="u-info"><div class="u-name">${esc(u.displayName||'—')}</div><div class="u-email">${esc(u.email)}</div></div>
+            <div class="u-badges">${methodBadge(u.method)}<span style="font-size:.75rem;color:var(--text-muted,#aaa)">${new Date(u.createdAt).toLocaleDateString('pt-BR')}</span></div>
+            <div class="u-actions">
+                <button class="btn-approve" onclick="approve('${u.id}')">&#10003; Aprovar</button>
+                <button class="btn-reject"  onclick="reject('${u.id}')">&#10007; Rejeitar</button>
             </div>
-            <div class="user-meta">
-                ${methodBadge(u.method)}
-                <span style="font-size:0.75rem;color:var(--text-muted,#aaa)">${new Date(u.createdAt).toLocaleDateString()}</span>
-            </div>
-            <div class="user-actions">
-                <button class="btn-approve" onclick="approve('${u.id}')">Approve</button>
-                <button class="btn-reject"  onclick="reject('${u.id}')">Reject</button>
-            </div>
-        </div>
-    `).join('');
+        </div>`).join('');
 }
 
 function renderAll(users) {
     const el = document.getElementById('allUsersList');
-    if (!users.length) { el.innerHTML = '<div class="empty-state">No users yet.</div>'; return; }
+    if (!users.length) { el.innerHTML = '<div class="empty-state">Nenhum usuário.</div>'; return; }
     el.innerHTML = users.map(u => `
-        <div class="user-row">
+        <div class="user-row2">
             ${avatarEl(u)}
-            <div class="user-info">
-                <strong>${u.displayName || '—'}</strong>
-                <span>${u.email}</span>
+            <div class="u-info">
+                <div class="u-name">${esc(u.displayName||'—')}</div>
+                <div class="u-email">${esc(u.email)}${u.profile?.bandaiName ? ` · <em>${esc(u.profile.bandaiName)}</em>` : ''}</div>
             </div>
-            <div class="user-meta">
-                ${methodBadge(u.method)}
-                ${statusBadge(u.status)}
-                ${u.role === 'admin' ? '<span class="badge badge-admin">admin</span>' : ''}
+            <div class="u-badges">${statusBadge(u.status)}${roleBadge(u.role)}</div>
+            <div class="u-actions">
+                ${u.status === 'suspended'
+                    ? `<button class="btn-approve" onclick="unsuspend('${u.id}')">&#9654; Reativar</button>`
+                    : u.status === 'approved' ? `<button class="btn-reject" style="background:rgba(240,173,78,.1);border-color:#f0ad4e;color:#b87e00;" onclick="suspend('${u.id}')">&#9646; Suspender</button>` : ''}
+                <button class="btn-approve" style="background:transparent;border-color:var(--primary,#048A81);color:var(--primary,#048A81);" onclick="toggleRole('${u.id}','${u.role}')">${u.role === 'admin' ? '&#8595; User' : '&#8593; Admin'}</button>
+                <button class="btn-approve" style="background:transparent;border-color:var(--border,#eee);color:var(--text,#1a1a2e);" onclick="openEditUserModal('${u.id}','${esc(u.displayName||'')}','${esc(u.email)}')">&#9998;</button>
+                <button class="btn-reject"  onclick="deleteUser('${u.id}','${esc(u.displayName||u.email)}')">&#128465;</button>
             </div>
-        </div>
-    `).join('');
+        </div>`).join('');
 }
 
 async function approve(id) {
     const btn = document.querySelector(`#row-${id} .btn-approve`);
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    const res = await fetch(`${AUTH_BASE}/admin/approve/${id}`, { method: 'POST', credentials: 'include' });
+    if (btn) { btn.disabled=true; btn.textContent='…'; }
+    const res = await fetch(`${AUTH_BASE}/admin/approve/${id}`, { method:'POST', credentials:'include' });
     if (res.ok) loadUsers();
-    else if (btn) { btn.disabled = false; btn.textContent = 'Approve'; }
+    else { alert('Erro.'); if(btn){btn.disabled=false;btn.textContent='✓ Aprovar';} }
+}
+async function reject(id) {
+    if (!confirm('Rejeitar este usuário?')) return;
+    const res = await fetch(`${AUTH_BASE}/admin/reject/${id}`, { method:'POST', credentials:'include' });
+    if (res.ok) loadUsers();
+}
+async function suspend(id) {
+    if (!confirm('Suspender este usuário? Ele não conseguirá mais logar.')) return;
+    const res = await fetch(`${AUTH_BASE}/admin/suspend/${id}`, { method:'POST', credentials:'include' });
+    if (res.ok) loadUsers(); else alert('Erro.');
+}
+async function unsuspend(id) {
+    const res = await fetch(`${AUTH_BASE}/admin/unsuspend/${id}`, { method:'POST', credentials:'include' });
+    if (res.ok) loadUsers(); else alert('Erro.');
+}
+async function toggleRole(id, currentRole) {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    if (!confirm(`Trocar role para "${newRole}"?`)) return;
+    const res = await fetch(`${AUTH_BASE}/admin/set-role/${id}`, {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({ role: newRole }),
+    });
+    if (res.ok) loadUsers(); else alert('Erro.');
+}
+async function promoteByEmail() {
+    const input  = document.getElementById('promoteEmailInput');
+    const status = document.getElementById('promoteEmailStatus');
+    const email  = input.value.trim();
+    if (!email) return;
+    status.style.color = 'var(--text-muted,#888)';
+    status.textContent = 'Promovendo…';
+    try {
+        const res = await fetch(`${AUTH_BASE}/admin/promote-by-email`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            status.style.color = 'var(--win,#28a745)';
+            status.textContent = `✓ ${data.email} agora é admin.`;
+            input.value = '';
+            loadUsers();
+        } else {
+            status.style.color = 'var(--loss,#dc3545)';
+            status.textContent = data.error || 'Erro ao promover usuário.';
+        }
+    } catch {
+        status.style.color = 'var(--loss,#dc3545)';
+        status.textContent = 'Erro de rede.';
+    }
+}
+async function deleteUser(id, name) {
+    if (!confirm(`Excluir permanentemente "${name}"? Esta ação não pode ser desfeita.`)) return;
+    const res = await fetch(`${AUTH_BASE}/admin/users/${id}`, { method:'DELETE', credentials:'include' });
+    if (res.ok) loadUsers(); else alert('Erro ao excluir.');
+}
+function openEditUserModal(id, name, email) {
+    document.getElementById('editUserId').value  = id;
+    document.getElementById('editUserName').value = name;
+    document.getElementById('editUserEmail').value = email;
+    document.getElementById('editUserModal').classList.add('open');
+}
+function closeEditUserModal() { document.getElementById('editUserModal').classList.remove('open'); }
+async function submitEditUser() {
+    const id    = document.getElementById('editUserId').value;
+    const name  = document.getElementById('editUserName').value.trim();
+    const email = document.getElementById('editUserEmail').value.trim();
+    if (!name || !email) { alert('Nome e email obrigatórios.'); return; }
+    const res = await fetch(`${AUTH_BASE}/admin/users/${id}`, {
+        method:'PUT', credentials:'include',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({ displayName:name, email }),
+    });
+    if (res.ok) { closeEditUserModal(); loadUsers(); } else alert('Erro ao salvar.');
 }
 
-async function reject(id) {
-    if (!confirm('Reject this user? They will not be able to sign in.')) return;
-    const btn = document.querySelector(`#row-${id} .btn-reject`);
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    const res = await fetch(`${AUTH_BASE}/admin/reject/${id}`, { method: 'POST', credentials: 'include' });
-    if (res.ok) loadUsers();
-    else if (btn) { btn.disabled = false; btn.textContent = 'Reject'; }
+// ── Bandai map & association ───────────────────────────────────────────────────
+async function loadMap() {
+    try {
+        const res = await fetch(`${AUTH_BASE}/bandai-map`, { credentials:'include' });
+        if (!res.ok) return;
+        const { map } = await res.json();
+        if (map) { document.getElementById('bandaiMapText').value = map; populateAssocPlayers(map); }
+    } catch {}
+}
+function populateAssocUsers(users) {
+    const sel = document.getElementById('assocUser');
+    sel.innerHTML = '<option value="">— selecione —</option>';
+    for (const u of users) {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = `${u.displayName||u.email}${u.profile?.bandaiName?' · '+u.profile.bandaiName:''}`;
+        sel.appendChild(opt);
+    }
+}
+function populateAssocPlayers(mapText) {
+    const sel = document.getElementById('assocPlayer');
+    sel.innerHTML = '<option value="">— selecione —</option>';
+    for (const line of mapText.split('\n')) {
+        const name = line.trim().split(':')[0].trim();
+        if (!name) continue;
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        sel.appendChild(opt);
+    }
+}
+async function saveMap() {
+    const map = document.getElementById('bandaiMapText').value.trim();
+    if (!map) { setStatus('mapSaveStatus','Mapa vazio.',false); return; }
+    const res = await fetch(`${AUTH_BASE}/bandai-map`, {
+        method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({map}),
+    });
+    if (res.ok) { setStatus('mapSaveStatus','✓ Salvo!',true); populateAssocPlayers(map); }
+    else setStatus('mapSaveStatus','Erro ao salvar.',false);
+}
+async function saveAssociation() {
+    const userId=document.getElementById('assocUser').value, bandaiName=document.getElementById('assocPlayer').value;
+    if (!userId||!bandaiName) { setStatus('assocStatus','Selecione usuário e player.',false); return; }
+    setStatus('assocStatus','Salvando…',true);
+    const res = await fetch(`${AUTH_BASE}/admin/associate`, {
+        method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId,bandaiName}),
+    });
+    if (res.ok) { setStatus('assocStatus','✓ Associado!',true); loadUsers(); }
+    else setStatus('assocStatus','Erro.',false);
+}
+
+// ── Tournaments ────────────────────────────────────────────────────────────────
+async function loadAdminTournaments() {
+    const el = document.getElementById('adminTournamentsList');
+    el.innerHTML = '<div class="empty-state">Carregando…</div>';
+    try {
+        const [tRes, cRes] = await Promise.all([
+            fetch(`${AUTH_BASE}/tournaments`, { credentials:'include' }),
+            fetch(`${AUTH_BASE}/circuits`,    { credentials:'include' }),
+        ]);
+        _adminTournaments = tRes.ok ? await tRes.json() : [];
+        _adminCircuits    = cRes.ok ? await cRes.json() : [];
+        if (!_adminTournaments.length) { el.innerHTML = '<div class="empty-state">Nenhum torneio.</div>'; return; }
+        const circuitMap = {};
+        for (const c of _adminCircuits) circuitMap[c.id] = c.name;
+        const stColor = {pending:'var(--muted)',in_progress:'var(--accent)',completed:'var(--win)'};
+        const stLabel = {pending:'Pendente',in_progress:'Em Andamento',completed:'Concluído'};
+        el.innerHTML = `<table class="adm-table">
+            <thead><tr><th>Nome</th><th>Data</th><th>Formato</th><th>Status</th><th>Circuito</th><th>Ações</th></tr></thead>
+            <tbody>${_adminTournaments.map(t => `<tr>
+                <td style="font-weight:600;">${esc(t.name)}</td>
+                <td style="font-size:.8rem;">${t.date||'—'}</td>
+                <td style="font-size:.78rem;color:var(--muted);">${t.format||'—'}</td>
+                <td><span style="font-size:.78rem;font-weight:700;color:${stColor[t.status]||'var(--muted)'};">${stLabel[t.status]||t.status}</span></td>
+                <td style="font-size:.78rem;color:var(--accent);">${t.circuitId ? esc(circuitMap[t.circuitId]||t.circuitId) : '—'}</td>
+                <td>
+                    <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+                        <button class="btn-approve" style="font-size:.75rem;padding:.25rem .55rem;" onclick="adminCloneTrn('${t.id}','${esc(t.name)}')">&#128203; Clonar</button>
+                        <button class="btn-approve" style="font-size:.75rem;padding:.25rem .55rem;background:transparent;border-color:var(--border);color:var(--text);" onclick="adminExportTrn('${t.id}','${esc(t.name)}')">&#8675; JSON</button>
+                        ${(t.rounds||[]).length ? `<button class="btn-approve" style="font-size:.75rem;padding:.25rem .55rem;background:transparent;border-color:var(--gold,#c9a84c);color:var(--gold,#c9a84c);" onclick="adminReopenRound('${t.id}')">&#8635; Reabrir</button>` : ''}
+                    </div>
+                </td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    } catch { el.innerHTML = '<div class="empty-state">Erro.</div>'; }
+}
+
+async function adminCloneTrn(id, name) {
+    const newName = prompt('Nome do novo torneio:', `${name} (cópia)`);
+    if (!newName) return;
+    const date = prompt('Data (AAAA-MM-DD):', new Date().toISOString().slice(0,10));
+    if (!date) return;
+    const res = await fetch(`${AUTH_BASE}/tournaments/${id}/clone`, {
+        method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ name:newName, date }),
+    });
+    if (res.ok) { alert('Torneio clonado com sucesso!'); loadAdminTournaments(); }
+    else { const e=await res.json().catch(()=>{}); alert(e?.error||'Erro.'); }
+}
+async function adminExportTrn(id, name) {
+    const res = await fetch(`${AUTH_BASE}/tournaments/${id}/export`, { credentials:'include' });
+    if (!res.ok) { alert('Erro.'); return; }
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href=url; a.download=`${name.replace(/[^a-z0-9]/gi,'_')}.json`; a.click(); URL.revokeObjectURL(url);
+}
+async function adminReopenRound(id) {
+    if (!confirm('Reabrir a última rodada deste torneio?')) return;
+    const res = await fetch(`${AUTH_BASE}/tournaments/${id}/reopen-round`, { method:'POST', credentials:'include' });
+    if (res.ok) { alert('Rodada reaberta.'); loadAdminTournaments(); }
+    else alert('Erro.');
+}
+
+// ── Circuits ───────────────────────────────────────────────────────────────────
+async function loadAdminCircuits() {
+    const el = document.getElementById('adminCircuitsList');
+    el.innerHTML = '<div class="empty-state">Carregando…</div>';
+    try {
+        const res = await fetch(`${AUTH_BASE}/circuits`, { credentials:'include' });
+        _adminCircuits = res.ok ? await res.json() : [];
+        if (!_adminCircuits.length) { el.innerHTML = '<div class="empty-state">Nenhum circuito.</div>'; return; }
+        el.innerHTML = `<table class="adm-table">
+            <thead><tr><th>Nome</th><th>Temporada</th><th>Período</th><th>Status</th><th>Ações</th></tr></thead>
+            <tbody>${_adminCircuits.map(c => `<tr>
+                <td style="font-weight:600;">${esc(c.name)}</td>
+                <td style="font-size:.8rem;">${esc(c.season||'—')}</td>
+                <td style="font-size:.78rem;color:var(--muted);">${c.startDate||'?'} → ${c.endDate||'?'}</td>
+                <td>${c.status==='closed' ? '<span class="badge-closed">Encerrado</span>' : '<span class="badge2 badge-approved">Ativo</span>'}</td>
+                <td>
+                    <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+                        <button class="btn-approve" style="font-size:.75rem;padding:.25rem .55rem;" onclick="openManualPtsModal('${c.id}')">&#43; Pontos</button>
+                        ${c.status !== 'closed' ? `<button class="btn-approve" style="font-size:.75rem;padding:.25rem .55rem;background:rgba(240,173,78,.1);border-color:#f0ad4e;color:#b87e00;" onclick="closeCircuit('${c.id}','${esc(c.name)}')">&#9632; Encerrar</button>` : ''}
+                    </div>
+                </td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    } catch { el.innerHTML = '<div class="empty-state">Erro.</div>'; }
+}
+
+function openManualPtsModal(circuitId) {
+    const c = _adminCircuits.find(x => x.id === circuitId);
+    document.getElementById('manualPtsCircuitId').value = circuitId;
+    document.getElementById('manualPtsValue').value = '0';
+    document.getElementById('manualPtsReason').value = '';
+    const sel = document.getElementById('manualPtsPlayer');
+    sel.innerHTML = '<option value="">— selecione —</option>';
+    for (const p of (c?.participants||[])) {
+        const opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = p.name; sel.appendChild(opt);
+    }
+    document.getElementById('manualPtsModal').classList.add('open');
+}
+function closeManualPtsModal() { document.getElementById('manualPtsModal').classList.remove('open'); }
+async function submitManualPoints() {
+    const circuitId = document.getElementById('manualPtsCircuitId').value;
+    const sel = document.getElementById('manualPtsPlayer');
+    const participantId   = sel.value;
+    const participantName = sel.options[sel.selectedIndex]?.text || participantId;
+    const points  = parseFloat(document.getElementById('manualPtsValue').value) || 0;
+    const reason  = document.getElementById('manualPtsReason').value.trim();
+    if (!participantId) { alert('Selecione um participante.'); return; }
+    const res = await fetch(`${AUTH_BASE}/circuits/${circuitId}/manual-points`, {
+        method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ participantId, participantName, points, reason }),
+    });
+    if (res.ok) { closeManualPtsModal(); alert(`${points} pt adicionado para ${participantName}.`); }
+    else alert('Erro.');
+}
+async function closeCircuit(id, name) {
+    if (!confirm(`Encerrar o circuito "${name}"? Isso marcará o campeão e não pode ser desfeito.`)) return;
+    const res = await fetch(`${AUTH_BASE}/circuits/${id}/close`, { method:'POST', credentials:'include' });
+    if (res.ok) { alert('Circuito encerrado!'); loadAdminCircuits(); }
+    else alert('Erro.');
+}
+
+// ── Conteúdo: Decks & Perfis ──────────────────────────────────────────────────
+async function loadAdminDecks() {
+    const el = document.getElementById('adminDecksList');
+    el.innerHTML = '<div class="empty-state">Carregando…</div>';
+    try {
+        const res = await fetch(`${AUTH_BASE}/admin/decks`, { credentials:'include' });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (!data.length) { el.innerHTML = '<div class="empty-state">Nenhum deck público.</div>'; return; }
+        let html = '';
+        for (const entry of data) {
+            const uObj = _adminAllUsers.find(u => u.id === entry.userId);
+            html += `<div style="margin-bottom:.75rem;"><div style="font-size:.8rem;font-weight:700;color:var(--muted);margin-bottom:.3rem;">${esc(uObj?.displayName||entry.userId)}</div>`;
+            for (const d of entry.decks) {
+                html += `<div class="user-row2">
+                    <div class="u-info"><div class="u-name">${esc(d.name||'Sem nome')}</div><div class="u-email">${esc(d.leader?.name||'')} · ${(d.cards||[]).length} cartas</div></div>
+                    <div class="u-actions"><button class="btn-reject" onclick="adminDeleteDeck('${entry.userId}','${d.id}','${esc(d.name||'')}')">&#128465; Remover</button></div>
+                </div>`;
+            }
+            html += '</div>';
+        }
+        el.innerHTML = html;
+    } catch { el.innerHTML = '<div class="empty-state">Erro.</div>'; }
+}
+async function adminDeleteDeck(userId, deckId, name) {
+    if (!confirm(`Remover o deck "${name}"?`)) return;
+    const res = await fetch(`${AUTH_BASE}/admin/decks/${userId}/${deckId}`, { method:'DELETE', credentials:'include' });
+    if (res.ok) loadAdminDecks(); else alert('Erro.');
+}
+
+async function loadAdminProfiles() {
+    const el = document.getElementById('adminProfilesList');
+    if (!_adminAllUsers.length) await loadUsers();
+    const withContent = _adminAllUsers.filter(u => u.profile?.bio || u.avatarUrl);
+    if (!withContent.length) { el.innerHTML = '<div class="empty-state">Nenhum perfil com bio ou avatar.</div>'; return; }
+    el.innerHTML = withContent.map(u => `
+        <div class="user-row2">
+            ${avatarEl(u)}
+            <div class="u-info">
+                <div class="u-name">${esc(u.displayName||u.email)}</div>
+                ${u.profile?.bio ? `<div class="u-email" style="font-style:italic;">"${esc(u.profile.bio.slice(0,80))}"</div>` : ''}
+            </div>
+            <div class="u-actions">
+                ${u.profile?.bio ? `<button class="btn-reject" style="font-size:.75rem;" onclick="clearProfileBio('${u.id}')">Limpar bio</button>` : ''}
+                ${u.avatarUrl    ? `<button class="btn-reject" style="font-size:.75rem;" onclick="clearProfileAvatar('${u.id}')">Remover avatar</button>` : ''}
+            </div>
+        </div>`).join('');
+}
+async function clearProfileBio(id) {
+    if (!confirm('Limpar a bio deste usuário?')) return;
+    const res = await fetch(`${AUTH_BASE}/admin/profile/${id}`, {
+        method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({bio:''}),
+    });
+    if (res.ok) loadAdminProfiles(); else alert('Erro.');
+}
+async function clearProfileAvatar(id) {
+    if (!confirm('Remover o avatar personalizado deste usuário?')) return;
+    const res = await fetch(`${AUTH_BASE}/admin/profile/${id}`, {
+        method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({avatarCustom:null}),
+    });
+    if (res.ok) loadAdminProfiles(); else alert('Erro.');
+}
+
+// ── Comunicação ────────────────────────────────────────────────────────────────
+async function loadBanner() {
+    try {
+        const res = await fetch(`${AUTH_BASE}/banner`);
+        const b   = res.ok ? await res.json() : null;
+        const prev = document.getElementById('currentBannerPreview');
+        if (b?.message) {
+            prev.innerHTML = `<div style="padding:.5rem .75rem;border-radius:7px;font-size:.83rem;font-weight:600;background:rgba(4,138,129,.1);color:var(--primary,#048A81);border:1px solid rgba(4,138,129,.3);">
+                Banner atual (${b.type||'info'}): "${esc(b.message)}"<br><span style="font-size:.72rem;color:var(--muted);">por ${esc(b.createdBy)} em ${new Date(b.createdAt).toLocaleString('pt-BR')}</span>
+            </div>`;
+            document.getElementById('bannerMessage').value = b.message;
+            document.getElementById('bannerType').value    = b.type||'info';
+        } else {
+            prev.innerHTML = '<span style="font-size:.8rem;color:var(--muted);">Nenhum banner ativo.</span>';
+        }
+    } catch {}
+}
+async function publishBanner() {
+    const message = document.getElementById('bannerMessage').value.trim();
+    const type    = document.getElementById('bannerType').value;
+    if (!message) { setStatus('bannerStatus','Digite uma mensagem.',false); return; }
+    const res = await fetch(`${AUTH_BASE}/admin/banner`, {
+        method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message,type}),
+    });
+    if (res.ok) { setStatus('bannerStatus','✓ Banner publicado!',true); loadBanner(); }
+    else setStatus('bannerStatus','Erro.',false);
+}
+async function clearBanner() {
+    if (!confirm('Remover o aviso global?')) return;
+    const res = await fetch(`${AUTH_BASE}/admin/banner`, {
+        method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:null}),
+    });
+    if (res.ok) { setStatus('bannerStatus','✓ Banner removido.',true); loadBanner(); document.getElementById('bannerMessage').value=''; }
+    else setStatus('bannerStatus','Erro.',false);
+}
+function loadMsgUsers() {
+    populateMsgUsers(_adminAllUsers.length ? _adminAllUsers : []);
+}
+function populateMsgUsers(users) {
+    const sel = document.getElementById('msgTargetUser');
+    sel.innerHTML = '<option value="">— selecione —</option>';
+    for (const u of users.filter(u => u.status==='approved')) {
+        const opt = document.createElement('option');
+        opt.value = u.id; opt.textContent = u.displayName||u.email; sel.appendChild(opt);
+    }
+}
+async function sendDirectMessage() {
+    const targetId = document.getElementById('msgTargetUser').value;
+    const message  = document.getElementById('msgText').value.trim();
+    if (!targetId) { setStatus('msgStatus','Selecione um destinatário.',false); return; }
+    if (!message)  { setStatus('msgStatus','Digite uma mensagem.',false); return; }
+    const res = await fetch(`${AUTH_BASE}/admin/message/${targetId}`, {
+        method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message}),
+    });
+    if (res.ok) { setStatus('msgStatus','✓ Mensagem enviada!',true); document.getElementById('msgText').value=''; }
+    else setStatus('msgStatus','Erro.',false);
+}
+
+// ── Auditoria ──────────────────────────────────────────────────────────────────
+let _auditLog = [];
+async function loadAuditLog() {
+    const el = document.getElementById('auditLogBody');
+    el.innerHTML = '<div class="empty-state">Carregando…</div>';
+    try {
+        const res = await fetch(`${AUTH_BASE}/admin/audit-log`, { credentials:'include' });
+        _auditLog = res.ok ? await res.json() : [];
+        renderAuditLog();
+    } catch { el.innerHTML = '<div class="empty-state">Erro.</div>'; }
+}
+function renderAuditLog() {
+    const el     = document.getElementById('auditLogBody');
+    const filter = document.getElementById('auditFilter')?.value || '';
+    const entries = filter ? _auditLog.filter(e => e.action === filter) : _auditLog;
+    if (!entries.length) { el.innerHTML = '<div class="empty-state">Nenhuma entrada.</div>'; return; }
+    const actionLabel = {
+        approve:'Aprovar', reject:'Rejeitar', suspend:'Suspender', unsuspend:'Reativar',
+        set_role:'Trocar role', edit_user:'Editar usuário', delete_user:'Excluir usuário',
+        edit_profile:'Editar perfil', create_tournament:'Criar torneio', delete_tournament:'Excluir torneio',
+        clone_tournament:'Clonar torneio', reopen_round:'Reabrir rodada', create_circuit:'Criar circuito',
+        delete_circuit:'Excluir circuito', close_circuit:'Encerrar circuito', delete_deck:'Excluir deck',
+    };
+    el.innerHTML = `<table class="adm-table">
+        <thead><tr><th>Data/Hora</th><th>Admin</th><th>Ação</th><th>Alvo</th><th>Detalhe</th></tr></thead>
+        <tbody>${entries.slice(0,200).map(e => `<tr>
+            <td style="font-size:.75rem;color:var(--muted);white-space:nowrap;">${new Date(e.ts).toLocaleString('pt-BR')}</td>
+            <td style="font-size:.8rem;font-weight:600;">${esc(e.actorName||e.actorId)}</td>
+            <td style="font-size:.78rem;">${actionLabel[e.action]||e.action}</td>
+            <td style="font-size:.78rem;">${esc(e.targetName||e.targetId)}</td>
+            <td style="font-size:.75rem;color:var(--muted);">${esc(e.detail||'')}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
 }
 </script>
 </body>

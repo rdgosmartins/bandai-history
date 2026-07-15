@@ -277,7 +277,7 @@ async function handleGoogleInit(request, env, cors) {
     await env.AUTH_KV.put(`oauth_state:${state}`, '1', { expirationTtl: 600 });
     const params = new URLSearchParams({
         client_id:     env.GOOGLE_CLIENT_ID,
-        redirect_uri:  `https://bandai-auth.rdgosmartins.workers.dev/auth/google/callback`,
+        redirect_uri:  `https://bandai-history.rdgosmartins.workers.dev/auth/google/callback`,
         response_type: 'code',
         scope:         'openid email profile',
         state,
@@ -307,7 +307,7 @@ async function handleGoogleCallback(request, env, cors) {
             code,
             client_id:     env.GOOGLE_CLIENT_ID,
             client_secret: env.GOOGLE_CLIENT_SECRET,
-            redirect_uri:  `https://bandai-auth.rdgosmartins.workers.dev/auth/google/callback`,
+            redirect_uri:  `https://bandai-history.rdgosmartins.workers.dev/auth/google/callback`,
             grant_type:    'authorization_code',
         }),
     });
@@ -2207,8 +2207,8 @@ export default {
             if (path === '/auth/me'              && method === 'GET')  return handleMe(request, env, cors);
             if (path === '/auth/logout'          && method === 'POST') return handleLogout(request, env, cors);
             if (path === '/admin/users'          && method === 'GET')  return handleAdminUsers(request, env, cors);
-            if (path === '/profile'              && method === 'GET')  return handleProfileGet(request, env, cors);
-            if (path === '/profile'              && method === 'PUT')  return handleProfilePut(request, env, cors);
+            if (path === '/my-profile'           && method === 'GET')  return handleProfileGet(request, env, cors);
+            if (path === '/my-profile'           && method === 'PUT')  return handleProfilePut(request, env, cors);
             if (path === '/directory'             && method === 'GET')  return handleDirectory(request, env, cors);
             if (path === '/bandai-map'           && method === 'GET')  return handleBandaiMapGet(request, env, cors);
             if (path === '/bandai-map'           && method === 'PUT')  return handleBandaiMapPut(request, env, cors);
@@ -2359,6 +2359,11 @@ export default {
 
             const mmPlayerMatch = path.match(/^\/matchmaker\/player\/([^/]+)$/);
             if (mmPlayerMatch && method === 'GET') return handleMatchmakerPlayer(request, env, cors, mmPlayerMatch[1]);
+
+            // Nenhuma rota de API bateu — repassa pro binding de Static Assets
+            // (analyzer.html, login.html, css/, js/, icons/ etc.), que é como esse
+            // Worker (bandai-history) servia os arquivos antes da unificação.
+            if (env.ASSETS) return env.ASSETS.fetch(request);
 
             return json({ error: 'Not found' }, 404, cors);
         } catch (err) {

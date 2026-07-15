@@ -21,6 +21,11 @@ const SET_PERIODS = [
     { name: "OP-13 · Carrying On His Will",           date: new Date("2025-11-07") },
     { name: "OP-14 / EB-04 · The Azure Sea's Seven",  date: new Date("2026-01-16") },
     { name: "OP-15 · Adventure on KAMI's Island",      date: new Date("2026-04-03") },
+    { name: "OP-16 · The Time of Battle",             date: new Date("2026-06-12") },
+    // ↑ Quando um novo set (OP-17...) for lançado, basta adicionar UMA linha aqui
+    // com nome e data. Os filtros de líder, o Log Pose e o seletor de deck do
+    // perfil são derivados automaticamente de /cards.json e não exigem mais
+    // nenhum ajuste manual em outros arquivos.
 ];
 
 const REGIONALS = [

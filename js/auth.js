@@ -1,8 +1,8 @@
-const AUTH_BASE = 'https://bandai-auth.rdgosmartins.workers.dev';
+const AUTH_BASE = 'https://bandai-history.rdgosmartins.workers.dev';
 
 async function requireAuth({ requireAdmin = false } = {}) {
     try {
-        const res = await fetch(`${AUTH_BASE}/auth/me`, { credentials: 'include' });
+        const res = await apiFetch(`/auth/me`);
         if (!res.ok) { window.location.href = '/login.html'; return null; }
         const user = await res.json();
         if (user.status === 'pending')  { window.location.href = '/pending.html'; return null; }
@@ -16,6 +16,6 @@ async function requireAuth({ requireAdmin = false } = {}) {
 }
 
 async function logout() {
-    await fetch(`${AUTH_BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
+    await apiFetch(`/auth/logout`, { method: 'POST' });
     window.location.href = '/login.html';
 }

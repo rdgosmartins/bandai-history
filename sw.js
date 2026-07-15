@@ -1,4 +1,4 @@
-const CACHE = 'yoko-v3';
+const CACHE = 'yoko-v4'; // bump força limpar o cache antigo (cache-first) de quem já visitou o site
 
 // ── Install: activate immediately, sem pré-cache ──────────────────────────────
 // cache.addAll() falha atomicamente se qualquer arquivo retornar erro;
@@ -16,7 +16,7 @@ self.addEventListener('activate', event => {
     );
 });
 
-// ── Fetch: cache-first APENAS para assets da mesma origem ────────────────────
+// ── Fetch: estratégia depende do tipo de asset ────────────────────────────────
 // Requests cross-origin (CDN, auth worker, Bandai proxy) ficam com o browser.
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
@@ -28,7 +28,29 @@ self.addEventListener('fetch', event => {
     const noCachePaths = ['/my-matches', '/cache/', '/inbox', '/banner', '/auth', '/login'];
     if (noCachePaths.some(p => url.pathname.startsWith(p))) return;
 
-    // Cache-first com fallback para rede
+    // HTML, JS, CSS e JSON são o "código" do app (admin.html, cards.json, etc.):
+    // usamos network-first, para que um novo deploy apareça na hora para todo
+    // mundo. O cache só é usado como fallback se a rede falhar (modo offline).
+    // Isso evita telas presas numa versão antiga depois de um deploy — como o
+    // admin.html mostrando só abas antigas para quem já tinha visitado o site.
+    const isCodeOrData = event.request.mode === 'navigate' ||
+        /\.(html|js|css|json)$/.test(url.pathname) || url.pathname === '/';
+
+    if (isCodeOrData) {
+        event.respondWith(
+            fetch(event.request).then(response => {
+                if (response.ok) {
+                    const clone = response.clone();
+                    caches.open(CACHE).then(c => c.put(event.request, clone));
+                }
+                return response;
+            }).catch(() => caches.match(event.request))
+        );
+        return;
+    }
+
+    // Demais assets (imagens, ícones, fontes): cache-first com fallback para rede.
+    // Esses raramente mudam, então vale economizar banda/latência.
     event.respondWith(
         caches.match(event.request).then(cached => {
             if (cached) return cached;

@@ -31,6 +31,7 @@ function switchTrnTab(tab) {
 // ── List ──────────────────────────────────────────────────────────────────────
 
 async function loadTournaments() {
+    await _trnLoadLeaders();
     _trnIsAdmin = document.getElementById('createTournamentBtn')?.style.display !== 'none';
     _showTrnList();
     switchTrnTab(_trnTab);
@@ -39,8 +40,8 @@ async function loadTournaments() {
     if (listEl) listEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>';
     try {
         const [tRes, cRes] = await Promise.all([
-            fetch(`${AUTH_BASE}/tournaments`, { credentials: 'include' }),
-            fetch(`${AUTH_BASE}/circuits`,    { credentials: 'include' }),
+            apiFetch(`/tournaments`),
+            apiFetch(`/circuits`),
         ]);
         if (!tRes.ok) throw new Error('HTTP ' + tRes.status);
         const [tournaments, circuits] = await Promise.all([tRes.json(), cRes.ok ? cRes.json() : Promise.resolve([])]);
@@ -99,7 +100,7 @@ async function openTournamentDetail(id) {
     const body = document.getElementById('tournamentDetailBody');
     body.innerHTML = '<p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>';
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments/${id}`, { credentials: 'include' });
+        const res = await apiFetch(`/tournaments/${id}`);
         if (!res.ok) throw new Error();
         _currentTrn = await res.json();
         _renderDetail();
@@ -533,7 +534,7 @@ function _renderLeaderStatsHtml(t) {
 
     const cards = sorted.map(l => {
         const total  = l.wins + l.losses;
-        const wr     = total ? Math.round(l.wins / total * 100) : 0;
+        const wr     = calcWinPct(l.wins, total, 0);
         const lname  = _leaderName(l.id);
         return `<div style="display:flex;align-items:center;gap:.5rem;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.4rem .6rem;min-width:140px;">
             <img src="${_leaderImgUrl(l.id)}" alt="" style="width:36px;border-radius:4px;" onerror="this.style.display='none'">
@@ -689,7 +690,7 @@ async function generateNextRound() {
     const btn = document.querySelector('#tournamentDetailBody .btn-primary');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments/${_currentTrn.id}/generate-round`, { method: 'POST', credentials: 'include' });
+        const res = await apiFetch(`/tournaments/${_currentTrn.id}/generate-round`, { method: 'POST' });
         if (!res.ok) { const err = await res.json().catch(()=>({})); alert(err.error || 'Erro.'); _renderDetail(); return; }
         _currentTrn = await res.json();
         _renderDetail();
@@ -803,7 +804,7 @@ async function exportTournamentJSON() {
     const t = _currentTrn;
     if (!t) return;
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments/${t.id}/export`, { credentials: 'include' });
+        const res = await apiFetch(`/tournaments/${t.id}/export`);
         if (!res.ok) { alert('Erro ao exportar.'); return; }
         const data = await res.json();
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -820,9 +821,9 @@ async function reopenLastRound() {
     const lastRound = t.rounds[t.rounds.length - 1];
     if (!confirm(`Reabrir Rodada ${lastRound.number}? Isso permitirá corrigir resultados.`)) return;
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments/${t.id}/reopen-round`, { method: 'POST', credentials: 'include' });
+        const res = await apiFetch(`/tournaments/${t.id}/reopen-round`, { method: 'POST' });
         if (!res.ok) { alert('Erro ao reabrir rodada.'); return; }
-        const detail = await fetch(`${AUTH_BASE}/tournaments/${t.id}`, { credentials: 'include' });
+        const detail = await apiFetch(`/tournaments/${t.id}`);
         if (detail.ok) { _currentTrn = await detail.json(); _renderDetail(); }
     } catch { alert('Erro de rede.'); }
 }
@@ -862,13 +863,14 @@ async function submitCloneTournament() {
 // ── Circuit tab ───────────────────────────────────────────────────────────────
 
 async function loadCircuitStandings() {
+    await _trnLoadLeaders();
     const panel = document.getElementById('circuitoPanelContent');
     if (!panel) return;
     panel.innerHTML = '<p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>';
     try {
         const [cRes, tRes] = await Promise.all([
-            fetch(`${AUTH_BASE}/circuits`,    { credentials: 'include' }),
-            fetch(`${AUTH_BASE}/tournaments`, { credentials: 'include' }),
+            apiFetch(`/circuits`),
+            apiFetch(`/tournaments`),
         ]);
         _circuits         = cRes.ok ? await cRes.json() : [];
         _cachedTournaments = tRes.ok ? await tRes.json() : [];
@@ -1128,7 +1130,7 @@ async function deleteCircuit(id) {
     const c = _circuits.find(x => x.id === id);
     if (!confirm(`Excluir o circuito "${c?.name}"? Esta ação não pode ser desfeita.`)) return;
     try {
-        const res = await fetch(`${AUTH_BASE}/circuits/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' });
+        const res = await apiFetch(`/circuits/${encodeURIComponent(id)}`, { method: 'DELETE' });
         if (!res.ok) { alert('Erro ao excluir.'); return; }
         _selectedCircuitId = null;
         closeEditCircuitModal(null, true);
@@ -1204,6 +1206,7 @@ function _populateCircuitSelect(selectId) {
 // ── Ao Vivo tab ───────────────────────────────────────────────────────────────
 
 async function loadLiveView() {
+    await _trnLoadLeaders();
     const panel = document.getElementById('trnPanel_aovivo');
     if (!panel) return;
     panel.innerHTML = '<p style="color:var(--muted);text-align:center;padding:2rem 0;">Carregando…</p>';
@@ -1216,13 +1219,13 @@ async function _fetchLiveView() {
     const panel = document.getElementById('trnPanel_aovivo');
     if (!panel) { clearInterval(_trnLiveInterval); _trnLiveInterval = null; return; }
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments`, { credentials: 'include' });
+        const res = await apiFetch(`/tournaments`);
         if (!res.ok) throw new Error();
         const list   = await res.json();
         const active = list.find(t => t.status === 'in_progress');
         if (!active) { panel.innerHTML = '<p style="color:var(--muted);text-align:center;padding:2.5rem 0;">Nenhum torneio em andamento.</p>'; return; }
         // Fetch full detail
-        const tRes = await fetch(`${AUTH_BASE}/tournaments/${active.id}`, { credentials: 'include' });
+        const tRes = await apiFetch(`/tournaments/${active.id}`);
         const t    = await tRes.json();
         panel.innerHTML = _renderLiveHtml(t);
     } catch {
@@ -1359,7 +1362,7 @@ async function submitEditTournament() {
 async function deleteTournament() {
     if (!confirm(`Excluir o torneio "${_currentTrn?.name}"? Esta ação não pode ser desfeita.`)) return;
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments/${_currentTrn.id}`, { method: 'DELETE', credentials: 'include' });
+        const res = await apiFetch(`/tournaments/${_currentTrn.id}`, { method: 'DELETE' });
         if (!res.ok) { alert('Erro ao excluir.'); return; }
         _currentTrn = null;
         _showTrnList();
@@ -1374,9 +1377,7 @@ async function dropPlayer(participantId) {
     if (!p) return;
     if (!confirm(`Dropar ${p.name}? As partidas pendentes serão dadas como W/O para os oponentes.`)) return;
     try {
-        const res = await fetch(`${AUTH_BASE}/tournaments/${_currentTrn.id}/drop/${encodeURIComponent(participantId)}`, {
-            method: 'POST', credentials: 'include',
-        });
+        const res = await apiFetch(`/tournaments/${_currentTrn.id}/drop/${encodeURIComponent(participantId)}`, { method: 'POST' });
         if (!res.ok) { const err = await res.json().catch(()=>({})); alert(err.error || 'Erro.'); return; }
         _currentTrn = await res.json();
         _renderDetail();
@@ -1430,52 +1431,71 @@ function _pName(id, participants) {
 }
 
 // ── Leader selection ──────────────────────────────────────────────────────────
+// Leaders são carregados dinamicamente de /cards.json (mesma fonte usada pelo
+// OPTCG Agent e pelo Deck Mapping). Isso significa que, quando um novo set
+// (ex: OP16, OP17...) entra no cards.json, os líderes aparecem aqui automaticamente
+// — não é mais necessário editar esta lista manualmente a cada lançamento.
 
-const TRN_LEADERS = [
-    {id:'OP01-001',name:'Roronoa Zoro'},{id:'OP01-002',name:'Trafalgar Law'},{id:'OP01-003',name:'Monkey D. Luffy'},
-    {id:'OP01-031',name:'Kouzuki Oden'},{id:'OP01-060',name:'Donquixote Doflamingo'},{id:'OP01-061',name:'Kaido'},
-    {id:'OP01-062',name:'Crocodile'},{id:'OP01-091',name:'King'},
-    {id:'OP02-001',name:'Edward Newgate'},{id:'OP02-002',name:'Monkey D. Garp'},{id:'OP02-025',name:"Kin'emon"},
-    {id:'OP02-026',name:'Sanji'},{id:'OP02-049',name:'Emporio Ivankov'},{id:'OP02-071',name:'Magellan'},
-    {id:'OP02-072',name:'Zephyr'},{id:'OP02-093',name:'Smoker'},
-    {id:'OP03-001',name:'Portgas D. Ace'},{id:'OP03-021',name:'Kuro'},{id:'OP03-022',name:'Arlong'},
-    {id:'OP03-040',name:'Nami'},{id:'OP03-058',name:'Iceburg'},{id:'OP03-076',name:'Rob Lucci'},
-    {id:'OP03-077',name:'Charlotte Linlin'},{id:'OP03-099',name:'Charlotte Katakuri'},
-    {id:'OP04-001',name:'Nefertari Vivi'},{id:'OP04-019',name:'Donquixote Doflamingo'},{id:'OP04-020',name:'Issho'},
-    {id:'OP04-039',name:'Rebecca'},{id:'OP04-040',name:'Queen'},{id:'OP04-058',name:'Crocodile'},
-    {id:'OP05-001',name:'Sabo'},{id:'OP05-002',name:'Belo Betty'},{id:'OP05-022',name:'Donquixote Rosinante'},
-    {id:'OP05-041',name:'Sakazuki'},{id:'OP05-060',name:'Monkey D. Luffy'},{id:'OP05-098',name:'Enel'},
-    {id:'OP06-001',name:'Uta'},{id:'OP06-020',name:'Hody Jones'},{id:'OP06-021',name:'Perona'},
-    {id:'OP06-022',name:'Yamato'},{id:'OP06-042',name:'Vinsmoke Reiju'},{id:'OP06-080',name:'Gecko Moria'},
-    {id:'OP07-001',name:'Monkey D. Dragon'},{id:'OP07-019',name:'Jewelry Bonney'},{id:'OP07-038',name:'Boa Hancock'},
-    {id:'OP07-059',name:'Foxy'},{id:'OP07-079',name:'Rob Lucci'},{id:'OP07-097',name:'Vegapunk'},
-    {id:'OP08-001',name:'Tony Tony Chopper'},{id:'OP08-002',name:'Marco'},{id:'OP08-021',name:'Carrot'},
-    {id:'OP08-057',name:'King'},{id:'OP08-058',name:'Charlotte Pudding'},{id:'OP08-098',name:'Kalgara'},
-    {id:'OP09-001',name:'Shanks'},{id:'OP09-022',name:'Lim'},{id:'OP09-042',name:'Buggy'},
-    {id:'OP09-061',name:'Monkey D. Luffy'},{id:'OP09-062',name:'Nico Robin'},{id:'OP09-081',name:'Marshall D. Teach'},
-    {id:'OP10-001',name:'Smoker'},{id:'OP10-002',name:'Caesar Clown'},{id:'OP10-003',name:'Sugar'},
-    {id:'OP10-022',name:'Trafalgar Law'},{id:'OP10-042',name:'Usopp'},{id:'OP10-099',name:'Eustass "Captain" Kid'},
-    {id:'OP11-001',name:'Koby'},{id:'OP11-021',name:'Jinbe'},{id:'OP11-022',name:'Shirahoshi'},
-    {id:'OP11-040',name:'Monkey D. Luffy'},{id:'OP11-041',name:'Nami'},{id:'OP11-062',name:'Charlotte Katakuri'},
-    {id:'OP12-001',name:'Silvers Rayleigh'},{id:'OP12-020',name:'Roronoa Zoro'},{id:'OP12-040',name:'Kuzan'},
-    {id:'OP12-041',name:'Sanji'},{id:'OP12-061',name:'Donquixote Rosinante'},{id:'OP12-081',name:'Koala'},
-    {id:'OP13-001',name:'Monkey D. Luffy'},{id:'OP13-002',name:'Portgas D. Ace'},{id:'OP13-003',name:'Gol D. Roger'},
-    {id:'OP13-004',name:'Sabo'},{id:'OP13-079',name:'Imu'},{id:'OP13-100',name:'Jewelry Bonney'},
-    {id:'OP14-001',name:'Trafalgar Law'},{id:'OP14-020',name:'Dracule Mihawk'},{id:'OP14-040',name:'Jinbe'},
-    {id:'OP14-041',name:'Boa Hancock'},{id:'OP14-060',name:'Donquixote Doflamingo'},{id:'OP14-079',name:'Crocodile'},
-    {id:'OP14-080',name:'Gecko Moria'},
-    {id:'OP15-001',name:'Don Krieg'},{id:'OP15-002',name:'Lucy'},{id:'OP15-022',name:'Brook'},
-    {id:'OP15-039',name:'Rebecca'},{id:'OP15-058',name:'Enel'},{id:'OP15-098',name:'Monkey D. Luffy'},
-    {id:'EB01-001',name:'Kouzuki Oden'},{id:'EB01-021',name:'Hannyabal'},{id:'EB01-040',name:'Kyros'},
-    {id:'EB02-010',name:'Monkey D. Luffy'},{id:'EB03-001',name:'Nefertari Vivi'},{id:'EB04-001',name:'Jewelry Bonney'},
-    {id:'ST01-001',name:'Monkey D. Luffy'},{id:'ST02-001',name:'Eustass "Captain" Kid'},{id:'ST03-001',name:'Crocodile'},
-    {id:'ST04-001',name:'Kaido'},{id:'ST05-001',name:'Shanks'},{id:'ST06-001',name:'Sakazuki'},
-    {id:'ST07-001',name:'Charlotte Linlin'},{id:'ST08-001',name:'Monkey D. Luffy'},{id:'ST09-001',name:'Yamato'},
-    {id:'ST10-001',name:'Trafalgar Law'},{id:'ST10-002',name:'Monkey D. Luffy'},{id:'ST10-003',name:'Eustass "Captain" Kid'},
-    {id:'ST11-001',name:'Uta'},{id:'ST12-001',name:'Roronoa Zoro & Sanji'},{id:'ST13-001',name:'Sabo'},
-    {id:'ST13-002',name:'Portgas D. Ace'},{id:'ST13-003',name:'Monkey D. Luffy'},{id:'ST14-001',name:'Monkey D. Luffy'},
-    {id:'ST21-001',name:'Monkey D. Luffy (Gear 5)'},{id:'ST22-001',name:'Ace & Newgate'},{id:'ST29-001',name:'Monkey D. Luffy'},
-];
+let TRN_LEADERS        = [];
+let _trnLeadersLoaded  = false;
+let _trnLeadersPromise = null;
+
+function _trnSetPrefix(id) {
+    const m = /^([A-Za-z]+\d+)-/.exec(id || '');
+    return m ? m[1] : (id || '');
+}
+
+// Ordena prefixos de set (OP01, OP02, ..., OP16, EB01..., ST01..., PRB01...)
+// numericamente dentro de cada família de letras, e não apenas por string.
+function _trnSetSortKey(prefix) {
+    const m = /^([A-Za-z]+)(\d+)$/.exec(prefix || '');
+    if (!m) return [prefix || '', 0];
+    return [m[1], parseInt(m[2], 10)];
+}
+
+function _trnCompareIds(a, b) {
+    const [famA, numA] = _trnSetSortKey(_trnSetPrefix(a));
+    const [famB, numB] = _trnSetSortKey(_trnSetPrefix(b));
+    if (famA !== famB) return famA.localeCompare(famB);
+    if (numA !== numB) return numA - numB;
+    return a.localeCompare(b);
+}
+
+async function _trnLoadLeaders() {
+    if (_trnLeadersLoaded) return;
+    if (_trnLeadersPromise) return _trnLeadersPromise;
+    _trnLeadersPromise = (async () => {
+        try {
+            const r = await fetch('/cards.json');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const all = await r.json();
+            TRN_LEADERS = all
+                .filter(c => c.t === 'Leader')
+                .map(c => ({ id: c.id, name: (c.n || c.id).replace(/\s*\(\d+\)\s*$/, '') }))
+                .sort((a, b) => _trnCompareIds(a.id, b.id));
+            _trnLeadersLoaded = true;
+        } catch (e) {
+            console.warn('[Tournaments] Falha ao carregar líderes de /cards.json', e);
+            TRN_LEADERS = [];
+        }
+    })();
+    return _trnLeadersPromise;
+}
+
+// Códigos de set (ex: 'OP16', 'EB04'...) derivados dos líderes carregados,
+// do mais recente para o mais antigo. Usado nos filtros de set (ex: Log Pose).
+function _trnSetCodesDesc(prefixFilter = /^(OP|EB)\d+$/) {
+    const codes = new Set();
+    for (const l of TRN_LEADERS) {
+        const p = _trnSetPrefix(l.id);
+        if (prefixFilter.test(p)) codes.add(p);
+    }
+    return [...codes].sort((a, b) => _trnCompareIds(b, a)); // desc
+}
+
+// Preload assim que o script carrega — como cards.json é um arquivo local,
+// na prática já estará pronto quando o usuário abrir qualquer tela que precise.
+_trnLoadLeaders();
 
 function _leaderImgUrl(id) { return id ? `https://optcgapi.com/media/static/Card_Images/${id}.jpg` : ''; }
 function _leaderName(id) {
