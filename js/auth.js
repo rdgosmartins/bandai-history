@@ -1,5 +1,13 @@
 const AUTH_BASE = 'https://bandai-history.rdgosmartins.workers.dev';
 
+// Cópia local de apiFetch (também existe em utils.js) — necessária porque em
+// algumas páginas (analyzer.html) o auth.js carrega no <head>, bem antes do
+// utils.js (carregado perto do fim do <body>), e o código aqui embaixo roda
+// imediatamente ao carregar. Sem isso, apiFetch ficaria undefined nesse meio-tempo.
+function apiFetch(path, options = {}) {
+    return fetch(AUTH_BASE + path, { credentials: 'include', ...options });
+}
+
 async function requireAuth({ requireAdmin = false } = {}) {
     try {
         const res = await apiFetch(`/auth/me`);
