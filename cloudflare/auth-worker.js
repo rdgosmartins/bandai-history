@@ -176,6 +176,7 @@ function buildUser(id, email, displayName, method, extras = {}) {
         createdAt:   new Date().toISOString(),
         approvedAt:  isAdmin ? new Date().toISOString() : null,
         approvedBy:  null,
+        teamId:      null,
         ...extras,
     };
 }
