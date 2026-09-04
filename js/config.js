@@ -102,6 +102,34 @@ function onUserChange() {
 // mostrar dados de todo mundo, mesmo em um dispositivo que nunca rodou "Sync All" —
 // antes disso, cada navegador só via os players que ELE MESMO tinha sincronizado.
 let _allCachePromise = null;
+let _cacheStorageWarning = false;
+const _memoryCaches = {};
+const CACHE_STORAGE_WARNING_TEXT = 'Local storage is full; new cache writes stay in memory until you free space.';
+
+function _persistCacheSnapshot(bandaiId, cache, source) {
+    const normalized = normalizeCacheMap(cache);
+    try {
+        localStorage.setItem(cacheKey(bandaiId), JSON.stringify(normalized));
+        delete _memoryCaches[bandaiId];
+        if (Object.keys(_memoryCaches).length === 0) _cacheStorageWarning = false;
+    } catch (e) {
+        _cacheStorageWarning = true;
+        _memoryCaches[bandaiId] = normalized;
+        console.warn(`[Cache] ${source} localStorage write failed — keeping cache in memory:`, e);
+    }
+    return normalized;
+}
+
+function _loadMemoryCache(bandaiId) {
+    return normalizeCacheMap(_memoryCaches[bandaiId] || {});
+}
+
+function _cacheWarningHtml() {
+    return _cacheStorageWarning
+        ? ` <span class="cache-warning">${CACHE_STORAGE_WARNING_TEXT}</span>`
+        : '';
+}
+
 async function loadAllCachesFromServer({ force = false } = {}) {
     if (_allCachePromise && !force) return _allCachePromise;
     _allCachePromise = (async () => {
@@ -111,11 +139,13 @@ async function loadAllCachesFromServer({ force = false } = {}) {
             const all = await r.json(); // { bandaiId: { eventId: eventData, ... }, ... }
             for (const [bandaiId, serverCache] of Object.entries(all || {})) {
                 if (!serverCache || !Object.keys(serverCache).length) continue;
-                const localCache = loadCache(bandaiId);
-                // Servidor é a fonte compartilhada mais atual; local só preenche o que
-                // porventura ainda não tenha sido enviado ao servidor por este navegador.
-                const merged = { ...localCache, ...serverCache };
-                localStorage.setItem(cacheKey(bandaiId), JSON.stringify(merged));
+                const localCache = normalizeCacheMap(loadCache(bandaiId));
+                const normalizedServer = normalizeCacheMap(serverCache);
+                const merged = {};
+                for (const eventId of new Set([...Object.keys(localCache), ...Object.keys(normalizedServer)])) {
+                    merged[eventId] = mergeEventRecords(localCache[eventId], normalizedServer[eventId]);
+                }
+                _persistCacheSnapshot(bandaiId, merged, 'cache-all');
             }
             console.log(`[Cache] cache-all mesclado: ${Object.keys(all || {}).length} jogadores.`);
         } catch (e) {
@@ -125,29 +155,123 @@ async function loadAllCachesFromServer({ force = false } = {}) {
     return _allCachePromise;
 }
 
+function _toNumber(value) {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+function _toBool(value) {
+    if (value === true || value === 1 || value === '1') return true;
+    if (value === false || value === 0 || value === '0') return false;
+    const text = String(value ?? '').trim().toLowerCase();
+    if (['true', 'win', 'won', 'yes', 'y'].includes(text)) return true;
+    if (['false', 'loss', 'lose', 'lost', 'no', 'n'].includes(text)) return false;
+    return null;
+}
+
+function normalizeRoundRecord(round) {
+    if (!round || typeof round !== 'object') return null;
+    const opponentUsers = Array.isArray(round.opponent_users)
+        ? round.opponent_users
+        : round.opponent_users
+            ? [round.opponent_users]
+            : [];
+    return {
+        ...round,
+        is_win: _toBool(round.is_win ?? round.won ?? round.result ?? round.outcome),
+        win_count: _toNumber(round.win_count ?? round.winCount ?? round.game_win_count ?? round.games_won),
+        lose_count: _toNumber(round.lose_count ?? round.loseCount ?? round.game_lose_count ?? round.games_lost),
+        opponent_users: opponentUsers.map(opp => {
+            if (!opp || typeof opp !== 'object') return opp;
+            return {
+                ...opp,
+                membership_number: opp.membership_number ?? opp.member_number ?? opp.member_no ?? opp.player_id ?? opp.bandaiId ?? opp.id ?? null,
+                player_name: opp.player_name ?? opp.name ?? opp.nickname ?? opp.user_name ?? null,
+            };
+        }).filter(Boolean),
+    };
+}
+
+function normalizeEventRecord(entry) {
+    if (!entry || typeof entry !== 'object') return entry;
+    const roundCandidates = [entry.rounds, entry.event?.rounds, entry.history?.rounds].filter(Array.isArray);
+    let rawRounds = [];
+    for (const candidate of roundCandidates) {
+        if (candidate.length > rawRounds.length) rawRounds = candidate;
+    }
+    const rounds = rawRounds.map(normalizeRoundRecord).filter(Boolean);
+    return {
+        ...entry,
+        rounds,
+        event: entry.event && typeof entry.event === 'object'
+            ? { ...entry.event, rounds: Array.isArray(entry.event.rounds) ? entry.event.rounds.map(normalizeRoundRecord).filter(Boolean) : entry.event.rounds }
+            : entry.event,
+        history: entry.history && typeof entry.history === 'object'
+            ? { ...entry.history, rounds: Array.isArray(entry.history.rounds) ? entry.history.rounds.map(normalizeRoundRecord).filter(Boolean) : entry.history.rounds }
+            : entry.history,
+    };
+}
+
+function normalizeCacheMap(cache) {
+    const out = {};
+    for (const [eventId, entry] of Object.entries(cache || {})) {
+        out[eventId] = normalizeEventRecord(entry);
+    }
+    return out;
+}
+
+function mergeEventRecords(localEntry, serverEntry) {
+    const local = normalizeEventRecord(localEntry);
+    const server = normalizeEventRecord(serverEntry);
+    const merged = { ...local, ...server };
+    const localRounds = Array.isArray(local?.rounds) ? local.rounds : [];
+    const serverRounds = Array.isArray(server?.rounds) ? server.rounds : [];
+    if (serverRounds.length === 0 && localRounds.length > 0) {
+        merged.rounds = localRounds;
+    } else if (serverRounds.length > 0 && localRounds.length === 0) {
+        merged.rounds = serverRounds;
+    } else if (serverRounds.length > 0 && localRounds.length > 0) {
+        merged.rounds = serverRounds.length >= localRounds.length ? serverRounds : localRounds;
+    } else {
+        merged.rounds = [];
+    }
+    return merged;
+}
+
 // ── Cache (localStorage, keyed per Bandai ID) ──────────────────────────────
 
 function cacheKey(bandaiId) { return CACHE_PREFIX + bandaiId; }
 
 function loadCache(bandaiId) {
+    const memoryCache = _loadMemoryCache(bandaiId);
     try {
         const raw = localStorage.getItem(cacheKey(bandaiId));
-        return raw ? JSON.parse(raw) : {};
-    } catch { return {}; }
+        const localCache = raw ? JSON.parse(raw) : {};
+        const normalizedLocal = normalizeCacheMap(localCache);
+        const normalizedMemory = normalizeCacheMap(memoryCache);
+
+        if (Object.keys(normalizedMemory).length === 0) return normalizedLocal;
+        if (Object.keys(normalizedLocal).length === 0) return normalizedMemory;
+
+        const merged = {};
+        for (const eventId of new Set([...Object.keys(normalizedLocal), ...Object.keys(normalizedMemory)])) {
+            merged[eventId] = mergeEventRecords(normalizedLocal[eventId], normalizedMemory[eventId]);
+        }
+        return merged;
+    } catch {
+        return memoryCache;
+    }
 }
 
 function saveCache(bandaiId, cache) {
-    try {
-        localStorage.setItem(cacheKey(bandaiId), JSON.stringify(cache));
-    } catch (e) {
-        console.warn('localStorage write failed — cache not saved:', e);
-    }
+    const normalized = _persistCacheSnapshot(bandaiId, cache, 'saveCache');
     // Push to shared KV cache (fire-and-forget — all sessions benefit)
     fetch(`${AUTH_BASE}/cache/${bandaiId}`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cache),
+        body: JSON.stringify(normalized),
     }).catch(() => {});
 }
 
@@ -163,10 +287,15 @@ async function pullServerCache(bandaiId) {
         const serverCache = await r.json();
         if (!serverCache || !Object.keys(serverCache).length) return;
         const localCache = loadCache(bandaiId);
-        // Server wins: server has the most recently synced data (saveCache always pushes).
-        // This also propagates server-side deletions (stale events removed from KV) to local.
-        const merged = { ...localCache, ...serverCache };
-        localStorage.setItem(cacheKey(bandaiId), JSON.stringify(merged));
+        // Prefer the entry that carries more normalized rounds, so partial server
+        // payloads do not replace a richer local record with metadata-only data.
+        const normalizedLocal = normalizeCacheMap(localCache);
+        const normalizedServer = normalizeCacheMap(serverCache);
+        const merged = {};
+        for (const eventId of new Set([...Object.keys(normalizedLocal), ...Object.keys(normalizedServer)])) {
+            merged[eventId] = mergeEventRecords(normalizedLocal[eventId], normalizedServer[eventId]);
+        }
+        _persistCacheSnapshot(bandaiId, merged, 'pullServerCache');
         console.log(`[Cache] Merged ${Object.keys(serverCache).length} server events for ${bandaiId} (local: ${Object.keys(localCache).length}, merged: ${Object.keys(merged).length})`);
     } catch (e) {
         clearTimeout(t);
@@ -176,6 +305,8 @@ async function pullServerCache(bandaiId) {
 
 function clearCacheForUser(bandaiId) {
     localStorage.removeItem(cacheKey(bandaiId));
+    delete _memoryCaches[bandaiId];
+    if (Object.keys(_memoryCaches).length === 0) _cacheStorageWarning = false;
 }
 
 function updateCacheBar(bandaiId) {
@@ -184,13 +315,14 @@ function updateCacheBar(bandaiId) {
     const bar     = document.getElementById('cacheBar');
     const inner   = document.getElementById('cacheBarInner');
     const text    = document.getElementById('cacheBarText');
+    const warning = _cacheWarningHtml();
     bar.style.display = '';
     if (count === 0) {
         inner.className = 'cache-bar';
-        text.innerHTML  = 'No cached data yet — first run will fetch everything.';
+        text.innerHTML  = `No cached data yet — first run will fetch everything.${warning}`;
     } else {
         inner.className = 'cache-bar has-cache';
-        text.innerHTML  = `<strong>${count}</strong> events cached locally.`;
+        text.innerHTML  = `<strong>${count}</strong> events cached locally.${warning}`;
     }
 }
 

@@ -122,6 +122,7 @@
             padding: 0.6rem 0.9rem; font-size: 0.82rem; color: var(--muted); }
         .cache-bar strong { color: var(--text); }
         .cache-bar.has-cache { border-color: var(--accent); background: #f0faf9; }
+        .cache-warning { color: var(--loss); font-weight: 700; margin-left: 0.35rem; }
         .cache-actions { display: flex; gap: 0.4rem; }
         .btn-danger { background: transparent; border: 1.5px solid var(--loss); color: var(--loss); }
         .btn-danger:hover { background: var(--loss); color: white; }

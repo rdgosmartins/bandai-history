@@ -302,6 +302,9 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
             const isLive    = (ev._status === 'running' || ev._status === 'open')
                            && eventAge < 2 * 24 * 60 * 60 * 1000;
             const liveBadge = isLive ? ' <span class="live-badge">LIVE</span>' : '';
+            const historyBadge = ev._history_error
+                ? ` <span class="time-ext-badge" title="History endpoint returned ${ev._history_error}: ${ev._history_error_message || 'unavailable'}">HISTORY ${ev._history_error}</span>`
+                : '';
             const resultColor = evW > evL ? 'var(--win)' : evW < evL ? 'var(--loss)' : 'var(--muted)';
             const cols = 8; // total column count
 
@@ -310,7 +313,7 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
             tr.className = 'tourney-row' + (isLive ? ' live-row' : '');
             tr.innerHTML = `<td>${dateStr}${liveBadge}</td>
                 <td>${storeStr}</td>
-                <td>${evName}</td>
+                <td>${evName}${historyBadge}</td>
                 <td class="td-num" style="color:${resultColor};font-weight:600">${evW}-${evL}</td>
                 <td class="td-num">${evGW}-${evGL}</td>
                 <td class="td-num">${ptsStr}</td>
@@ -323,18 +326,26 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
                     <thead><tr>
                         <th>Round</th><th>Opponent</th><th>Result</th><th>Games</th>
                     </tr></thead><tbody>`;
-            ev.rounds.forEach((r, i) => {
-                const oppName = r.opponent_users?.[0]?.player_name?.trim() || '—';
-                const gw = r.win_count  ?? (r.is_win ? 1 : 0);
-                const gl = r.lose_count ?? (r.is_win ? 0 : 1);
-                const rColor = r.is_win ? 'var(--win)' : 'var(--loss)';
-                roundsHtml += `<tr>
-                    <td style="color:var(--muted)">R${i + 1}</td>
-                    <td>${oppName}</td>
-                    <td style="color:${rColor};font-weight:600">${r.is_win ? 'Win' : 'Loss'}</td>
-                    <td class="td-num">${gw}-${gl}</td>
-                </tr>`;
-            });
+            if (ev.rounds.length === 0) {
+                roundsHtml += `<tr><td colspan="4" style="padding:0.8rem;color:var(--muted);">
+                    ${ev._history_error
+                        ? `History unavailable (${ev._history_error}); showing cached event metadata only.`
+                        : 'No rounds available for this event.'}
+                </td></tr>`;
+            } else {
+                ev.rounds.forEach((r, i) => {
+                    const oppName = r.opponent_users?.[0]?.player_name?.trim() || '—';
+                    const gw = r.win_count  ?? (r.is_win ? 1 : 0);
+                    const gl = r.lose_count ?? (r.is_win ? 0 : 1);
+                    const rColor = r.is_win ? 'var(--win)' : 'var(--loss)';
+                    roundsHtml += `<tr>
+                        <td style="color:var(--muted)">R${i + 1}</td>
+                        <td>${oppName}</td>
+                        <td style="color:${rColor};font-weight:600">${r.is_win ? 'Win' : 'Loss'}</td>
+                        <td class="td-num">${gw}-${gl}</td>
+                    </tr>`;
+                });
+            }
             roundsHtml += '</tbody></table></div>';
 
             tr.addEventListener('click', () => {

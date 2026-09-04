@@ -51,7 +51,7 @@ function onCompareUserChange() {
     const userB = App.usersWithToken[parseInt(idx)];
 
     const cacheB = loadCache(userB.bandaiId);
-    const evDataB = Object.values(cacheB);
+    const evDataB = Object.values(cacheB).filter(ev => Array.isArray(ev?.rounds) && ev.rounds.length > 0);
     if (evDataB.length === 0) {
         document.getElementById('compareContent').innerHTML =
             `<p style="color:var(--muted);font-size:0.88rem;">No cached data for <strong>${userB.name}</strong>. Run Fetch &amp; Analyze for that user first.</p>`;

@@ -230,10 +230,14 @@ function _updateRankFilterSummary(allUsers, filteredUsers) {
 }
 
 function applyRankingsFilter() {
-    const allUsers = App.usersWithToken.map(u => ({
-        ...u,
-        events: Object.values(loadCache(u.bandaiId) || {})
-    })).filter(u => u.events.length > 0);
+    const allUsers = App.usersWithToken.map(u => {
+        const events = Object.values(loadCache(u.bandaiId) || {})
+            .filter(ev => Array.isArray(ev?.rounds) && ev.rounds.length > 0);
+        return {
+            ...u,
+            events,
+        };
+    }).filter(u => u.events.length > 0);
 
     // Rebuild filter chips from full unfiltered pool so new periods (e.g. OP-14)
     // are always represented even when navigating to the tab after new data is fetched.
@@ -290,15 +294,23 @@ async function buildGlobalRankings() {
     // se o boot já tiver terminado, ou aguarda se ainda estiver em andamento.
     await loadAllCachesFromServer();
 
-    const allUsers = App.usersWithToken.map(u => ({
-        ...u,
-        events: Object.values(loadCache(u.bandaiId) || {})
-    })).filter(u => u.events.length > 0);
+    const cachedEvents = App.usersWithToken.flatMap(u => Object.values(loadCache(u.bandaiId) || {}));
+    const allUsers = App.usersWithToken.map(u => {
+        const events = Object.values(loadCache(u.bandaiId) || {})
+            .filter(ev => Array.isArray(ev?.rounds) && ev.rounds.length > 0);
+        return {
+            ...u,
+            events,
+        };
+    }).filter(u => u.events.length > 0);
 
     if (allUsers.length === 0) {
+        const msg = cachedEvents.length > 0
+            ? 'Events were fetched, but none have round data yet. The history endpoint may be blocked for these events.'
+            : 'No cached data found. Fetch at least one user first.';
         ['leaderboardBody','rankH2H'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.innerHTML = '<p style="color:var(--muted);padding:1rem 0;">No cached data found. Fetch at least one user first.</p>';
+            if (el) el.innerHTML = `<p style="color:var(--muted);padding:1rem 0;">${msg}</p>`;
         });
         return;
     }

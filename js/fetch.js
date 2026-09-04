@@ -5,7 +5,8 @@
 async function fetchUserEvents(user, onProgress) {
     const token = user.token;
     // Fetch multiple tab/flag combinations to capture both open and completed events,
-    // then deduplicate by event ID so each event is processed only once.
+    // then paginate each query and deduplicate by event ID so each event is processed
+    // only once.
     const BASE = `${BANDAI_API_BASE}/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0`;
     const tabCombos = [
         `${BASE}&past_event_display_flg=1&selected_tab=3`, // past/completed (original)
@@ -15,14 +16,39 @@ async function fetchUserEvents(user, onProgress) {
         `${BASE}&past_event_display_flg=1&selected_tab=1`,
         `${BASE}&past_event_display_flg=1&selected_tab=2`,
     ];
-    const tabResults = await Promise.all(
-        tabCombos.map((url, i) => {
+
+    async function fetchTabEvents(url, tab) {
+        const pageLimit = 1000;
+        const events = [];
+        let offset = 0;
+
+        while (true) {
+            const pageUrl = new URL(url);
+            pageUrl.searchParams.set('limit', String(pageLimit));
+            pageUrl.searchParams.set('offset', String(offset));
+
             const ac = new AbortController();
-            setTimeout(() => ac.abort(), 15_000);
-            return fetch(url, { headers: { 'X-Authentication': token }, signal: ac.signal })
-                .then(r => r.ok ? r.json().then(j => ({ tab: i + 1, url, count: j?.success?.events?.length ?? 0, events: j?.success?.events ?? [] })) : { tab: i + 1, url, count: 0, events: [] })
-                .catch(() => ({ tab: i + 1, url, count: 0, events: [] }));
-        })
+            const t  = setTimeout(() => ac.abort(), 15_000);
+            try {
+                const r = await fetch(pageUrl.toString(), { headers: { 'X-Authentication': token }, signal: ac.signal });
+                if (!r.ok) break;
+                const j = await r.json();
+                const pageEvents = j?.success?.events ?? [];
+                events.push(...pageEvents);
+                if (pageEvents.length < pageLimit) break;
+                offset += pageLimit;
+            } catch {
+                break;
+            } finally {
+                clearTimeout(t);
+            }
+        }
+
+        return { tab, url, count: events.length, events };
+    }
+
+    const tabResults = await Promise.all(
+        tabCombos.map((url, i) => fetchTabEvents(url, i + 1))
     );
     console.log('[BandaiTabs]', tabResults.map(r => `tab${r.tab}(${r.url.split('selected_tab=')[1]}): ${r.count} events`));
     const eventMap = new Map();
@@ -118,40 +144,174 @@ async function fetchUserEvents(user, onProgress) {
                 { headers: baseHeaders, signal: evAc.signal }
             );
             clearTimeout(evT);
-            if (evResp.ok) {
-                const evData = (await evResp.json()).success;
-                evData._event_id        = ev.id;
-                evData._start_datetime  = ev.start_datetime;
-                evData._event_name      = ev.name ?? ev.event_name ?? ev.title
-                    ?? evData.event?.name ?? evData.event?.event_name
-                    ?? evData.event?.series_title ?? null;
-                evData._rank            = evData.user?.rank ?? null;
-                evData._match_points    = evData.user?.match_point != null
-                    ? Number(evData.user.match_point) : null;
-                evData._store_name      = ev.organizer_name ?? ev.organizer ?? ev.organization_name
-                    ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
-                    ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
-                    ?? evData.event?.organizer_name ?? evData.event?.organizer
-                    ?? evData.event?.organization_name ?? evData.event?.hosted_by
-                    ?? evData.event?.store_name ?? evData.event?.shop_name
-                    ?? evData.event?.venue_name ?? evData.event?.store?.name
-                    ?? evData.event?.organizer?.name ?? null;
-                evData._capacity        = ev.capacity ?? ev.max_capacity
-                    ?? ev.max_entry_count
-                    ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
 
-                // Fetch extra detail (applicant count, capacity, entry fee, status) from the detail endpoint
-                const detail = await fetchEventDetail(ev.id);
-                evData._applicant_count    = detail?.applicant_count    ?? null;
-                evData._capacity           = detail?.max_join_count     ?? evData._capacity;
-                evData._entry_fee          = detail?.entry_fee          ?? null;
-                evData._entry_fee_currency = detail?.entry_fee_currency ?? null;
-                evData._status             = detail?.status             ?? null;
-                await sleep(300);
+            const detail = await fetchEventDetail(ev.id);
+            const existingEntry = cache[String(ev.id)];
+            const existingRounds = Array.isArray(existingEntry?.rounds) ? existingEntry.rounds : [];
+            let evData = existingEntry && typeof existingEntry === 'object'
+                ? { ...existingEntry }
+                : {
+                    rounds: [],
+                    event: {},
+                    history: null,
+                };
 
-                cache[String(ev.id)] = evData;
+            evData._event_id       = ev.id;
+            evData._start_datetime = ev.start_datetime;
+            evData._event_name     = ev.name ?? ev.event_name ?? ev.title
+                ?? existingEntry?.event?.name ?? existingEntry?.event?.event_name
+                ?? existingEntry?.event?.series_title ?? null;
+            evData._rank           = existingEntry?._rank ?? evData.user?.rank ?? null;
+            evData._match_points   = existingEntry?._match_points ?? (evData.user?.match_point != null
+                ? Number(evData.user.match_point) : null);
+            evData._store_name     = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+                ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+                ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
+                ?? existingEntry?._store_name ?? evData.event?.organizer_name ?? evData.event?.organizer
+                ?? evData.event?.organization_name ?? evData.event?.hosted_by
+                ?? evData.event?.store_name ?? evData.event?.shop_name
+                ?? evData.event?.venue_name ?? evData.event?.store?.name
+                ?? evData.event?.organizer?.name ?? null;
+            evData._capacity       = ev.capacity ?? ev.max_capacity
+                ?? ev.max_entry_count
+                ?? existingEntry?._capacity
+                ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
+
+            // Fetch extra detail (applicant count, capacity, entry fee, status) from the detail endpoint
+            if (detail) {
+                evData._applicant_count    = detail.applicant_count    ?? evData._applicant_count ?? null;
+                evData._capacity           = detail.max_join_count     ?? evData._capacity;
+                evData._entry_fee          = detail.entry_fee          ?? evData._entry_fee ?? null;
+                evData._entry_fee_currency = detail.entry_fee_currency ?? evData._entry_fee_currency ?? null;
+                evData._status             = detail.status             ?? evData._status ?? null;
             }
+
+            if (evResp.ok) {
+                const parsed = (await evResp.json()).success;
+                const roundSource = Array.isArray(parsed.rounds)
+                    ? parsed.rounds
+                    : Array.isArray(parsed.event?.rounds)
+                        ? parsed.event.rounds
+                        : Array.isArray(parsed.history?.rounds)
+                            ? parsed.history.rounds
+                            : [];
+                evData = {
+                    ...evData,
+                    ...parsed,
+                    rounds: roundSource.map(r => ({
+                        ...r,
+                        is_win: r.is_win ?? r.won ?? r.result ?? r.outcome ?? null,
+                        win_count: r.win_count ?? r.winCount ?? r.game_win_count ?? r.games_won ?? null,
+                        lose_count: r.lose_count ?? r.loseCount ?? r.game_lose_count ?? r.games_lost ?? null,
+                        opponent_users: Array.isArray(r.opponent_users) ? r.opponent_users : (r.opponent_users ? [r.opponent_users] : []),
+                    })),
+                };
+                if (Array.isArray(evData.event?.rounds)) {
+                    evData.event.rounds = evData.event.rounds.map(r => ({
+                        ...r,
+                        is_win: r.is_win ?? r.won ?? r.result ?? r.outcome ?? null,
+                        win_count: r.win_count ?? r.winCount ?? r.game_win_count ?? r.games_won ?? null,
+                        lose_count: r.lose_count ?? r.loseCount ?? r.game_lose_count ?? r.games_lost ?? null,
+                        opponent_users: Array.isArray(r.opponent_users) ? r.opponent_users : (r.opponent_users ? [r.opponent_users] : []),
+                    }));
+                }
+                if (Array.isArray(evData.history?.rounds)) {
+                    evData.history.rounds = evData.history.rounds.map(r => ({
+                        ...r,
+                        is_win: r.is_win ?? r.won ?? r.result ?? r.outcome ?? null,
+                        win_count: r.win_count ?? r.winCount ?? r.game_win_count ?? r.games_won ?? null,
+                        lose_count: r.lose_count ?? r.loseCount ?? r.game_lose_count ?? r.games_lost ?? null,
+                        opponent_users: Array.isArray(r.opponent_users) ? r.opponent_users : (r.opponent_users ? [r.opponent_users] : []),
+                    }));
+                }
+                if (existingRounds.length > 0 && existingRounds.length > evData.rounds.length) {
+                    evData.rounds = existingRounds;
+                }
+            } else {
+                evData.rounds = existingRounds;
+                evData._history_error = evResp.status;
+                evData._history_error_message = evResp.statusText || 'History unavailable';
+                if (!evData.event || typeof evData.event !== 'object') evData.event = {};
+                evData.event.rounds = Array.isArray(evData.event.rounds) ? evData.event.rounds : [];
+                if (evData.history && typeof evData.history === 'object') {
+                    evData.history.rounds = Array.isArray(evData.history.rounds) ? evData.history.rounds : [];
+                }
+            }
+
+            evData._event_id       = ev.id;
+            evData._start_datetime = ev.start_datetime;
+            evData._event_name     = ev.name ?? ev.event_name ?? ev.title
+                ?? evData.event?.name ?? evData.event?.event_name
+                ?? evData.event?.series_title ?? null;
+            evData._rank           = evData.user?.rank ?? evData._rank ?? null;
+            evData._match_points   = evData.user?.match_point != null
+                ? Number(evData.user.match_point) : (evData._match_points ?? null);
+            evData._store_name     = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+                ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+                ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
+                ?? evData._store_name ?? evData.event?.organizer_name ?? evData.event?.organizer
+                ?? evData.event?.organization_name ?? evData.event?.hosted_by
+                ?? evData.event?.store_name ?? evData.event?.shop_name
+                ?? evData.event?.venue_name ?? evData.event?.store?.name
+                ?? evData.event?.organizer?.name ?? null;
+            evData._capacity       = ev.capacity ?? ev.max_capacity
+                ?? ev.max_entry_count
+                ?? evData._capacity
+                ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
+
             await sleep(300);
+            cache[String(ev.id)] = evData;
+        }
+    }
+
+    const normalizeRound = round => {
+        if (!round || typeof round !== 'object') return null;
+        const opponentUsers = Array.isArray(round.opponent_users)
+            ? round.opponent_users
+            : round.opponent_users
+                ? [round.opponent_users]
+                : [];
+        const toBool = value => {
+            if (value === true || value === 1 || value === '1') return true;
+            if (value === false || value === 0 || value === '0') return false;
+            const text = String(value ?? '').trim().toLowerCase();
+            if (['true', 'win', 'won', 'yes', 'y'].includes(text)) return true;
+            if (['false', 'loss', 'lose', 'lost', 'no', 'n'].includes(text)) return false;
+            return null;
+        };
+        const toNumber = value => {
+            if (value == null || value === '') return null;
+            const n = Number(value);
+            return Number.isFinite(n) ? n : null;
+        };
+        return {
+            ...round,
+            is_win: toBool(round.is_win ?? round.won ?? round.result ?? round.outcome),
+            win_count: toNumber(round.win_count ?? round.winCount ?? round.game_win_count ?? round.games_won),
+            lose_count: toNumber(round.lose_count ?? round.loseCount ?? round.game_lose_count ?? round.games_lost),
+            opponent_users: opponentUsers.map(opp => {
+                if (!opp || typeof opp !== 'object') return opp;
+                return {
+                    ...opp,
+                    membership_number: opp.membership_number ?? opp.member_number ?? opp.member_no ?? opp.player_id ?? opp.bandaiId ?? opp.id ?? null,
+                    player_name: opp.player_name ?? opp.name ?? opp.nickname ?? opp.user_name ?? null,
+                };
+            }).filter(Boolean),
+        };
+    };
+
+    for (const ev of events) {
+        const entry = cache[String(ev.id)];
+        if (!entry) continue;
+        const normalizedRounds = Array.isArray(entry.rounds)
+            ? entry.rounds.map(normalizeRound).filter(Boolean)
+            : [];
+        entry.rounds = normalizedRounds;
+        if (entry.event && typeof entry.event === 'object' && Array.isArray(entry.event.rounds)) {
+            entry.event.rounds = entry.event.rounds.map(normalizeRound).filter(Boolean);
+        }
+        if (entry.history && typeof entry.history === 'object' && Array.isArray(entry.history.rounds)) {
+            entry.history.rounds = entry.history.rounds.map(normalizeRound).filter(Boolean);
         }
     }
 
@@ -166,7 +326,7 @@ async function fetchUserEvents(user, onProgress) {
         if (suspiciousFee) entry._entry_fee = null; // force re-fetch
         const staleStatus = (entry._status === 'open' || entry._status === 'running')
             && new Date(entry._start_datetime) < new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-        return entry._applicant_count == null || entry._entry_fee == null || staleStatus;
+        return entry._applicant_count == null || entry._entry_fee == null || staleStatus || !Array.isArray(entry.rounds) || entry.rounds.length === 0;
     });
     if (missingDetail.length > 0) {
         for (let i = 0; i < missingDetail.length; i++) {
