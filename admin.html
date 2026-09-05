@@ -234,7 +234,7 @@
 <!-- ── Edit User Modal ── -->
 <div id="editUserModal" class="adm-modal-overlay" onclick="if(event.target===this)closeEditUserModal()">
     <div class="adm-modal-box">
-        <button class="adm-modal-close" onclick="closeEditUserModal()">&#10005;</button>
+        <button type="button" class="adm-modal-close" onclick="closeEditUserModal()">&#10005;</button>
         <div style="font-size:1rem;font-weight:700;color:var(--primary,#048A81);margin-bottom:1rem;">&#9998; Editar Usuário</div>
         <input type="hidden" id="editUserId">
         <div style="display:grid;gap:.7rem;">
@@ -243,8 +243,8 @@
             <div><label class="adm-label">Time</label><select id="editUserTeam" class="adm-input"><option value="">— Sem time —</option></select></div>
         </div>
         <div style="display:flex;gap:.5rem;margin-top:1.1rem;justify-content:flex-end;">
-            <button class="btn-reject" onclick="closeEditUserModal()">Cancelar</button>
-            <button class="btn-approve" onclick="submitEditUser()">&#10003; Salvar</button>
+            <button type="button" class="btn-reject" onclick="closeEditUserModal()">Cancelar</button>
+            <button type="button" class="btn-approve" onclick="submitEditUser()">&#10003; Salvar</button>
         </div>
     </div>
 </div>
@@ -252,7 +252,7 @@
 <!-- ── Team Modal ── -->
 <div id="teamModal" class="adm-modal-overlay" onclick="if(event.target===this)closeTeamModal()">
     <div class="adm-modal-box">
-        <button class="adm-modal-close" onclick="closeTeamModal()">&#10005;</button>
+        <button type="button" class="adm-modal-close" onclick="closeTeamModal()">&#10005;</button>
         <div style="font-size:1rem;font-weight:700;color:var(--primary,#048A81);margin-bottom:1rem;">&#9879; Time</div>
         <input type="hidden" id="teamId">
         <div style="display:grid;gap:.7rem;">
@@ -459,6 +459,9 @@ function openEditUserModal(id, name, email, teamId) {
     ).join('');
     teamSel.value = teamId || '';
     document.getElementById('editUserModal').classList.add('open');
+}
+function closeEditUserModal() {
+    document.getElementById('editUserModal').classList.remove('open');
 }
 
 // ── Teams management ─────────────────────────────────────────────────────────
