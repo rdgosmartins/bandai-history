@@ -12,6 +12,7 @@ function switchTab(tab) {
     const _agTab = document.getElementById('agentTab'); if (_agTab) _agTab.style.display = tab === 'agent' ? '' : 'none';
     const _dmTab = document.getElementById('deckMapTab'); if (_dmTab) _dmTab.style.display = tab === 'deckmap' ? '' : 'none';
     const _mmTab = document.getElementById('matchmakerTab'); if (_mmTab) _mmTab.style.display = tab === 'matchmaker' ? '' : 'none';
+    const _wgTab = document.getElementById('worstGenTab'); if (_wgTab) _wgTab.style.display = tab === 'worst-generation' ? '' : 'none';
     document.getElementById('tabMyStats').classList.toggle('active',      tab === 'my-stats');
     document.getElementById('tabRankings').classList.toggle('active',     tab === 'rankings');
     document.getElementById('tabProfile').classList.toggle('active',      tab === 'profile');
@@ -33,6 +34,7 @@ function switchTab(tab) {
     if (tab === 'agent')       loadAgentTab();
     if (tab === 'deckmap')     loadDeckMapTab();
     if (tab === 'matchmaker')  loadMatchmakerTab();
+    if (tab === 'worst-generation') renderWorstGeneration();
 }
 
 

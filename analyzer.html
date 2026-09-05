@@ -228,6 +228,7 @@
         <button class="tab-btn" id="tabAgent"                onclick="switchTab('agent')">&#129504; OPTCG Agent</button>
         <button class="tab-btn" id="tabDeckMap"              onclick="switchTab('deckmap')">&#128506; Deck Mapping</button>
         <button class="tab-btn" id="tabMatchmaker"            onclick="switchTab('matchmaker')">&#127988; Matchmaker</button>
+        <button class="tab-btn" id="tabWorstGen"             onclick="switchTab('worst-generation')" style="display:none">&#127987;&#65039; Worst Generation</button>
         <button class="tab-btn" id="tabTournaments"        onclick="switchTab('tournaments')" style="display:none">&#127941; Torneios</button>
         <button class="tab-btn" id="tabCircuito"           onclick="switchTab('circuito')" style="display:none">&#9878; Circuito</button>
         <button class="tab-btn" id="tabResults"            onclick="switchTab('results')" style="display:none">&#127942; Resultados</button>
@@ -1048,6 +1049,44 @@
 
     </div>
 
+    <!-- Worst Generation Tab -->
+    <div id="worstGenTab" style="display:none">
+        <div class="card">
+            <div class="card-header">
+                <h2><span class="section-icon">&#127987;&#65039;</span> Worst Generation</h2>
+            </div>
+            <div class="card-body">
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Team standings and confrontations derived from cached match rounds. Assign players to teams from the Admin panel.</p>
+                <div id="worstGenSummary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;"></div>
+                <div class="table-wrap">
+                    <table class="h2h-table" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">#</th>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;">Team</th>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">Players</th>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">Events</th>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">W</th>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">L</th>
+                                <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">WR%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="worstGenTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2><span class="section-icon">&#9878;&#65039;</span> Team vs Team</h2>
+            </div>
+            <div class="card-body">
+                <div class="table-wrap" id="worstGenH2H"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Player Profile Tab -->
     <div id="profileTab" style="display:none">
         <div class="card">
@@ -1791,6 +1830,7 @@
 <script src="js/compare.js"></script>
 <script src="js/modal.js"></script>
 <script src="js/rankings.js"></script>
+<script src="js/teams.js"></script>
 <script src="js/fetch.js"></script>
 <script src="js/export.js"></script>
 <script src="js/inspector.js"></script>
@@ -2141,6 +2181,7 @@ function loadFromCache() {
             const dir = await dirRes.json();
             App.profileDirectory = {};
             for (const p of dir) if (p.bandaiName) App.profileDirectory[p.bandaiName.toLowerCase()] = p;
+            rebuildTeamLookups();
             // If rankings tab is already visible, re-render so playerNameLink gets applied
             if (document.getElementById('rankingsTab')?.style.display !== 'none') applyRankingsFilter();
             if (document.getElementById('yokoTab')?.style.display !== 'none') renderYokoBadges();
@@ -2151,6 +2192,11 @@ function loadFromCache() {
         if (!map) throw new Error('empty map');
         document.getElementById('usernameMap').value = map;
         applyParsed(parseMapText(map));
+        // Load team registry + reveal the hidden Worst Generation tab
+        await loadTeams();
+        rebuildTeamLookups();
+        const _wgBtn = document.getElementById('tabWorstGen');
+        if (_wgBtn && (App.teams || []).length > 0) _wgBtn.style.display = '';
         dotEl.className = 'dash-dot ok';
         const statusEl = document.getElementById('fileStatus');
         statusEl.textContent = statusEl.textContent.replace(' loaded', ' loaded · server');

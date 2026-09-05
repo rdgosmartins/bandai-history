@@ -12,7 +12,7 @@
     <script src="js/utils.js"></script>
     <script src="js/auth.js"></script>
     <script>
-        let currentAdmin, _adminAllUsers = [], _adminTournaments = [], _adminCircuits = [];
+        let currentAdmin, _adminAllUsers = [], _adminTournaments = [], _adminCircuits = [], _adminTeams = [];
         (async () => {
             currentAdmin = await requireAuth({ requireAdmin: true });
             if (!currentAdmin) return;
@@ -73,6 +73,7 @@
     <div class="adm-tab-nav">
         <button class="adm-tab-btn active" id="adm-btn-pendentes"   onclick="adminTab('pendentes')">⏳ Pendentes <span id="pendingBadge"></span></button>
         <button class="adm-tab-btn"        id="adm-btn-usuarios"    onclick="adminTab('usuarios')">&#128101; Usuários</button>
+        <button class="adm-tab-btn"        id="adm-btn-teams"       onclick="adminTab('teams')">&#9879; Times</button>
         <button class="adm-tab-btn"        id="adm-btn-torneios"    onclick="adminTab('torneios')">&#127941; Torneios</button>
         <button class="adm-tab-btn"        id="adm-btn-circuitos"   onclick="adminTab('circuitos')">&#9878; Circuitos</button>
         <button class="adm-tab-btn"        id="adm-btn-conteudo"    onclick="adminTab('conteudo')">&#128193; Conteúdo</button>
@@ -125,6 +126,22 @@
                 <span id="mapSaveStatus" class="adm-status"></span>
                 <button class="btn-approve" onclick="saveMap()">&#128190; Salvar Mapa</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ── Times ── -->
+    <div id="adm-teams" class="adm-section">
+        <div class="admin-card" style="margin-bottom:1rem;border-left:3px solid var(--primary,#048A81);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                <h2 style="margin:0;">&#9879; Gerenciar Times</h2>
+                <button class="btn-approve" onclick="openTeamModal()">&#43; Novo Time</button>
+            </div>
+            <p style="font-size:.82rem;color:var(--text-muted,#888);margin:0 0 .75rem;">
+                Crie, edite e exclua times. Atribua usuários a um time pela tela de Usuários (botão de editar). Ao excluir, usuários atribuídos bloqueiam a exclusão.
+            </p>
+        </div>
+        <div class="admin-card">
+            <div id="teamsList"><div class="empty-state">Carregando…</div></div>
         </div>
     </div>
 
@@ -223,10 +240,29 @@
         <div style="display:grid;gap:.7rem;">
             <div><label class="adm-label">Nome</label><input type="text" id="editUserName" class="adm-input"></div>
             <div><label class="adm-label">Email</label><input type="email" id="editUserEmail" class="adm-input"></div>
+            <div><label class="adm-label">Time</label><select id="editUserTeam" class="adm-input"><option value="">— Sem time —</option></select></div>
         </div>
         <div style="display:flex;gap:.5rem;margin-top:1.1rem;justify-content:flex-end;">
             <button class="btn-reject" onclick="closeEditUserModal()">Cancelar</button>
             <button class="btn-approve" onclick="submitEditUser()">&#10003; Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Team Modal ── -->
+<div id="teamModal" class="adm-modal-overlay" onclick="if(event.target===this)closeTeamModal()">
+    <div class="adm-modal-box">
+        <button class="adm-modal-close" onclick="closeTeamModal()">&#10005;</button>
+        <div style="font-size:1rem;font-weight:700;color:var(--primary,#048A81);margin-bottom:1rem;">&#9879; Time</div>
+        <input type="hidden" id="teamId">
+        <div style="display:grid;gap:.7rem;">
+            <div><label class="adm-label">Nome</label><input type="text" id="teamName" class="adm-input" placeholder="Ex.: Sun Pirates"></div>
+            <div><label class="adm-label">Cor</label><input type="color" id="teamColor" class="adm-input" style="height:38px;padding:.2rem;"></div>
+            <div><label class="adm-label">Ícone (emoji)</label><input type="text" id="teamIcon" class="adm-input" placeholder="🏴‍☠️" maxlength="4"></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:1.1rem;justify-content:flex-end;">
+            <button class="btn-reject" onclick="closeTeamModal()">Cancelar</button>
+            <button class="btn-approve" onclick="saveTeam()">&#10003; Salvar</button>
         </div>
     </div>
 </div>
@@ -266,7 +302,7 @@ function methodBadge(m) { const map={google:'badge-google',email:'badge-email',b
 function setStatus(elId, msg, ok) { const el=document.getElementById(elId); el.textContent=msg; el.style.color=ok?'var(--win,#28a745)':'var(--loss,#dc3545)'; if(ok)setTimeout(()=>{el.textContent='';},3000); }
 
 // ── Tab management ─────────────────────────────────────────────────────────────
-const ADM_TABS = ['pendentes','usuarios','torneios','circuitos','conteudo','comunicacao','auditoria'];
+const ADM_TABS = ['pendentes','usuarios','teams','torneios','circuitos','conteudo','comunicacao','auditoria'];
 function adminTab(name) {
     ADM_TABS.forEach(t => {
         document.getElementById(`adm-${t}`).classList.toggle('active', t === name);
@@ -275,6 +311,7 @@ function adminTab(name) {
     const loaders = {
         pendentes:   () => loadUsers(),
         usuarios:    () => { loadUsers(); loadMap(); },
+        teams:       () => loadTeams(),
         torneios:    () => loadAdminTournaments(),
         circuitos:   () => loadAdminCircuits(),
         conteudo:    () => { loadAdminDecks(); loadAdminProfiles(); },
@@ -341,7 +378,7 @@ function renderAll(users) {
                     ? `<button class="btn-approve" onclick="unsuspend('${u.id}')">&#9654; Reativar</button>`
                     : u.status === 'approved' ? `<button class="btn-reject" style="background:rgba(240,173,78,.1);border-color:#f0ad4e;color:#b87e00;" onclick="suspend('${u.id}')">&#9646; Suspender</button>` : ''}
                 <button class="btn-approve" style="background:transparent;border-color:var(--primary,#048A81);color:var(--primary,#048A81);" onclick="toggleRole('${u.id}','${u.role}')">${u.role === 'admin' ? '&#8595; User' : '&#8593; Admin'}</button>
-                <button class="btn-approve" style="background:transparent;border-color:var(--border,#eee);color:var(--text,#1a1a2e);" onclick="openEditUserModal('${u.id}','${esc(u.displayName||'')}','${esc(u.email)}')">&#9998;</button>
+                <button class="btn-approve" style="background:transparent;border-color:var(--border,#eee);color:var(--text,#1a1a2e);" onclick="openEditUserModal('${u.id}','${esc(u.displayName||'')}','${esc(u.email)}','${u.teamId||''}')">&#9998;</button>
                 <button class="btn-reject"  onclick="deleteUser('${u.id}','${esc(u.displayName||u.email)}')">&#128465;</button>
             </div>
         </div>`).join('');
@@ -410,13 +447,93 @@ async function deleteUser(id, name) {
     const res = await fetch(`${AUTH_BASE}/admin/users/${id}`, { method:'DELETE', credentials:'include' });
     if (res.ok) loadUsers(); else alert('Erro ao excluir.');
 }
-function openEditUserModal(id, name, email) {
+function openEditUserModal(id, name, email, teamId) {
     document.getElementById('editUserId').value  = id;
     document.getElementById('editUserName').value = name;
     document.getElementById('editUserEmail').value = email;
+    const teamSel = document.getElementById('editUserTeam');
+    // Populate team options from the in-memory registry (loaded by loadTeams)
+    const teams = typeof _adminTeams !== 'undefined' ? _adminTeams : [];
+    teamSel.innerHTML = '<option value="">— Sem time —</option>' + teams.map(t =>
+        `<option value="${t.id}">${(t.icon||'')} ${t.name}</option>`
+    ).join('');
+    teamSel.value = teamId || '';
     document.getElementById('editUserModal').classList.add('open');
 }
-function closeEditUserModal() { document.getElementById('editUserModal').classList.remove('open'); }
+
+// ── Teams management ─────────────────────────────────────────────────────────
+let _editingTeamId = null;
+
+async function loadTeams() {
+    try {
+        const res = await fetch(`${AUTH_BASE}/teams`, { credentials:'include' });
+        if (!res.ok) return;
+        _adminTeams = await res.json();
+        renderTeams();
+    } catch (e) { console.warn('[Admin] Falha ao carregar /teams:', e); }
+}
+
+function renderTeams() {
+    const el = document.getElementById('teamsList');
+    if (!el) return;
+    if (!_adminTeams.length) { el.innerHTML = '<div class="empty-state">Nenhum time criado ainda.</div>'; return; }
+    el.innerHTML = _adminTeams.map(t => `
+        <div class="user-row2">
+            <div style="display:flex;align-items:center;gap:.6rem;flex:1;">
+                <span style="width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:${t.color||'#3b82f6'};color:#fff;font-size:1rem;flex:none;">${t.icon||'🏴‍☠️'}</span>
+                <div>
+                    <div class="u-name">${esc(t.name)}</div>
+                    <div class="u-email">Criado ${new Date(t.createdAt).toLocaleDateString()}</div>
+                </div>
+            </div>
+            <div class="u-actions">
+                <button class="btn-approve" style="background:transparent;border-color:var(--border,#eee);color:var(--text,#1a1a2e);" onclick="openTeamModal('${t.id}')">&#9998;</button>
+                <button class="btn-reject" onclick="deleteTeam('${t.id}','${esc(t.name)}')">&#128465;</button>
+            </div>
+        </div>`).join('');
+}
+
+function openTeamModal(id) {
+    const t = id ? _adminTeams.find(x => x.id === id) : null;
+    _editingTeamId = id || null;
+    document.getElementById('teamId').value        = t?.id || '';
+    document.getElementById('teamName').value       = t?.name || '';
+    document.getElementById('teamColor').value      = t?.color || '#3b82f6';
+    document.getElementById('teamIcon').value       = t?.icon || '';
+    document.getElementById('teamModal').classList.add('open');
+}
+function closeTeamModal() { document.getElementById('teamModal').classList.remove('open'); }
+
+async function saveTeam() {
+    const id    = document.getElementById('teamId').value;
+    const name  = document.getElementById('teamName').value.trim();
+    const color = document.getElementById('teamColor').value;
+    const icon  = document.getElementById('teamIcon').value.trim();
+    if (!name) { alert('Nome do time é obrigatório.'); return; }
+    const body = JSON.stringify({ name, color: color || null, icon: icon || null });
+    const url  = id ? `${AUTH_BASE}/teams/${id}` : `${AUTH_BASE}/teams`;
+    const res  = await fetch(url, {
+        method: id ? 'PUT' : 'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'}, body,
+    });
+    if (res.ok) { closeTeamModal(); loadTeams(); } else {
+        const e = await res.json().catch(()=>null);
+        alert(e?.error || 'Erro ao salvar time.');
+    }
+}
+
+async function deleteTeam(id, name) {
+    if (!confirm(`Excluir o time "${name}"?`)) return;
+    const res = await fetch(`${AUTH_BASE}/teams/${id}`, { method:'DELETE', credentials:'include' });
+    if (res.ok) { loadTeams(); return; }
+    if (res.status === 409) {
+        const e = await res.json().catch(()=>null);
+        const names = (e?.assignedUsers||[]).map(u=>u.displayName).join(', ');
+        alert(`Não é possível excluir: ${e?.count||0} usuário(s) ainda estão neste time.${names ? '\n\nUsuários: '+names : ''}\n\nReatribua-os primeiro pela tela Usuários.`);
+    } else {
+        alert('Erro ao excluir time.');
+    }
+}
 async function submitEditUser() {
     const id    = document.getElementById('editUserId').value;
     const name  = document.getElementById('editUserName').value.trim();
@@ -424,9 +541,9 @@ async function submitEditUser() {
     if (!name || !email) { alert('Nome e email obrigatórios.'); return; }
     const res = await fetch(`${AUTH_BASE}/admin/users/${id}`, {
         method:'PUT', credentials:'include',
-        headers:{'Content-Type':'application/json'}, body:JSON.stringify({ displayName:name, email }),
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({ displayName:name, email, teamId: document.getElementById('editUserTeam').value || null }),
     });
-    if (res.ok) { closeEditUserModal(); loadUsers(); } else alert('Erro ao salvar.');
+    if (res.ok) { closeEditUserModal(); loadUsers(); loadTeams(); } else alert('Erro ao salvar.');
 }
 
 // ── Bandai map & association ───────────────────────────────────────────────────

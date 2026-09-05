@@ -161,6 +161,46 @@ async function mmPrependIndex(env, key, id, max) {
 
 function newUserId() { return 'usr_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16); }
 
+// ── Teams ──────────────────────────────────────────────────────────────────
+const TEAM_INDEX_KEY = 'team_index';
+function newTeamId() { return 'team_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16); }
+
+async function getTeam(env, id) {
+    const v = await env.AUTH_KV.get(`team:${id}`);
+    return v ? JSON.parse(v) : null;
+}
+
+async function putTeam(env, team) {
+    await env.AUTH_KV.put(`team:${team.id}`, JSON.stringify(team));
+}
+
+function sanitizeTeam(team) {
+    if (!team) return null;
+    return {
+        id:        team.id,
+        name:      team.name,
+        color:     team.color ?? null,
+        icon:      team.icon ?? null,
+        createdAt: team.createdAt,
+        updatedAt: team.updatedAt,
+    };
+}
+
+async function listTeams(env) {
+    const raw  = await env.AUTH_KV.get(TEAM_INDEX_KEY);
+    const ids  = raw ? JSON.parse(raw) : [];
+    const teams = await Promise.all(ids.map(id => getTeam(env, id)));
+    return teams.filter(Boolean).map(sanitizeTeam);
+}
+
+async function teamMemberCount(env, teamId) {
+    const raw = await env.AUTH_KV.get('user_index');
+    if (!raw) return 0;
+    const ids = JSON.parse(raw);
+    const users = await Promise.all(ids.map(id => getUser(env, id)));
+    return users.filter(u => u && u.teamId === teamId).length;
+}
+
 function buildUser(id, email, displayName, method, extras = {}) {
     const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
     return {
@@ -409,7 +449,7 @@ async function handleAdminUsers(request, env, cors) {
         Promise.all(allIds.map(id => getUser(env, id))),
     ]);
 
-    const sanitize = u => u ? { id: u.id, email: u.email, displayName: u.displayName, avatarUrl: u.avatarUrl, method: u.method, status: u.status, role: u.role, createdAt: u.createdAt, profile: { bandaiName: u.profile?.bandaiName || null } } : null;
+    const sanitize = u => u ? { id: u.id, email: u.email, displayName: u.displayName, avatarUrl: u.avatarUrl, method: u.method, status: u.status, role: u.role, createdAt: u.createdAt, teamId: u.teamId || null, profile: { bandaiName: u.profile?.bandaiName || null } } : null;
     return json({ pending: pending.filter(Boolean).map(sanitize), all: all.filter(Boolean).map(sanitize) }, 200, cors);
 }
 
@@ -480,6 +520,81 @@ async function handleReject(request, env, cors, id) {
     return json({ ok: true }, 200, cors);
 }
 
+// ── Teams handlers ───────────────────────────────────────────────────────────
+
+async function handleTeamsGet(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    return json(await listTeams(env), 200, cors);
+}
+
+async function handleTeamsPost(request, env, cors) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    const name = String(body.name || '').trim();
+    if (!name) return json({ error: 'name é obrigatório' }, 400, cors);
+    const now = new Date().toISOString();
+    const team = {
+        id:        newTeamId(),
+        name:      name.slice(0, 128),
+        color:     body.color ? String(body.color).slice(0, 16) : null,
+        icon:      body.icon ? String(body.icon).slice(0, 8) : null,
+        createdAt: now,
+        updatedAt: now,
+    };
+    await putTeam(env, team);
+    await appendIndex(env, TEAM_INDEX_KEY, team.id);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'create_team', targetId: team.id, targetName: team.name });
+    return json(sanitizeTeam(team), 201, cors);
+}
+
+async function handleTeamPut(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const team = await getTeam(env, id);
+    if (!team) return json({ error: 'Not found' }, 404, cors);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400, cors); }
+    if (body.name !== undefined) {
+        const name = String(body.name || '').trim();
+        if (!name) return json({ error: 'name é obrigatório' }, 400, cors);
+        team.name = name.slice(0, 128);
+    }
+    if (body.color !== undefined) team.color = body.color ? String(body.color).slice(0, 16) : null;
+    if (body.icon  !== undefined) team.icon  = body.icon  ? String(body.icon).slice(0, 8)  : null;
+    team.updatedAt = new Date().toISOString();
+    await putTeam(env, team);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'edit_team', targetId: team.id, targetName: team.name });
+    return json(sanitizeTeam(team), 200, cors);
+}
+
+async function handleTeamDelete(request, env, cors, id) {
+    const actor = await authenticate(request, env);
+    if (!actor || actor.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const team = await getTeam(env, id);
+    if (!team) return json({ error: 'Not found' }, 404, cors);
+
+    // Block deletion while users still reference the team
+    const raw = await env.AUTH_KV.get('user_index');
+    const ids = raw ? JSON.parse(raw) : [];
+    const users = await Promise.all(ids.map(uid => getUser(env, uid)));
+    const assigned = users.filter(u => u && u.teamId === id);
+    if (assigned.length) {
+        return json({
+            error: 'Team has assigned users',
+            count: assigned.length,
+            assignedUsers: assigned.map(u => ({ id: u.id, displayName: u.displayName, email: u.email })),
+        }, 409, cors);
+    }
+
+    await env.AUTH_KV.delete(`team:${id}`);
+    await removeIndex(env, TEAM_INDEX_KEY, id);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'delete_team', targetId: id, targetName: team.name });
+    return json({ ok: true }, 200, cors);
+}
+
 // ── User Profile ──────────────────────────────────────────────────────────────
 
 async function handleProfileGet(request, env, cors) {
@@ -530,6 +645,7 @@ function publicProfile(u) {
         whatsapp:     u.profile?.whatsapp      || null,
         youtube:      u.profile?.youtube      || null,
         twitch:       u.profile?.twitch       || null,
+        teamId:       u.teamId || null,
     };
 }
 
@@ -902,9 +1018,21 @@ async function handleAdminEditUser(request, env, cors, id) {
             user.email = newEmail;
         }
     }
+    let teamChanged = false;
+    if (body.teamId !== undefined) {
+        const nextTeamId = (body.teamId === null || body.teamId === '') ? null : String(body.teamId).trim();
+        if (nextTeamId) {
+            const team = await getTeam(env, nextTeamId);
+            if (!team) return json({ error: 'Team not found' }, 404, cors);
+        }
+        if ((user.teamId || null) !== nextTeamId) {
+            user.teamId = nextTeamId;
+            teamChanged = true;
+        }
+    }
     await putUser(env, user);
-    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'edit_user', targetId: user.id, targetName: user.displayName, detail: 'name/email updated' });
-    return json({ ok: true }, 200, cors);
+    await appendAuditLog(env, { actorId: actor.id, actorName: actor.displayName, action: 'edit_user', targetId: user.id, targetName: user.displayName, detail: teamChanged ? `team set to ${user.teamId || 'unassigned'}` : 'name/email updated' });
+    return json({ ok: true, teamId: user.teamId || null }, 200, cors);
 }
 
 async function handleDeleteUser(request, env, cors, id) {
@@ -2208,6 +2336,12 @@ export default {
             if (path === '/auth/me'              && method === 'GET')  return handleMe(request, env, cors);
             if (path === '/auth/logout'          && method === 'POST') return handleLogout(request, env, cors);
             if (path === '/admin/users'          && method === 'GET')  return handleAdminUsers(request, env, cors);
+            if (path === '/teams'                && method === 'GET')  return handleTeamsGet(request, env, cors);
+            if (path === '/teams'                && method === 'POST') return handleTeamsPost(request, env, cors);
+
+            const teamMatch = path.match(/^\/teams\/([^/]+)$/);
+            if (teamMatch && method === 'PUT')    return handleTeamPut(request, env, cors, teamMatch[1]);
+            if (teamMatch && method === 'DELETE') return handleTeamDelete(request, env, cors, teamMatch[1]);
             if (path === '/profile'              && method === 'GET')  return handleProfileGet(request, env, cors);
             if (path === '/profile'              && method === 'PUT')  return handleProfilePut(request, env, cors);
             if (path === '/directory'             && method === 'GET')  return handleDirectory(request, env, cors);
