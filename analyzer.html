@@ -19,6 +19,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
     <link rel="stylesheet" href="css/variables.css">
     <link rel="stylesheet" href="css/layout.css">
     <link rel="stylesheet" href="css/components.css">
@@ -1058,6 +1059,24 @@
             <div class="card-body">
                 <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Team standings and confrontations derived from cached match rounds. Assign players to teams from the Admin panel.</p>
                 <div id="worstGenSummary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;"></div>
+
+                <div class="charts-grid" style="margin-bottom:1.5rem;">
+                    <div class="chart-panel">
+                        <h3>Team Standings</h3>
+                        <p id="worstGenStandingsNote" style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;line-height:1.5;">Stacked wins and losses by team, sorted by win rate.</p>
+                        <div class="chart-canvas-wrap tall" id="worstGenStandingsWrap">
+                            <canvas id="chartWorstStandings"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-panel">
+                        <h3>Team Trend</h3>
+                        <p id="worstGenTrendNote" style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;line-height:1.5;">Cumulative and rolling win-rate lines across the filtered team snapshot.</p>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartWorstTrend"></canvas>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="table-wrap">
                     <table class="h2h-table" style="width:100%;">
                         <thead>
@@ -1082,6 +1101,13 @@
                 <h2><span class="section-icon">&#9878;&#65039;</span> Team vs Team</h2>
             </div>
             <div class="card-body">
+                <div class="chart-panel" style="margin-bottom:1.25rem;">
+                    <h3>Team Matchup Heatmap</h3>
+                    <p id="worstGenH2HNote" style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;line-height:1.5;">Each cell shows the win rate for one team against another in the filtered snapshot.</p>
+                    <div class="chart-canvas-wrap tall" id="worstGenH2HWrap">
+                        <canvas id="chartWorstH2H"></canvas>
+                    </div>
+                </div>
                 <div class="table-wrap" id="worstGenH2H"></div>
             </div>
         </div>

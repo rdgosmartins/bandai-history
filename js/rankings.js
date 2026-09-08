@@ -231,7 +231,7 @@ function _updateRankFilterSummary(allUsers, filteredUsers) {
         : `All ${totalEvs} events`;
 }
 
-function applyRankingsFilter() {
+function buildRankingsFilteredSnapshot() {
     const allUsers = App.usersWithToken.map(u => {
         const events = Object.values(loadCache(u.bandaiId) || {})
             .filter(ev => Array.isArray(ev?.rounds) && ev.rounds.length > 0);
@@ -241,18 +241,13 @@ function applyRankingsFilter() {
         };
     }).filter(u => u.events.length > 0);
 
-    // Rebuild filter chips from full unfiltered pool so new periods (e.g. OP-14)
-    // are always represented even when navigating to the tab after new data is fetched.
-    const allEvents = allUsers.flatMap(u => u.events);
-    _buildRankFilterChips(allEvents);
-
     const filteredUsers = allUsers.map(u => ({
         ...u,
         events: _applyRankFilter(u.events)
     })).filter(u => u.events.length > 0); // drop players with zero events under current filter
 
     // Build a set of "date|store" keys from non-restricted players' filtered events.
-    const isRestricted = u => RESTRICTED_TO_SHARED.some(n => u.name.toLowerCase().includes(n));
+    const isRestricted = u => RESTRICTED_TO_SHARED.some(n => String(u.name || '').toLowerCase().includes(n));
     const sharedKeys = new Set(
         filteredUsers
             .filter(u => !isRestricted(u))
@@ -276,6 +271,18 @@ function applyRankingsFilter() {
         };
     }).filter(u => u.events.length > 0); // drop restricted players with no matching events
 
+    return {
+        allUsers,
+        filteredUsers,
+        finalUsers,
+        sharedKeys,
+    };
+}
+
+function applyRankingsFilter() {
+    const snapshot = buildRankingsFilteredSnapshot();
+    const { allUsers, finalUsers } = snapshot;
+
     _updateRankFilterSummary(allUsers, finalUsers);
     renderWinRateTimeline(finalUsers);
     renderMostActive(finalUsers);
@@ -288,6 +295,11 @@ function applyRankingsFilter() {
     _populateStoreH2HSelect(finalUsers);
     const storeH2HCard = document.getElementById('storeH2HCard');
     if (storeH2HCard) storeH2HCard.style.display = finalUsers.length > 0 ? 'block' : 'none';
+
+    const wgTab = document.getElementById('worstGenTab');
+    if (wgTab && wgTab.style.display !== 'none' && typeof renderWorstGeneration === 'function') {
+        renderWorstGeneration(finalUsers);
+    }
 }
 
 async function buildGlobalRankings() {
