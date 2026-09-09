@@ -2373,6 +2373,34 @@ async function handleMatchmakerMatches(request, env, cors, url) {
 const BANDAI_API_BASE = 'https://bandai-proxy.rdgosmartins.workers.dev';
 const SYNC_SLICE_SIZE = 5;             // users processed per invocation
 const SYNC_LOCK_TTL   = 900;           // seconds before a stale lock can be taken over
+const SYNC_STALE_AFTER_MS = 30 * 60 * 1000; // 30 minutes before we treat a running sync as abandoned
+
+function syncDefaultJobState(overrides = {}) {
+    return {
+        status: 'idle',
+        startedAt: null,
+        finishedAt: null,
+        total: 0,
+        done: 0,
+        ok: 0,
+        failed: 0,
+        results: [],
+        cursor: 0,
+        ...overrides,
+    };
+}
+
+function syncJobAgeMs(job) {
+    if (!job?.startedAt) return null;
+    const started = Date.parse(job.startedAt);
+    if (!Number.isFinite(started)) return null;
+    return Date.now() - started;
+}
+
+function syncIsStaleJob(job) {
+    const age = syncJobAgeMs(job);
+    return age !== null && age > SYNC_STALE_AFTER_MS;
+}
 
 function bandaiHeaders(token) {
     return {
@@ -2428,18 +2456,21 @@ async function syncUser(env, user) {
         `${BASE}&past_event_display_flg=1&selected_tab=1`,
         `${BASE}&past_event_display_flg=1&selected_tab=2`,
     ];
+    const tabHeaders = { 'X-Authentication': token };
 
     async function fetchTabEvents(url) {
         const pageLimit = 1000;
         const events = [];
         let offset = 0;
+        let ok = false;
         while (true) {
             const pageUrl = new URL(url);
             pageUrl.searchParams.set('limit', String(pageLimit));
             pageUrl.searchParams.set('offset', String(offset));
             try {
-                const r = await fetch(pageUrl.toString(), { headers: bandaiHeaders(token) });
+                const r = await fetch(pageUrl.toString(), { headers: tabHeaders });
                 if (!r.ok) break;
+                ok = true;
                 const j = await r.json();
                 const pageEvents = j?.success?.events ?? [];
                 events.push(...pageEvents);
@@ -2447,21 +2478,29 @@ async function syncUser(env, user) {
                 offset += pageLimit;
             } catch { break; }
         }
-        return events;
+        return { ok, events };
     }
 
     const tabResults = await Promise.all(tabCombos.map(fetchTabEvents));
     const eventMap = new Map();
-    for (const evs of tabResults) {
-        for (const ev of evs) {
+    let successfulTabs = 0;
+    for (const result of tabResults) {
+        if (result.ok) successfulTabs++;
+        for (const ev of result.events) {
             if (ev?.id && !eventMap.has(ev.id)) eventMap.set(ev.id, ev);
         }
     }
     const events = [...eventMap.values()];
-    if (events.length === 0) throw new Error(`${user.name}: no events returned`);
 
     let cache = {};
     const rawCache = await env.AUTH_KV.get('cache:' + user.bandaiId);
+    if (rawCache) { try { cache = JSON.parse(rawCache); } catch {} }
+
+    if (events.length === 0) {
+        if (successfulTabs === 0) throw new Error(`${user.name}: all event tab requests failed`);
+        return { newCount: 0, totalCount: Object.keys(cache).length };
+    }
+
     if (rawCache) { try { cache = JSON.parse(rawCache); } catch {} }
 
     const staleZeroRounds = events.filter(ev => {
@@ -2611,8 +2650,32 @@ async function runSyncSlice(env) {
         const slice = users.slice(cursor, cursor + SYNC_SLICE_SIZE);
         const results = [...(cur.results || [])];
         let ok = cur.ok || 0, failed = cur.failed || 0;
+        let processed = 0;
 
         for (const user of slice) {
+            const liveJob = await syncGetJob(env);
+            if (!liveJob || liveJob.status !== 'running') {
+                const stoppedJob = syncDefaultJobState({
+                    status: liveJob?.status || 'stopped',
+                    startedAt: cur.startedAt,
+                    finishedAt: liveJob?.finishedAt || new Date().toISOString(),
+                    total: liveJob?.total ?? users.length,
+                    done: liveJob?.done ?? cursor + processed,
+                    ok,
+                    failed,
+                    results,
+                    cursor: liveJob?.cursor ?? cursor + processed,
+                    error: liveJob?.error || 'stopped-by-user',
+                });
+                await syncPutJob(env, stoppedJob);
+                return {
+                    status: stoppedJob.status,
+                    total: stoppedJob.total,
+                    done: stoppedJob.done,
+                    stopped: true,
+                };
+            }
+
             try {
                 const { newCount, totalCount } = await syncUser(env, user);
                 results.push({ name: user.name, bandaiId: user.bandaiId, newCount, totalCount, error: null });
@@ -2621,6 +2684,65 @@ async function runSyncSlice(env) {
                 results.push({ name: user.name, bandaiId: user.bandaiId, newCount: 0, totalCount: 0, error: String(err?.message || err) });
                 failed++;
             }
+
+            processed++;
+            const afterJob = await syncGetJob(env);
+            if (!afterJob || afterJob.status !== 'running') {
+                const stoppedJob = syncDefaultJobState({
+                    status: afterJob?.status || 'stopped',
+                    startedAt: cur.startedAt,
+                    finishedAt: afterJob?.finishedAt || new Date().toISOString(),
+                    total: afterJob?.total ?? users.length,
+                    done: cursor + processed,
+                    ok,
+                    failed,
+                    results,
+                    cursor: cursor + processed,
+                    error: afterJob?.error || 'stopped-by-user',
+                });
+                await syncPutJob(env, stoppedJob);
+                return {
+                    status: stoppedJob.status,
+                    total: stoppedJob.total,
+                    done: stoppedJob.done,
+                    stopped: true,
+                };
+            }
+
+            const partialJob = {
+                status: 'running',
+                startedAt: cur.startedAt,
+                total: users.length,
+                done: cursor + processed,
+                ok,
+                failed,
+                results,
+                cursor: cursor + processed,
+            };
+            await syncPutJob(env, partialJob);
+        }
+
+        const latestJob = await syncGetJob(env);
+        if (!latestJob || latestJob.status !== 'running') {
+            const stoppedJob = syncDefaultJobState({
+                status: latestJob?.status || 'stopped',
+                startedAt: cur.startedAt,
+                finishedAt: latestJob?.finishedAt || new Date().toISOString(),
+                total: latestJob?.total ?? users.length,
+                done: latestJob?.done ?? cursor + processed,
+                ok,
+                failed,
+                results,
+                cursor: latestJob?.cursor ?? cursor + processed,
+                error: latestJob?.error || 'stopped-by-user',
+            });
+            await syncPutJob(env, stoppedJob);
+            return {
+                status: stoppedJob.status,
+                total: stoppedJob.total,
+                done: stoppedJob.done,
+                stopped: true,
+            };
         }
 
         const newCursor = cursor + slice.length;
@@ -2637,21 +2759,98 @@ async function runSyncSlice(env) {
     }
 }
 
+async function handleSyncStop(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+
+    const job = (await syncGetJob(env)) || syncDefaultJobState();
+    const stoppedJob = syncDefaultJobState({
+        status: 'stopped',
+        startedAt: job.startedAt,
+        finishedAt: new Date().toISOString(),
+        total: job.total || 0,
+        done: job.done || 0,
+        ok: job.ok || 0,
+        failed: job.failed || 0,
+        results: Array.isArray(job.results) ? job.results : [],
+        cursor: job.cursor || 0,
+        error: 'stopped-by-user',
+    });
+
+    await syncPutJob(env, stoppedJob);
+
+    return json({ ok: true, status: 'stopped', job: stoppedJob }, 200, cors);
+}
+
 async function handleSyncAll(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
     if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
-    const job = (await syncGetJob(env)) || {};
-    if (job.status === 'running') return json({ ok: false, error: 'A sync is already running' }, 409, cors);
-    await syncPutJob(env, { status: 'idle', startedAt: null, finishedAt: null, total: 0, done: 0, ok: 0, failed: 0, results: [], cursor: 0 });
-    return runSyncSlice(env).then(() => json({ ok: true, status: 'running' }, 202, cors));
+
+    const job = (await syncGetJob(env)) || syncDefaultJobState();
+    if (job.status === 'running' && !syncIsStaleJob(job)) {
+        return json({
+            ok: false,
+            error: 'A sync is already running',
+            job,
+        }, 409, cors);
+    }
+
+    if (job.status === 'running' && syncIsStaleJob(job)) {
+        await env.AUTH_KV.delete('sync_lock').catch(() => {});
+    }
+
+    if (await env.AUTH_KV.get('sync_lock')) {
+        return json({
+            ok: false,
+            error: 'A sync is already running',
+            job,
+        }, 409, cors);
+    }
+
+    await syncPutJob(env, syncDefaultJobState({
+        status: 'running',
+        startedAt: new Date().toISOString(),
+    }));
+
+    const runResult = await runSyncSlice(env);
+    const nextJob = await syncGetJob(env);
+    if (runResult?.skipped) {
+        return json({
+            ok: false,
+            error: runResult.reason || 'A sync is already running',
+            job: nextJob || runResult || null,
+        }, 409, cors);
+    }
+    return json({
+        ok: true,
+        status: nextJob?.status || runResult?.status || 'running',
+        job: nextJob || runResult || null,
+    }, 202, cors);
 }
 
 async function handleSyncStatus(request, env, cors) {
     const user = await authenticate(request, env);
     if (!user) return json({ error: 'Unauthorized' }, 401, cors);
     const job = await syncGetJob(env);
-    return json(job || { status: 'idle', total: 0, done: 0, ok: 0, failed: 0, results: [] }, 200, cors);
+
+    if (!job) {
+        return json(syncDefaultJobState(), 200, cors);
+    }
+
+    if (job.status === 'running' && syncIsStaleJob(job)) {
+        const staleJob = syncDefaultJobState({
+            status: 'error',
+            finishedAt: new Date().toISOString(),
+            error: 'stale-running-job-reset',
+        });
+        await syncPutJob(env, staleJob);
+        await syncReleaseLock(env).catch(() => {});
+        return json(staleJob, 200, cors);
+    }
+
+    return json(job, 200, cors);
 }
 
 export default {
@@ -2720,6 +2919,7 @@ export default {
             if (path === '/admin/audit-log' && method === 'GET') return handleAuditLog(request, env, cors);
             if (path === '/admin/decks'     && method === 'GET') return handleAdminDecksGet(request, env, cors);
             if (path === '/inbox'           && method === 'GET') return handleInboxGet(request, env, cors);
+            if (path === '/sync/stop'       && method === 'POST') return handleSyncStop(request, env, cors);
 
             const inboxReadMatch = path.match(/^\/inbox\/([^/]+)\/read$/);
             if (inboxReadMatch && method === 'POST') return handleInboxRead(request, env, cors, inboxReadMatch[1]);

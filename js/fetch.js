@@ -21,6 +21,7 @@ async function fetchUserEvents(user, onProgress) {
         const pageLimit = 1000;
         const events = [];
         let offset = 0;
+        let ok = false;
 
         while (true) {
             const pageUrl = new URL(url);
@@ -32,6 +33,7 @@ async function fetchUserEvents(user, onProgress) {
             try {
                 const r = await fetch(pageUrl.toString(), { headers: { 'X-Authentication': token }, signal: ac.signal });
                 if (!r.ok) break;
+                ok = true;
                 const j = await r.json();
                 const pageEvents = j?.success?.events ?? [];
                 events.push(...pageEvents);
@@ -44,7 +46,7 @@ async function fetchUserEvents(user, onProgress) {
             }
         }
 
-        return { tab, url, count: events.length, events };
+        return { tab, url, ok, count: events.length, events };
     }
 
     const tabResults = await Promise.all(
@@ -52,18 +54,24 @@ async function fetchUserEvents(user, onProgress) {
     );
     console.log('[BandaiTabs]', tabResults.map(r => `tab${r.tab}(${r.url.split('selected_tab=')[1]}): ${r.count} events`));
     const eventMap = new Map();
+    let successfulTabs = 0;
     for (const result of tabResults) {
+        if (result.ok) successfulTabs++;
         for (const ev of result.events) {
             if (!eventMap.has(ev.id)) eventMap.set(ev.id, ev);
         }
     }
     const events = [...eventMap.values()];
-    if (events.length === 0) throw new Error(`No events found for ${user.name} — all tab requests failed`);
 
     // Merge server KV cache before using local — shares data across all browsers/sessions
     await pullServerCache(user.bandaiId);
 
     const cache       = loadCache(user.bandaiId);
+    if (events.length === 0) {
+        if (successfulTabs === 0) throw new Error(`No events found for ${user.name} — all tab requests failed`);
+        return { newCount: 0, totalCount: Object.keys(cache).length };
+    }
+
     // Events with 0 rounds that are >2 days old should be re-fetched — Bandai sometimes
     // publishes results after the event ends, and cached 0-round entries block re-fetch.
     const staleZeroRounds = events.filter(ev => {
@@ -361,15 +369,24 @@ async function fetchUserEvents(user, onProgress) {
 const SYNC_POLL_MS = 2500;
 const SYNC_POLL_MAX = 300; // ~12.5 min cap before giving up on the poll
 let _syncPollTimer = null;
+let _syncStopping = false;
+
+function _setSyncControls({ running }) {
+    const stopBtn = document.getElementById('stopSyncBtn');
+    if (stopBtn) stopBtn.disabled = !running;
+    document.getElementById('syncAllBtn').disabled = running;
+}
 
 async function syncAllUsers() {
     if (App.usersWithToken.length === 0) return;
 
     clearError();
+    _syncStopping = false;
     document.getElementById('progress').style.display = 'block';
     document.getElementById('fetchBtn').disabled     = true;
     document.getElementById('syncAllBtn').disabled   = true;
     document.getElementById('loadCacheBtn').disabled = true;
+    _setSyncControls({ running: true });
 
     try {
         const resp = await apiFetch('/sync/all', { method: 'POST' });
@@ -385,6 +402,16 @@ async function syncAllUsers() {
         const job = await _pollSyncJob();
         if (!job) {
             throw new Error('Timed out waiting for the sync job.');
+        }
+
+        if (job.status === 'stopped') {
+            setProgress('Sync stopped.', 100);
+            const summaryEl = document.getElementById('syncAllSummary');
+            if (summaryEl) {
+                summaryEl.textContent = `Sync stopped — ${job.done || 0}/${job.total || 0} users processed`;
+                summaryEl.style.display = '';
+            }
+            return;
         }
 
         setProgress('All users synced!', 100);
@@ -463,12 +490,46 @@ async function syncAllUsers() {
         showError(err.message);
     } finally {
         _stopSyncPoll();
+        _setSyncControls({ running: false });
         document.getElementById('fetchBtn').disabled     = false;
         document.getElementById('syncAllBtn').disabled   = App.usersWithToken.length < 2;
         const _selIdx = document.getElementById('userSelect').value;
         document.getElementById('loadCacheBtn').disabled = _selIdx === ''
             || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx)]?.bandaiId || '')).length === 0;
         pushPlayerBadges();
+    }
+}
+
+async function stopSyncAll() {
+    clearError();
+    _syncStopping = true;
+    const stopBtn = document.getElementById('stopSyncBtn');
+    if (stopBtn) stopBtn.disabled = true;
+
+    try {
+        const resp = await apiFetch('/sync/stop', { method: 'POST' });
+        if (!resp.ok) {
+            const body = await resp.json().catch(() => ({}));
+            throw new Error(body.error || `Stop Sync failed (HTTP ${resp.status})`);
+        }
+
+        const job = await resp.json().catch(() => null);
+        _stopSyncPoll();
+        setProgress('Sync stopped.', 100);
+        const summaryEl = document.getElementById('syncAllSummary');
+        if (summaryEl) {
+            summaryEl.textContent = `Sync stopped — ${job?.job?.done || job?.done || 0}/${job?.job?.total || job?.total || 0} users processed`;
+            summaryEl.style.display = '';
+        }
+        document.getElementById('progress').style.display = 'none';
+        _setSyncControls({ running: false });
+        document.getElementById('fetchBtn').disabled = false;
+        const _selIdx = document.getElementById('userSelect').value;
+        document.getElementById('loadCacheBtn').disabled = _selIdx === ''
+            || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx)]?.bandaiId || '')).length === 0;
+    } catch (err) {
+        _syncStopping = false;
+        showError(err.message);
     }
 }
 
@@ -491,17 +552,21 @@ function _pollSyncJob() {
                 const last = (job.results && job.results[job.results.length - 1]) || {};
                 const stateTxt = job.status === 'done'
                     ? 'Done'
-                    : job.status === 'error'
-                        ? 'Error'
-                        : last.name
-                            ? `Syncing ${job.done}/${job.total}: ${last.name}${last.error ? ' (error)' : ''}`
-                            : `Syncing ${job.done}/${job.total}…`;
+                    : job.status === 'stopped'
+                        ? 'Stopped'
+                        : job.status === 'error'
+                            ? 'Error'
+                            : last.name
+                                ? `Syncing ${job.done}/${job.total}: ${last.name}${last.error ? ' (error)' : ''}`
+                                : `Syncing ${job.done}/${job.total}…`;
                 const errTxt = job.failed ? ` · ${job.failed} error${job.failed>1?'s':''}` : '';
                 setProgress(`${stateTxt}${errTxt}`, job.status === 'done' ? 100 : pct);
             }
 
-            if (job && (job.status === 'done' || job.status === 'error')) {
+            if (job && (job.status === 'done' || job.status === 'error' || job.status === 'stopped')) {
                 resolve(job);
+            } else if (_syncStopping) {
+                resolve({ status: 'stopped' });
             } else if (ticks >= SYNC_POLL_MAX) {
                 resolve(null);
             } else {
