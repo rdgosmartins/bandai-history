@@ -354,7 +354,14 @@ async function fetchUserEvents(user, onProgress) {
     return { newCount: newEvents.length, totalCount: events.length };
 }
 
-// Sync new events for every user with a token, then re-render the currently selected user.
+// Sync new events for every user with a token. Dispatches a server-side job on
+// the dedicated sync worker (daily cron + manual), then polls progress — no
+// blocking loop in the browser. On completion the shared caches are pulled from
+// the server and the current view / rankings are rebuilt.
+const SYNC_POLL_MS = 2500;
+const SYNC_POLL_MAX = 300; // ~12.5 min cap before giving up on the poll
+let _syncPollTimer = null;
+
 async function syncAllUsers() {
     if (App.usersWithToken.length === 0) return;
 
@@ -364,40 +371,27 @@ async function syncAllUsers() {
     document.getElementById('syncAllBtn').disabled   = true;
     document.getElementById('loadCacheBtn').disabled = true;
 
-    const results = []; // { name, newCount, totalCount, error }
-
     try {
-        for (let u = 0; u < App.usersWithToken.length; u++) {
-            const user = App.usersWithToken[u];
-            const pctBase = Math.round((u / App.usersWithToken.length) * 90);
-            const pctNext = Math.round(((u + 1) / App.usersWithToken.length) * 90);
-            setProgress(`Syncing ${u + 1}/${App.usersWithToken.length}: ${user.name}…`, pctBase);
-            try {
-                const fetchPromise = fetchUserEvents(user, (text, pct) => {
-                    const scaled = pctBase + Math.round(pct / 100 * (pctNext - pctBase));
-                    setProgress(text, scaled);
-                });
-                const timeoutPromise = new Promise((_, rej) =>
-                    setTimeout(() => rej(new Error(`Timeout — ${user.name} levou mais de 3 min`)), 180_000)
-                );
-                const { newCount, totalCount } = await Promise.race([fetchPromise, timeoutPromise]);
-                results.push({ name: user.name, newCount, totalCount, error: null });
-            } catch (err) {
-                results.push({ name: user.name, newCount: 0, totalCount: 0, error: err.message });
-            }
-            updateCacheBar(App.usersWithToken[parseInt(document.getElementById('userSelect').value || '0')]?.bandaiId);
+        const resp = await apiFetch('/sync/all', { method: 'POST' });
+        if (!resp.ok) {
+            const body = await resp.json().catch(() => ({}));
+            const msg = resp.status === 403
+                ? 'Sync All is admin-only.'
+                : (body.error || `Sync All failed (HTTP ${resp.status})`);
+            throw new Error(msg);
+        }
+
+        setProgress('Sync job started…', 2);
+        const job = await _pollSyncJob();
+        if (!job) {
+            throw new Error('Timed out waiting for the sync job.');
         }
 
         setProgress('All users synced!', 100);
         setTimeout(() => { document.getElementById('progress').style.display = 'none'; }, 800);
 
-        // Show a brief summary
-        const lines = results.map(r =>
-            r.error
-                ? `${r.name}: ❌ ${r.error}`
-                : `${r.name}: +${r.newCount} new (${r.totalCount} total)`
-        ).join('\n');
-        console.log('[Sync All]\n' + lines);
+        // Pull the freshly-written shared caches into localStorage, then rebuild.
+        await loadAllCachesFromServer();
 
         // Re-render the currently selected user if one is active
         const selIdx = document.getElementById('userSelect').value;
@@ -447,19 +441,23 @@ async function syncAllUsers() {
         if (document.getElementById('rankingsTab').style.display !== 'none') buildGlobalRankings();
 
         // Show summary in a status line under the buttons
+        const results = job.results || [];
+        const newTotal = results.reduce((s, r) => s + (r.newCount || 0), 0);
+        const errCount = (job.failed || 0);
         const summaryEl = document.getElementById('syncAllSummary');
         if (summaryEl) {
-            const newTotal = results.reduce((s, r) => s + r.newCount, 0);
-            const errCount = results.filter(r => r.error).length;
             summaryEl.textContent = errCount
-                ? `Sync complete — ${newTotal} new events across ${results.length} users (${errCount} error${errCount>1?'s':''})`
+                ? `Sync complete — ${newTotal} new events (${errCount} error${errCount>1?'s':''})`
                 : `Sync complete — ${newTotal} new event${newTotal !== 1 ? 's' : ''} across ${results.length} users`;
             summaryEl.style.display = '';
         }
 
+        console.log('[Sync All]', job);
+
     } catch (err) {
         showError(err.message);
     } finally {
+        _stopSyncPoll();
         document.getElementById('fetchBtn').disabled     = false;
         document.getElementById('syncAllBtn').disabled   = App.usersWithToken.length < 2;
         const _selIdx = document.getElementById('userSelect').value;
@@ -467,6 +465,50 @@ async function syncAllUsers() {
             || Object.keys(loadCache(App.usersWithToken[parseInt(_selIdx)]?.bandaiId || '')).length === 0;
         pushPlayerBadges();
     }
+}
+
+// Polls GET /sync/status, rendering live per-user progress until the job
+// reaches 'done' or 'error'. Resolves with the final job object.
+function _pollSyncJob() {
+    return new Promise((resolve) => {
+        let ticks = 0;
+        const tick = async () => {
+            ticks++;
+            let job = null;
+            try {
+                const resp = await apiFetch('/sync/status');
+                if (resp.ok) job = await resp.json();
+            } catch { /* transient — keep polling */ }
+
+            if (job) {
+                const total = job.total || 1;
+                const pct = Math.min(98, Math.round((job.done || 0) / total * 100));
+                const last = (job.results && job.results[job.results.length - 1]) || {};
+                const stateTxt = job.status === 'done'
+                    ? 'Done'
+                    : job.status === 'error'
+                        ? 'Error'
+                        : last.name
+                            ? `Syncing ${job.done}/${job.total}: ${last.name}${last.error ? ' (error)' : ''}`
+                            : `Syncing ${job.done}/${job.total}…`;
+                const errTxt = job.failed ? ` · ${job.failed} error${job.failed>1?'s':''}` : '';
+                setProgress(`${stateTxt}${errTxt}`, job.status === 'done' ? 100 : pct);
+            }
+
+            if (job && (job.status === 'done' || job.status === 'error')) {
+                resolve(job);
+            } else if (ticks >= SYNC_POLL_MAX) {
+                resolve(null);
+            } else {
+                _syncPollTimer = setTimeout(tick, SYNC_POLL_MS);
+            }
+        };
+        tick();
+    });
+}
+
+function _stopSyncPoll() {
+    if (_syncPollTimer) { clearTimeout(_syncPollTimer); _syncPollTimer = null; }
 }
 
 async function fetchAndAnalyze() {

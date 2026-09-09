@@ -2363,7 +2363,304 @@ async function handleMatchmakerMatches(request, env, cors, url) {
     return json({ matches }, 200, cors);
 }
 
+// ── Sync All (scheduled + manual) ───────────────────────────────────────────
+// Daily cron + admin-triggered server-side sync. Reads the shared bandai_map
+// for per-user tokens, fetches events from the Bandai proxy, and upserts into
+// the same cache:<bandaiId> KV keys the frontend reads. Runs in bounded slices
+// per invocation so it stays within a single Worker's CPU/time limits; the job
+// state (sync_job) + lock (sync_lock) live in AUTH_KV.
+
+const BANDAI_API_BASE = 'https://bandai-proxy.rdgosmartins.workers.dev';
+const SYNC_SLICE_SIZE = 5;             // users processed per invocation
+const SYNC_LOCK_TTL   = 900;           // seconds before a stale lock can be taken over
+
+function bandaiHeaders(token) {
+    return {
+        'X-Authentication': token,
+        'X-Accept-Version': 'v1',
+        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+        'Origin': 'https://www.bandai-tcg-plus.com',
+        'Referer': 'https://www.bandai-tcg-plus.com/',
+    };
+}
+
+function syncParseUsers(map) {
+    const users = [];
+    for (const line of String(map || '').split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const firstColon = trimmed.indexOf(':');
+        if (firstColon === -1) continue;
+        const secondColon = trimmed.indexOf(':', firstColon + 1);
+        const name = trimmed.slice(0, firstColon).trim();
+        const bandaiId = secondColon === -1
+            ? trimmed.slice(firstColon + 1).trim()
+            : trimmed.slice(firstColon + 1, secondColon).trim();
+        const token = secondColon !== -1 ? trimmed.slice(secondColon + 1).trim() : null;
+        if (!name || !bandaiId) continue;
+        if (token) users.push({ name, bandaiId, token });
+    }
+    return users;
+}
+
+const syncSleep = ms => new Promise(r => setTimeout(r, ms));
+
+function syncNormalizeRounds(rounds) {
+    if (!Array.isArray(rounds)) return [];
+    return rounds.map(r => ({
+        ...r,
+        is_win: r.is_win ?? r.won ?? r.result ?? r.outcome ?? null,
+        win_count: r.win_count ?? r.winCount ?? r.game_win_count ?? r.games_won ?? null,
+        lose_count: r.lose_count ?? r.loseCount ?? r.game_lose_count ?? r.games_lost ?? null,
+        opponent_users: Array.isArray(r.opponent_users) ? r.opponent_users : (r.opponent_users ? [r.opponent_users] : []),
+    }));
+}
+
+async function syncUser(env, user) {
+    const token = user.token;
+    const BASE = `${BANDAI_API_BASE}/api/user/my/event?favorite=0&game_title_id=&limit=1000&offset=0`;
+    const tabCombos = [
+        `${BASE}&past_event_display_flg=1&selected_tab=3`,
+        `${BASE}&past_event_display_flg=0&selected_tab=1`,
+        `${BASE}&past_event_display_flg=0&selected_tab=2`,
+        `${BASE}&past_event_display_flg=0&selected_tab=3`,
+        `${BASE}&past_event_display_flg=1&selected_tab=1`,
+        `${BASE}&past_event_display_flg=1&selected_tab=2`,
+    ];
+
+    async function fetchTabEvents(url) {
+        const pageLimit = 1000;
+        const events = [];
+        let offset = 0;
+        while (true) {
+            const pageUrl = new URL(url);
+            pageUrl.searchParams.set('limit', String(pageLimit));
+            pageUrl.searchParams.set('offset', String(offset));
+            try {
+                const r = await fetch(pageUrl.toString(), { headers: bandaiHeaders(token) });
+                if (!r.ok) break;
+                const j = await r.json();
+                const pageEvents = j?.success?.events ?? [];
+                events.push(...pageEvents);
+                if (pageEvents.length < pageLimit) break;
+                offset += pageLimit;
+            } catch { break; }
+        }
+        return events;
+    }
+
+    const tabResults = await Promise.all(tabCombos.map(fetchTabEvents));
+    const eventMap = new Map();
+    for (const evs of tabResults) {
+        for (const ev of evs) {
+            if (ev?.id && !eventMap.has(ev.id)) eventMap.set(ev.id, ev);
+        }
+    }
+    const events = [...eventMap.values()];
+    if (events.length === 0) throw new Error(`${user.name}: no events returned`);
+
+    let cache = {};
+    const rawCache = await env.AUTH_KV.get('cache:' + user.bandaiId);
+    if (rawCache) { try { cache = JSON.parse(rawCache); } catch {} }
+
+    const staleZeroRounds = events.filter(ev => {
+        const entry = cache[String(ev.id)];
+        if (!entry || !Array.isArray(entry.rounds) || entry.rounds.length > 0) return false;
+        const age = Date.now() - new Date(entry._start_datetime ?? 0).getTime();
+        return age > 2 * 24 * 60 * 60 * 1000;
+    });
+    const newEvents = events.filter(ev => !cache[String(ev.id)]);
+    const eventsToFetch = [...newEvents, ...staleZeroRounds];
+
+    async function fetchEventDetail(eventId) {
+        try {
+            const r = await fetch(`${BANDAI_API_BASE}/api/user/my/event/${eventId}`, { headers: bandaiHeaders(token) });
+            if (!r.ok) return null;
+            const ev = (await r.json())?.success?.event;
+            if (!ev) return null;
+            return {
+                applicant_count:    ev.count_applicants ?? null,
+                max_join_count:     ev.max_join_count ?? null,
+                entry_fee:          ev.entry_fee != null ? parseFloat(ev.entry_fee) : null,
+                entry_fee_currency: ev.entry_fee_currency_code ?? null,
+                status:             ev.status_name ?? null,
+            };
+        } catch { return null; }
+    }
+
+    for (const ev of eventsToFetch) {
+        const detail = await fetchEventDetail(ev.id);
+        const existingEntry = cache[String(ev.id)];
+        const existingRounds = Array.isArray(existingEntry?.rounds) ? existingEntry.rounds : [];
+        let evData = existingEntry && typeof existingEntry === 'object'
+            ? { ...existingEntry }
+            : { rounds: [], event: {}, history: null };
+
+        evData._event_id       = ev.id;
+        evData._start_datetime = ev.start_datetime;
+        evData._event_name     = ev.name ?? ev.event_name ?? ev.title
+            ?? existingEntry?.event?.name ?? existingEntry?.event?.event_name
+            ?? existingEntry?.event?.series_title ?? null;
+        evData._rank           = existingEntry?._rank ?? evData.user?.rank ?? null;
+        evData._match_points   = existingEntry?._match_points ?? (evData.user?.match_point != null
+            ? Number(evData.user.match_point) : null);
+        evData._store_name     = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+            ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+            ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
+            ?? existingEntry?._store_name ?? null;
+        evData._capacity       = ev.capacity ?? ev.max_capacity ?? ev.max_entry_count
+            ?? existingEntry?._capacity ?? null;
+
+        if (detail) {
+            evData._applicant_count = detail.applicant_count ?? evData._applicant_count ?? null;
+            evData._capacity        = detail.max_join_count ?? evData._capacity;
+            evData._entry_fee       = detail.entry_fee ?? evData._entry_fee ?? null;
+            evData._entry_fee_currency = detail.entry_fee_currency ?? evData._entry_fee_currency ?? null;
+            evData._status          = detail.status ?? evData._status ?? null;
+        }
+
+        try {
+            const r = await fetch(`${BANDAI_API_BASE}/api/user/event/${ev.id}/history`, { headers: bandaiHeaders(token) });
+            if (r.ok) {
+                const parsed = (await r.json()).success;
+                const roundSource = Array.isArray(parsed.rounds)
+                    ? parsed.rounds
+                    : Array.isArray(parsed.event?.rounds)
+                        ? parsed.event.rounds
+                        : Array.isArray(parsed.history?.rounds)
+                            ? parsed.history.rounds
+                            : [];
+                evData = { ...evData, ...parsed, rounds: syncNormalizeRounds(roundSource) };
+                if (Array.isArray(evData.event?.rounds)) evData.event.rounds = syncNormalizeRounds(evData.event.rounds);
+                if (Array.isArray(evData.history?.rounds)) evData.history.rounds = syncNormalizeRounds(evData.history.rounds);
+                if (existingRounds.length > 0 && existingRounds.length > evData.rounds.length) {
+                    evData.rounds = existingRounds;
+                }
+            } else {
+                evData.rounds = existingRounds;
+                evData._history_error = r.status;
+                evData._history_error_message = r.statusText || 'History unavailable';
+            }
+        } catch {
+            evData.rounds = existingRounds;
+            evData._history_error = 'exception';
+        }
+
+        evData._event_id       = ev.id;
+        evData._start_datetime = ev.start_datetime;
+        evData._event_name     = ev.name ?? ev.event_name ?? ev.title ?? evData.event?.name ?? evData.event?.event_name ?? evData.event?.series_title ?? null;
+        evData._rank           = evData.user?.rank ?? evData._rank ?? null;
+        evData._match_points   = evData.user?.match_point != null ? Number(evData.user.match_point) : (evData._match_points ?? null);
+        evData._store_name     = ev.organizer_name ?? ev.organizer ?? ev.organization_name
+            ?? ev.hosted_by ?? ev.store_name ?? ev.shop_name ?? ev.venue_name
+            ?? ev.store?.name ?? ev.shop?.name ?? ev.organizer?.name
+            ?? evData.event?.organizer_name ?? evData.event?.organizer
+            ?? evData.event?.organization_name ?? evData.event?.hosted_by
+            ?? evData.event?.store_name ?? evData.event?.shop_name
+            ?? evData.event?.venue_name ?? evData.event?.store?.name
+            ?? evData.event?.organizer?.name ?? null;
+        evData._capacity       = ev.capacity ?? ev.max_capacity ?? ev.max_entry_count
+            ?? evData.event?.capacity ?? evData.event?.max_capacity ?? null;
+
+        await syncSleep(300);
+        cache[String(ev.id)] = evData;
+    }
+
+    await env.AUTH_KV.put('cache:' + user.bandaiId, JSON.stringify(cache));
+    return { newCount: eventsToFetch.length, totalCount: events.length };
+}
+
+async function syncGetJob(env) {
+    const raw = await env.AUTH_KV.get('sync_job');
+    return raw ? JSON.parse(raw) : null;
+}
+async function syncPutJob(env, job) { await env.AUTH_KV.put('sync_job', JSON.stringify(job)); }
+async function syncAcquireLock(env) {
+    if (await env.AUTH_KV.get('sync_lock')) return false;
+    await env.AUTH_KV.put('sync_lock', '1', { expirationTtl: SYNC_LOCK_TTL });
+    return true;
+}
+async function syncReleaseLock(env) { await env.AUTH_KV.delete('sync_lock'); }
+
+async function runSyncSlice(env) {
+    if (!(await syncAcquireLock(env))) {
+        return { skipped: true, reason: 'lock held — already running' };
+    }
+    try {
+        const map = await env.AUTH_KV.get('bandai_map') || '';
+        const users = syncParseUsers(map);
+        const job = (await syncGetJob(env)) || {};
+        if (job.status !== 'running' || !Array.isArray(job.results)) {
+            await syncPutJob(env, {
+                status: 'running', startedAt: new Date().toISOString(),
+                total: users.length, done: 0, ok: 0, failed: 0, results: [], cursor: 0,
+            });
+        }
+        const cur = await syncGetJob(env);
+        const cursor = cur.cursor || 0;
+        if (cursor >= users.length && users.length > 0) {
+            await syncPutJob(env, { ...cur, status: 'done', finishedAt: new Date().toISOString() });
+            return { status: 'done', total: cur.total, done: cur.done };
+        }
+        if (users.length === 0) {
+            await syncPutJob(env, { status: 'done', startedAt: cur.startedAt, finishedAt: new Date().toISOString(), total: 0, done: 0, ok: 0, failed: 0, results: [], cursor: 0 });
+            return { status: 'done', total: 0, done: 0 };
+        }
+
+        const slice = users.slice(cursor, cursor + SYNC_SLICE_SIZE);
+        const results = [...(cur.results || [])];
+        let ok = cur.ok || 0, failed = cur.failed || 0;
+
+        for (const user of slice) {
+            try {
+                const { newCount, totalCount } = await syncUser(env, user);
+                results.push({ name: user.name, bandaiId: user.bandaiId, newCount, totalCount, error: null });
+                ok++;
+            } catch (err) {
+                results.push({ name: user.name, bandaiId: user.bandaiId, newCount: 0, totalCount: 0, error: String(err?.message || err) });
+                failed++;
+            }
+        }
+
+        const newCursor = cursor + slice.length;
+        const done = newCursor >= users.length;
+        await syncPutJob(env, {
+            status: done ? 'done' : 'running',
+            startedAt: cur.startedAt,
+            finishedAt: done ? new Date().toISOString() : undefined,
+            total: users.length, done: newCursor, ok, failed, results, cursor: newCursor,
+        });
+        return { status: done ? 'done' : 'running', total: users.length, done: newCursor };
+    } finally {
+        await syncReleaseLock(env);
+    }
+}
+
+async function handleSyncAll(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    if (user.role !== 'admin') return json({ error: 'Forbidden' }, 403, cors);
+    const job = (await syncGetJob(env)) || {};
+    if (job.status === 'running') return json({ ok: false, error: 'A sync is already running' }, 409, cors);
+    await syncPutJob(env, { status: 'idle', startedAt: null, finishedAt: null, total: 0, done: 0, ok: 0, failed: 0, results: [], cursor: 0 });
+    return runSyncSlice(env).then(() => json({ ok: true, status: 'running' }, 202, cors));
+}
+
+async function handleSyncStatus(request, env, cors) {
+    const user = await authenticate(request, env);
+    if (!user) return json({ error: 'Unauthorized' }, 401, cors);
+    const job = await syncGetJob(env);
+    return json(job || { status: 'idle', total: 0, done: 0, ok: 0, failed: 0, results: [] }, 200, cors);
+}
+
 export default {
+    // Daily Cron Trigger — the job resumes across invocations (one slice per fire),
+    // so a large team completes over a few runs.
+    async scheduled(controller, env) {
+        await runSyncSlice(env);
+    },
+
     async fetch(request, env) {
         const url    = new URL(request.url);
         const method = request.method;
@@ -2540,6 +2837,12 @@ export default {
 
             const mmPlayerMatch = path.match(/^\/matchmaker\/player\/([^/]+)$/);
             if (mmPlayerMatch && method === 'GET') return handleMatchmakerPlayer(request, env, cors, mmPlayerMatch[1]);
+
+            // ── Sync All (job) ──────────────────────────────────────────────
+            // Manual dispatch (admin) and progress polling run on THIS worker,
+            // which also owns the Cron Trigger below.
+            if (path === '/sync/all' && method === 'POST')    return handleSyncAll(request, env, cors);
+            if (path === '/sync/status' && method === 'GET')  return handleSyncStatus(request, env, cors);
 
             // Nenhuma rota de API bateu — repassa pro binding de Static Assets
             // (analyzer.html, login.html, css/, js/, icons/ etc.), que é como esse
