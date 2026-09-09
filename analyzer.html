@@ -1113,6 +1113,72 @@
         </div>
     </div>
 
+    <!-- Team Detail Modal -->
+    <div id="teamDetailModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+            <div style="padding:1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <div style="display:flex;align-items:center;gap:0.75rem;">
+                    <span id="teamDetailIcon" style="font-size:1.5rem;"></span>
+                    <div>
+                        <h2 id="teamDetailName" style="margin:0;font-size:1.25rem;"></h2>
+                        <p id="teamDetailPlayerCount" style="margin:0;font-size:0.8rem;color:var(--muted);"></p>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('teamDetailModal').style.display='none';" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--muted);">✕</button>
+            </div>
+
+            <div style="padding:1.25rem;border-bottom:1px solid var(--border);">
+                <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Summary</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:0.75rem;">
+                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Players</p>
+                        <p id="teamDetailPlayersStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;"></p>
+                    </div>
+                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Events</p>
+                        <p id="teamDetailEventsStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;"></p>
+                    </div>
+                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Wins</p>
+                        <p id="teamDetailWinsStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;color:var(--win);"></p>
+                    </div>
+                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Losses</p>
+                        <p id="teamDetailLossesStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;color:var(--loss);"></p>
+                    </div>
+                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
+                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Win Rate</p>
+                        <p id="teamDetailWinRateStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="padding:1.25rem;border-bottom:1px solid var(--border);">
+                <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Roster</h3>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;font-size:0.85rem;border-collapse:collapse;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--border);">
+                                <th style="text-align:left;padding:0.5rem;font-weight:600;color:var(--muted);">Player</th>
+                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">Events</th>
+                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">W</th>
+                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">L</th>
+                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">WR%</th>
+                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">Last Active</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teamDetailRosterBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="padding:1.25rem;">
+                <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Recent Performance</h3>
+                <div id="teamDetailRecentMatches" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Player Profile Tab -->
     <div id="profileTab" style="display:none">
         <div class="card">
