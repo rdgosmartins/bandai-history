@@ -13,12 +13,33 @@
     <script src="js/auth.js"></script>
     <script>
         let currentAdmin, _adminAllUsers = [], _adminTournaments = [], _adminCircuits = [], _adminTeams = [];
-        (async () => {
-            currentAdmin = await requireAuth({ requireAdmin: true });
-            if (!currentAdmin) return;
-            document.getElementById('adminName').textContent = currentAdmin.displayName || currentAdmin.email;
-            adminTab('pendentes');
-        })();
+        let _adminBootstrapPromise = null;
+        const adminFetch = (path, options = {}) =>
+            fetch(`${AUTH_BASE}${path}`, { ...options, credentials: 'include', cache: 'no-store' });
+        const adminDomReady = document.readyState === 'loading'
+            ? new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }))
+            : Promise.resolve();
+        function getActiveAdminTab() {
+            return document.querySelector('.adm-tab-btn.active')?.id?.replace('adm-btn-', '') || 'pendentes';
+        }
+        async function bootstrapAdmin() {
+            if (_adminBootstrapPromise) return _adminBootstrapPromise;
+            _adminBootstrapPromise = (async () => {
+                await adminDomReady;
+                currentAdmin = await requireAuth({ requireAdmin: true });
+                if (!currentAdmin) return;
+                const adminName = document.getElementById('adminName');
+                if (adminName) adminName.textContent = currentAdmin.displayName || currentAdmin.email;
+                adminTab(getActiveAdminTab());
+            })();
+            return _adminBootstrapPromise;
+        }
+        window.addEventListener('pageshow', event => {
+            if (!event.persisted) return;
+            _adminBootstrapPromise = null;
+            bootstrapAdmin();
+        });
+        bootstrapAdmin();
     </script>
     <style>
         .adm-tab-nav { display:flex; flex-wrap:wrap; gap:0; border-bottom:2px solid var(--border,#eee); margin-bottom:1.5rem; }
@@ -324,7 +345,7 @@ function adminTab(name) {
 // ── Users ─────────────────────────────────────────────────────────────────────
 async function loadUsers() {
     try {
-        const res = await fetch(`${AUTH_BASE}/admin/users`, { credentials: 'include' });
+        const res = await adminFetch(`/admin/users`, { credentials: 'include' });
         if (!res.ok) throw new Error();
         const { pending, all } = await res.json();
         _adminAllUsers = all;
@@ -387,28 +408,28 @@ function renderAll(users) {
 async function approve(id) {
     const btn = document.querySelector(`#row-${id} .btn-approve`);
     if (btn) { btn.disabled=true; btn.textContent='…'; }
-    const res = await fetch(`${AUTH_BASE}/admin/approve/${id}`, { method:'POST', credentials:'include' });
+    const res = await adminFetch(`/admin/approve/${id}`, { method:'POST', credentials:'include' });
     if (res.ok) loadUsers();
     else { alert('Erro.'); if(btn){btn.disabled=false;btn.textContent='✓ Aprovar';} }
 }
 async function reject(id) {
     if (!confirm('Rejeitar este usuário?')) return;
-    const res = await fetch(`${AUTH_BASE}/admin/reject/${id}`, { method:'POST', credentials:'include' });
+    const res = await adminFetch(`/admin/reject/${id}`, { method:'POST', credentials:'include' });
     if (res.ok) loadUsers();
 }
 async function suspend(id) {
     if (!confirm('Suspender este usuário? Ele não conseguirá mais logar.')) return;
-    const res = await fetch(`${AUTH_BASE}/admin/suspend/${id}`, { method:'POST', credentials:'include' });
+    const res = await adminFetch(`/admin/suspend/${id}`, { method:'POST', credentials:'include' });
     if (res.ok) loadUsers(); else alert('Erro.');
 }
 async function unsuspend(id) {
-    const res = await fetch(`${AUTH_BASE}/admin/unsuspend/${id}`, { method:'POST', credentials:'include' });
+    const res = await adminFetch(`/admin/unsuspend/${id}`, { method:'POST', credentials:'include' });
     if (res.ok) loadUsers(); else alert('Erro.');
 }
 async function toggleRole(id, currentRole) {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     if (!confirm(`Trocar role para "${newRole}"?`)) return;
-    const res = await fetch(`${AUTH_BASE}/admin/set-role/${id}`, {
+    const res = await adminFetch(`/admin/set-role/${id}`, {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({ role: newRole }),
     });
@@ -422,7 +443,7 @@ async function promoteByEmail() {
     status.style.color = 'var(--text-muted,#888)';
     status.textContent = 'Promovendo…';
     try {
-        const res = await fetch(`${AUTH_BASE}/admin/promote-by-email`, {
+        const res = await adminFetch(`/admin/promote-by-email`, {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
@@ -444,7 +465,7 @@ async function promoteByEmail() {
 }
 async function deleteUser(id, name) {
     if (!confirm(`Excluir permanentemente "${name}"? Esta ação não pode ser desfeita.`)) return;
-    const res = await fetch(`${AUTH_BASE}/admin/users/${id}`, { method:'DELETE', credentials:'include' });
+    const res = await adminFetch(`/admin/users/${id}`, { method:'DELETE', credentials:'include' });
     if (res.ok) loadUsers(); else alert('Erro ao excluir.');
 }
 function openEditUserModal(id, name, email, teamId) {
@@ -469,7 +490,7 @@ let _editingTeamId = null;
 
 async function loadTeams() {
     try {
-        const res = await fetch(`${AUTH_BASE}/teams`, { credentials:'include' });
+        const res = await adminFetch(`/teams`, { credentials:'include' });
         if (!res.ok) return;
         _adminTeams = await res.json();
         renderTeams();
@@ -527,7 +548,7 @@ async function saveTeam() {
 
 async function deleteTeam(id, name) {
     if (!confirm(`Excluir o time "${name}"?`)) return;
-    const res = await fetch(`${AUTH_BASE}/teams/${id}`, { method:'DELETE', credentials:'include' });
+    const res = await adminFetch(`/teams/${id}`, { method:'DELETE', credentials:'include' });
     if (res.ok) { loadTeams(); return; }
     if (res.status === 409) {
         const e = await res.json().catch(()=>null);
@@ -542,7 +563,7 @@ async function submitEditUser() {
     const name  = document.getElementById('editUserName').value.trim();
     const email = document.getElementById('editUserEmail').value.trim();
     if (!name || !email) { alert('Nome e email obrigatórios.'); return; }
-    const res = await fetch(`${AUTH_BASE}/admin/users/${id}`, {
+    const res = await adminFetch(`/admin/users/${id}`, {
         method:'PUT', credentials:'include',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({ displayName:name, email, teamId: document.getElementById('editUserTeam').value || null }),
     });
@@ -552,7 +573,7 @@ async function submitEditUser() {
 // ── Bandai map & association ───────────────────────────────────────────────────
 async function loadMap() {
     try {
-        const res = await fetch(`${AUTH_BASE}/bandai-map`, { credentials:'include' });
+        const res = await adminFetch(`/bandai-map`, { credentials:'include' });
         if (!res.ok) return;
         const { map } = await res.json();
         if (map) { document.getElementById('bandaiMapText').value = map; populateAssocPlayers(map); }
@@ -582,7 +603,7 @@ function populateAssocPlayers(mapText) {
 async function saveMap() {
     const map = document.getElementById('bandaiMapText').value.trim();
     if (!map) { setStatus('mapSaveStatus','Mapa vazio.',false); return; }
-    const res = await fetch(`${AUTH_BASE}/bandai-map`, {
+    const res = await adminFetch(`/bandai-map`, {
         method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({map}),
     });
     if (res.ok) { setStatus('mapSaveStatus','✓ Salvo!',true); populateAssocPlayers(map); }
@@ -592,7 +613,7 @@ async function saveAssociation() {
     const userId=document.getElementById('assocUser').value, bandaiName=document.getElementById('assocPlayer').value;
     if (!userId||!bandaiName) { setStatus('assocStatus','Selecione usuário e player.',false); return; }
     setStatus('assocStatus','Salvando…',true);
-    const res = await fetch(`${AUTH_BASE}/admin/associate`, {
+    const res = await adminFetch(`/admin/associate`, {
         method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId,bandaiName}),
     });
     if (res.ok) { setStatus('assocStatus','✓ Associado!',true); loadUsers(); }
@@ -605,8 +626,8 @@ async function loadAdminTournaments() {
     el.innerHTML = '<div class="empty-state">Carregando…</div>';
     try {
         const [tRes, cRes] = await Promise.all([
-            fetch(`${AUTH_BASE}/tournaments`, { credentials:'include' }),
-            fetch(`${AUTH_BASE}/circuits`,    { credentials:'include' }),
+            adminFetch(`/tournaments`, { credentials:'include' }),
+            adminFetch(`/circuits`,    { credentials:'include' }),
         ]);
         _adminTournaments = tRes.ok ? await tRes.json() : [];
         _adminCircuits    = cRes.ok ? await cRes.json() : [];
@@ -640,7 +661,7 @@ async function adminCloneTrn(id, name) {
     if (!newName) return;
     const date = prompt('Data (AAAA-MM-DD):', new Date().toISOString().slice(0,10));
     if (!date) return;
-    const res = await fetch(`${AUTH_BASE}/tournaments/${id}/clone`, {
+    const res = await adminFetch(`/tournaments/${id}/clone`, {
         method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ name:newName, date }),
     });
@@ -648,7 +669,7 @@ async function adminCloneTrn(id, name) {
     else { const e=await res.json().catch(()=>{}); alert(e?.error||'Erro.'); }
 }
 async function adminExportTrn(id, name) {
-    const res = await fetch(`${AUTH_BASE}/tournaments/${id}/export`, { credentials:'include' });
+    const res = await adminFetch(`/tournaments/${id}/export`, { credentials:'include' });
     if (!res.ok) { alert('Erro.'); return; }
     const data = await res.json();
     const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
@@ -658,7 +679,7 @@ async function adminExportTrn(id, name) {
 }
 async function adminReopenRound(id) {
     if (!confirm('Reabrir a última rodada deste torneio?')) return;
-    const res = await fetch(`${AUTH_BASE}/tournaments/${id}/reopen-round`, { method:'POST', credentials:'include' });
+    const res = await adminFetch(`/tournaments/${id}/reopen-round`, { method:'POST', credentials:'include' });
     if (res.ok) { alert('Rodada reaberta.'); loadAdminTournaments(); }
     else alert('Erro.');
 }
@@ -668,7 +689,7 @@ async function loadAdminCircuits() {
     const el = document.getElementById('adminCircuitsList');
     el.innerHTML = '<div class="empty-state">Carregando…</div>';
     try {
-        const res = await fetch(`${AUTH_BASE}/circuits`, { credentials:'include' });
+        const res = await adminFetch(`/circuits`, { credentials:'include' });
         _adminCircuits = res.ok ? await res.json() : [];
         if (!_adminCircuits.length) { el.innerHTML = '<div class="empty-state">Nenhum circuito.</div>'; return; }
         el.innerHTML = `<table class="adm-table">
@@ -711,7 +732,7 @@ async function submitManualPoints() {
     const points  = parseFloat(document.getElementById('manualPtsValue').value) || 0;
     const reason  = document.getElementById('manualPtsReason').value.trim();
     if (!participantId) { alert('Selecione um participante.'); return; }
-    const res = await fetch(`${AUTH_BASE}/circuits/${circuitId}/manual-points`, {
+    const res = await adminFetch(`/circuits/${circuitId}/manual-points`, {
         method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ participantId, participantName, points, reason }),
     });
@@ -720,7 +741,7 @@ async function submitManualPoints() {
 }
 async function closeCircuit(id, name) {
     if (!confirm(`Encerrar o circuito "${name}"? Isso marcará o campeão e não pode ser desfeito.`)) return;
-    const res = await fetch(`${AUTH_BASE}/circuits/${id}/close`, { method:'POST', credentials:'include' });
+    const res = await adminFetch(`/circuits/${id}/close`, { method:'POST', credentials:'include' });
     if (res.ok) { alert('Circuito encerrado!'); loadAdminCircuits(); }
     else alert('Erro.');
 }
@@ -730,7 +751,7 @@ async function loadAdminDecks() {
     const el = document.getElementById('adminDecksList');
     el.innerHTML = '<div class="empty-state">Carregando…</div>';
     try {
-        const res = await fetch(`${AUTH_BASE}/admin/decks`, { credentials:'include' });
+        const res = await adminFetch(`/admin/decks`, { credentials:'include' });
         if (!res.ok) throw new Error();
         const data = await res.json();
         if (!data.length) { el.innerHTML = '<div class="empty-state">Nenhum deck público.</div>'; return; }
@@ -751,7 +772,7 @@ async function loadAdminDecks() {
 }
 async function adminDeleteDeck(userId, deckId, name) {
     if (!confirm(`Remover o deck "${name}"?`)) return;
-    const res = await fetch(`${AUTH_BASE}/admin/decks/${userId}/${deckId}`, { method:'DELETE', credentials:'include' });
+    const res = await adminFetch(`/admin/decks/${userId}/${deckId}`, { method:'DELETE', credentials:'include' });
     if (res.ok) loadAdminDecks(); else alert('Erro.');
 }
 
@@ -775,14 +796,14 @@ async function loadAdminProfiles() {
 }
 async function clearProfileBio(id) {
     if (!confirm('Limpar a bio deste usuário?')) return;
-    const res = await fetch(`${AUTH_BASE}/admin/profile/${id}`, {
+    const res = await adminFetch(`/admin/profile/${id}`, {
         method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({bio:''}),
     });
     if (res.ok) loadAdminProfiles(); else alert('Erro.');
 }
 async function clearProfileAvatar(id) {
     if (!confirm('Remover o avatar personalizado deste usuário?')) return;
-    const res = await fetch(`${AUTH_BASE}/admin/profile/${id}`, {
+    const res = await adminFetch(`/admin/profile/${id}`, {
         method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({avatarCustom:null}),
     });
     if (res.ok) loadAdminProfiles(); else alert('Erro.');
@@ -791,7 +812,7 @@ async function clearProfileAvatar(id) {
 // ── Comunicação ────────────────────────────────────────────────────────────────
 async function loadBanner() {
     try {
-        const res = await fetch(`${AUTH_BASE}/banner`);
+        const res = await adminFetch(`/banner`);
         const b   = res.ok ? await res.json() : null;
         const prev = document.getElementById('currentBannerPreview');
         if (b?.message) {
@@ -809,7 +830,7 @@ async function publishBanner() {
     const message = document.getElementById('bannerMessage').value.trim();
     const type    = document.getElementById('bannerType').value;
     if (!message) { setStatus('bannerStatus','Digite uma mensagem.',false); return; }
-    const res = await fetch(`${AUTH_BASE}/admin/banner`, {
+    const res = await adminFetch(`/admin/banner`, {
         method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message,type}),
     });
     if (res.ok) { setStatus('bannerStatus','✓ Banner publicado!',true); loadBanner(); }
@@ -817,7 +838,7 @@ async function publishBanner() {
 }
 async function clearBanner() {
     if (!confirm('Remover o aviso global?')) return;
-    const res = await fetch(`${AUTH_BASE}/admin/banner`, {
+    const res = await adminFetch(`/admin/banner`, {
         method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:null}),
     });
     if (res.ok) { setStatus('bannerStatus','✓ Banner removido.',true); loadBanner(); document.getElementById('bannerMessage').value=''; }
@@ -839,7 +860,7 @@ async function sendDirectMessage() {
     const message  = document.getElementById('msgText').value.trim();
     if (!targetId) { setStatus('msgStatus','Selecione um destinatário.',false); return; }
     if (!message)  { setStatus('msgStatus','Digite uma mensagem.',false); return; }
-    const res = await fetch(`${AUTH_BASE}/admin/message/${targetId}`, {
+    const res = await adminFetch(`/admin/message/${targetId}`, {
         method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message}),
     });
     if (res.ok) { setStatus('msgStatus','✓ Mensagem enviada!',true); document.getElementById('msgText').value=''; }
@@ -852,7 +873,7 @@ async function loadAuditLog() {
     const el = document.getElementById('auditLogBody');
     el.innerHTML = '<div class="empty-state">Carregando…</div>';
     try {
-        const res = await fetch(`${AUTH_BASE}/admin/audit-log`, { credentials:'include' });
+        const res = await adminFetch(`/admin/audit-log`, { credentials:'include' });
         _auditLog = res.ok ? await res.json() : [];
         renderAuditLog();
     } catch { el.innerHTML = '<div class="empty-state">Erro.</div>'; }

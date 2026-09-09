@@ -1,4 +1,4 @@
-const CACHE = 'yoko-v4'; // bump força limpar o cache antigo (cache-first) de quem já visitou o site
+const CACHE = 'yoko-v5'; // bump força limpar o cache antigo (cache-first) de quem já visitou o site
 
 // ── Install: activate immediately, sem pré-cache ──────────────────────────────
 // cache.addAll() falha atomicamente se qualquer arquivo retornar erro;
@@ -24,15 +24,22 @@ self.addEventListener('fetch', event => {
     // Só intercepta same-origin, método GET
     if (url.origin !== self.location.origin || event.request.method !== 'GET') return;
 
-    // Rotas dinâmicas/auth — sem cache, sempre rede
-    const noCachePaths = ['/my-matches', '/cache/', '/inbox', '/banner', '/auth', '/login'];
-    if (noCachePaths.some(p => url.pathname.startsWith(p))) return;
+    // Rotas dinâmicas/auth/admin — sem cache, sempre rede
+    const noCachePaths = [
+        '/my-matches', '/cache/', '/inbox', '/banner', '/auth', '/login',
+        '/admin', '/teams', '/bandai-map', '/tournaments', '/circuits', '/profile'
+    ];
+    if (noCachePaths.some(p => url.pathname.startsWith(p))) {
+        if (event.request.mode === 'navigate') {
+            event.respondWith(fetch(event.request));
+        }
+        return;
+    }
 
     // HTML, JS, CSS e JSON são o "código" do app (admin.html, cards.json, etc.):
     // usamos network-first, para que um novo deploy apareça na hora para todo
     // mundo. O cache só é usado como fallback se a rede falhar (modo offline).
-    // Isso evita telas presas numa versão antiga depois de um deploy — como o
-    // admin.html mostrando só abas antigas para quem já tinha visitado o site.
+    // Isso evita telas presas numa versão antiga depois de um deploy.
     const isCodeOrData = event.request.mode === 'navigate' ||
         /\.(html|js|css|json)$/.test(url.pathname) || url.pathname === '/';
 

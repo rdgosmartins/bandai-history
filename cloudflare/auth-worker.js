@@ -26,7 +26,7 @@ function preflight(env, origin) {
 function json(body, status = 200, cors = {}) {
     return new Response(JSON.stringify(body), {
         status,
-        headers: { 'Content-Type': 'application/json', ...cors },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...cors },
     });
 }
 
