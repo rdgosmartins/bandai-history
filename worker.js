@@ -2801,6 +2801,10 @@ async function handleSyncAll(request, env, cors) {
         await env.AUTH_KV.delete('sync_lock').catch(() => {});
     }
 
+    if (job.status !== 'running' && await env.AUTH_KV.get('sync_lock')) {
+        await env.AUTH_KV.delete('sync_lock').catch(() => {});
+    }
+
     if (await env.AUTH_KV.get('sync_lock')) {
         return json({
             ok: false,

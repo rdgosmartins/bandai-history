@@ -367,7 +367,7 @@ async function fetchUserEvents(user, onProgress) {
 // blocking loop in the browser. On completion the shared caches are pulled from
 // the server and the current view / rankings are rebuilt.
 const SYNC_POLL_MS = 2500;
-const SYNC_POLL_MAX = 300; // ~12.5 min cap before giving up on the poll
+const SYNC_POLL_MAX = 0; // 0 = no hard timeout; user can stop explicitly
 let _syncPollTimer = null;
 let _syncStopping = false;
 
@@ -390,7 +390,16 @@ async function syncAllUsers() {
 
     try {
         const resp = await apiFetch('/sync/all', { method: 'POST' });
-        if (!resp.ok) {
+        let startedNewJob = true;
+        if (resp.status === 409) {
+            const body = await resp.json().catch(() => ({}));
+            if (body?.job?.status === 'running') {
+                startedNewJob = false;
+                setProgress('Sync already running…', Math.min(98, Math.round((body.job.done || 0) / Math.max(1, body.job.total || 1) * 100)));
+            } else {
+                throw new Error(body.error || 'A sync is already running');
+            }
+        } else if (!resp.ok) {
             const body = await resp.json().catch(() => ({}));
             const msg = resp.status === 403
                 ? 'Sync All is admin-only.'
@@ -398,7 +407,7 @@ async function syncAllUsers() {
             throw new Error(msg);
         }
 
-        setProgress('Sync job started…', 2);
+        if (startedNewJob) setProgress('Sync job started…', 2);
         const job = await _pollSyncJob();
         if (!job) {
             throw new Error('Timed out waiting for the sync job.');
@@ -567,7 +576,7 @@ function _pollSyncJob() {
                 resolve(job);
             } else if (_syncStopping) {
                 resolve({ status: 'stopped' });
-            } else if (ticks >= SYNC_POLL_MAX) {
+            } else if (SYNC_POLL_MAX > 0 && ticks >= SYNC_POLL_MAX) {
                 resolve(null);
             } else {
                 _syncPollTimer = setTimeout(tick, SYNC_POLL_MS);
