@@ -65,25 +65,27 @@ function _wgResolveUsers(sourceUsers) {
     if (Array.isArray(sourceUsers)) return sourceUsers;
     if (sourceUsers && Array.isArray(sourceUsers.finalUsers)) return sourceUsers.finalUsers;
 
-    if (typeof buildRankingsFilteredSnapshot === 'function') {
-        try {
-            const snapshot = buildRankingsFilteredSnapshot();
-            if (snapshot && Array.isArray(snapshot.finalUsers)) return snapshot.finalUsers;
-        } catch (e) {
-            console.warn('[Teams] Failed to reuse rankings snapshot:', e);
-        }
-    }
-
     const allUsers = App.usersWithToken.map(u => ({
         ...u,
         events: Object.values(loadCache(u.bandaiId) || {})
             .filter(ev => ev?.rounds && ev.rounds.length > 0)
     })).filter(u => u.events.length > 0);
 
-    return allUsers.map(u => ({
-        ...u,
-        events: _applyRankFilter(u.events)
-    })).filter(u => u.events.length > 0);
+    if (typeof buildRankingsFilteredSnapshot === 'function') {
+        try {
+            const snapshot = buildRankingsFilteredSnapshot();
+            if (snapshot && Array.isArray(snapshot.finalUsers) && snapshot.finalUsers.length > 0) {
+                return snapshot.finalUsers;
+            }
+            if (snapshot && Array.isArray(snapshot.allUsers) && snapshot.allUsers.length > 0) {
+                return snapshot.allUsers;
+            }
+        } catch (e) {
+            console.warn('[Teams] Failed to reuse rankings snapshot:', e);
+        }
+    }
+
+    return allUsers;
 }
 
 function _wgParseColor(color) {

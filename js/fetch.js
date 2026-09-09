@@ -391,7 +391,12 @@ async function syncAllUsers() {
         setTimeout(() => { document.getElementById('progress').style.display = 'none'; }, 800);
 
         // Pull the freshly-written shared caches into localStorage, then rebuild.
-        await loadAllCachesFromServer();
+        await loadAllCachesFromServer({ force: true });
+
+        // Re-render the worst generation view if it is currently open.
+        if (document.getElementById('worstGenTab')?.style.display !== 'none' && typeof renderWorstGeneration === 'function') {
+            await renderWorstGeneration(undefined);
+        }
 
         // Re-render the currently selected user if one is active
         const selIdx = document.getElementById('userSelect').value;
