@@ -25,5 +25,18 @@ window.App = {
     teamResults: null,         // { teamId: { w, l, events, members } }
     teamH2H: null,             // { teamIdA: { teamIdB: { w, l } } }
     teamVersion: 0,            // invalidator: bump when the team registry changes
+
+    // Worst Generation dashboard UI state
+    teamQuery: '',
+    teamSort: 'wr',
+    teamSelectedId: null,
+    teamCompareId: null,
+    teamHoverId: null,
+    teamDetailTab: 'general',
+    teamDashboardBound: false,
+    teamDashboardHydrated: false,
+    teamDeckMetaCache: {},   // teamId → deck meta loaded from deckmap snapshots
+    lastWorstGenerationData: null,
+    lastWorstGenerationUsers: null,
 };
 const CACHE_PREFIX = 'bandai_events_';

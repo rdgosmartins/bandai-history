@@ -92,8 +92,6 @@
             document.getElementById('signOutBtn').style.display = '';
             document.getElementById('profileBtn').style.display = '';
             document.getElementById('inboxBtn').style.display = '';
-            document.getElementById('tabResults').style.display = '';
-            document.getElementById('tabCircuito').style.display = '';
             document.getElementById('tabNav').style.display = 'flex';
             if (user.role === 'admin') {
                 document.getElementById('adminPanelBtn').style.display = '';
@@ -224,15 +222,11 @@
         <button class="tab-btn active" id="tabMyStats"   onclick="switchTab('my-stats')">&#128202; My Stats</button>
         <button class="tab-btn" id="tabRankings"          onclick="switchTab('rankings')">&#127942; Global Rankings</button>
         <button class="tab-btn" id="tabProfile"           onclick="switchTab('profile')">&#128100; Player Profile</button>
-        <button class="tab-btn" id="tabYoko"              onclick="switchTab('yoko')">&#127358; Yoko Stats</button>
         <button class="tab-btn" id="tabMatchLog"             onclick="switchTab('match-log')">&#129527; Log Pose</button>
-        <button class="tab-btn" id="tabAgent"                onclick="switchTab('agent')">&#129504; OPTCG Agent</button>
         <button class="tab-btn" id="tabDeckMap"              onclick="switchTab('deckmap')">&#128506; Deck Mapping</button>
         <button class="tab-btn" id="tabMatchmaker"            onclick="switchTab('matchmaker')">&#127988; Matchmaker</button>
         <button class="tab-btn" id="tabWorstGen"             onclick="switchTab('worst-generation')" style="display:none">&#127987;&#65039; Worst Generation</button>
         <button class="tab-btn" id="tabTournaments"        onclick="switchTab('tournaments')" style="display:none">&#127941; Torneios</button>
-        <button class="tab-btn" id="tabCircuito"           onclick="switchTab('circuito')" style="display:none">&#9878; Circuito</button>
-        <button class="tab-btn" id="tabResults"            onclick="switchTab('results')" style="display:none">&#127942; Resultados</button>
     </div>
 
     <!-- Results -->
@@ -1060,6 +1054,37 @@
                 <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Team standings and confrontations derived from cached match rounds. Assign players to teams from the Admin panel.</p>
                 <div id="worstGenSummary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;"></div>
 
+                <div class="filter-row" style="margin:0 0 1rem;align-items:flex-end;gap:0.75rem;">
+                    <div class="filter-group" style="flex:1;min-width:220px;">
+                        <label for="worstGenQuery">Search teams</label>
+                        <input id="worstGenQuery" type="text" placeholder="Search by team or player" oninput="onWorstGenQueryChange(this.value)" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);">
+                    </div>
+                    <div class="filter-group" style="min-width:180px;">
+                        <label for="worstGenSort">Sort by</label>
+                        <select id="worstGenSort" onchange="onWorstGenSortChange(this.value)" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);">
+                            <option value="wr">Win rate</option>
+                            <option value="wins">Wins</option>
+                            <option value="losses">Losses</option>
+                            <option value="events">Events</option>
+                            <option value="members">Players</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" style="min-width:220px;">
+                        <label for="worstGenCompareSelect">Compare with</label>
+                        <select id="worstGenCompareSelect" onchange="onWorstGenCompareChange(this.value)" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);">
+                            <option value="">— none —</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" style="min-width:150px;">
+                        <label>&nbsp;</label>
+                        <button class="btn btn-outline" type="button" onclick="clearWorstGenSelection()" style="width:100%;">Clear selection</button>
+                    </div>
+                </div>
+
+                <div id="worstGenHoverCard" class="card" style="margin-bottom:1rem;display:none;"></div>
+                <div id="worstGenComparePanel" class="card" style="margin-bottom:1.5rem;display:none;"></div>
+
                 <div class="charts-grid" style="margin-bottom:1.5rem;">
                     <div class="chart-panel">
                         <h3>Team Standings</h3>
@@ -1124,57 +1149,41 @@
                         <p id="teamDetailPlayerCount" style="margin:0;font-size:0.8rem;color:var(--muted);"></p>
                     </div>
                 </div>
-                <button onclick="document.getElementById('teamDetailModal').style.display='none';" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--muted);">✕</button>
+                <button onclick="clearWorstGenSelection()" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--muted);">✕</button>
             </div>
 
-            <div style="padding:1.25rem;border-bottom:1px solid var(--border);">
-                <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Summary</h3>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:0.75rem;">
-                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
-                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Players</p>
-                        <p id="teamDetailPlayersStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;"></p>
-                    </div>
-                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
-                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Events</p>
-                        <p id="teamDetailEventsStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;"></p>
-                    </div>
-                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
-                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Wins</p>
-                        <p id="teamDetailWinsStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;color:var(--win);"></p>
-                    </div>
-                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
-                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Losses</p>
-                        <p id="teamDetailLossesStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;color:var(--loss);"></p>
-                    </div>
-                    <div style="background:var(--bg-primary);padding:0.75rem;border-radius:4px;text-align:center;">
-                        <p style="margin:0;font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Win Rate</p>
-                        <p id="teamDetailWinRateStat" style="margin:0.25rem 0 0 0;font-size:1.25rem;font-weight:bold;"></p>
-                    </div>
-                </div>
-            </div>
-
-            <div style="padding:1.25rem;border-bottom:1px solid var(--border);">
-                <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Roster</h3>
-                <div style="overflow-x:auto;">
-                    <table style="width:100%;font-size:0.85rem;border-collapse:collapse;">
-                        <thead>
-                            <tr style="border-bottom:1px solid var(--border);">
-                                <th style="text-align:left;padding:0.5rem;font-weight:600;color:var(--muted);">Player</th>
-                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">Events</th>
-                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">W</th>
-                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">L</th>
-                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">WR%</th>
-                                <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">Last Active</th>
-                            </tr>
-                        </thead>
-                        <tbody id="teamDetailRosterBody"></tbody>
-                    </table>
-                </div>
+            <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:.5rem;">
+                <button type="button" class="btn btn-outline btn-sm" data-team-detail-tab="general" onclick="setWorstGenDetailTab('general')">General</button>
+                <button type="button" class="btn btn-outline btn-sm" data-team-detail-tab="players" onclick="setWorstGenDetailTab('players')">Players</button>
+                <button type="button" class="btn btn-outline btn-sm" data-team-detail-tab="meta" onclick="setWorstGenDetailTab('meta')">Deck Meta</button>
+                <button type="button" class="btn btn-outline btn-sm" data-team-detail-tab="history" onclick="setWorstGenDetailTab('history')">History</button>
             </div>
 
             <div style="padding:1.25rem;">
-                <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Recent Performance</h3>
-                <div id="teamDetailRecentMatches" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
+                <div data-team-detail-pane="general" id="teamDetailGeneralBody"></div>
+                <div data-team-detail-pane="players" id="teamDetailPlayersPane" style="display:none;">
+                    <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Roster</h3>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%;font-size:0.85rem;border-collapse:collapse;">
+                            <thead>
+                                <tr style="border-bottom:1px solid var(--border);">
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;color:var(--muted);">Player</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">Events</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">W</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">L</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">WR%</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;color:var(--muted);">Last Active</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teamDetailRosterBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div data-team-detail-pane="meta" id="teamDetailMetaBody" style="display:none;"></div>
+                <div data-team-detail-pane="history" id="teamDetailHistoryBody" style="display:none;">
+                    <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Recent Performance</h3>
+                    <div id="teamDetailRecentMatches" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
+                </div>
             </div>
         </div>
     </div>

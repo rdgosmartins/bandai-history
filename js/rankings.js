@@ -34,7 +34,7 @@ function switchTab(tab) {
     if (tab === 'agent')       loadAgentTab();
     if (tab === 'deckmap')     loadDeckMapTab();
     if (tab === 'matchmaker')  loadMatchmakerTab();
-    if (tab === 'worst-generation') renderWorstGeneration();
+    if (tab === 'worst-generation') renderWorstGeneration(App.lastWorstGenerationUsers ?? undefined);
 }
 
 
