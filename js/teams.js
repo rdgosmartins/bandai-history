@@ -248,11 +248,22 @@ function buildTeamAnalytics(finalUsers) {
     rebuildTeamLookups();
 
     const filteredUsers = _wgResolveUsers(finalUsers);
+    const discoveredTeamIds = new Set();
+    for (const u of filteredUsers) {
+        const teamId = teamIdForBandaiId(u?.bandaiId);
+        if (teamId && teamId !== teamUnassignedId()) discoveredTeamIds.add(teamId);
+    }
 
     // teamId → aggregate
     const results = {};
-    // ordered team list (registry order) plus the unassigned bucket
-    const order = (App.teams || []).map(t => t.id);
+    // ordered team list (registry order) plus any discovered team ids and the unassigned bucket
+    const order = [];
+    for (const t of App.teams || []) {
+        if (t?.id && !order.includes(t.id)) order.push(t.id);
+    }
+    for (const id of discoveredTeamIds) {
+        if (id && !order.includes(id)) order.push(id);
+    }
     if (!order.includes(teamUnassignedId())) order.push(teamUnassignedId());
     for (const id of order) {
         results[id] = { teamId: id, w: 0, l: 0, events: 0, members: new Set(), memberCount: 0 };
