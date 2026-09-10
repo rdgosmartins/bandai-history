@@ -103,6 +103,21 @@
         -webkit-overflow-scrolling: touch;
     }
 
+    #teamDetailModal {
+        align-items: flex-end !important;
+        padding: 0 !important;
+    }
+
+    #teamDetailModal > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        border-radius: 20px 20px 0 0 !important;
+        max-height: 92vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
     /* ── Filter rows / groups ───────────────────────────────────────────────── */
     .filter-row {
         flex-direction: column !important;
