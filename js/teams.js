@@ -244,6 +244,27 @@ function _wgBuildTrend(matches, teamIds) {
     return { days, labels, cumulative, rolling, totals, activeCounts, rollingWindow: ROLLING_N };
 }
 
+function _wgEventKey(ev) {
+    const rawId = ev?.id || ev?.event?.id || ev?._event_id || null;
+    if (rawId) return String(rawId);
+
+    const date = ev?._start_datetime ? ev._start_datetime.slice(0, 10) : 'unknown';
+    const store = ev?._store_name || '';
+    const format = ev?.format || ev?._format || '';
+    const title = ev?.name || ev?._event_name || ev?.event?.name || ev?._title || ev?.title || '';
+    return `${date}|${store}|${format}|${title}`;
+}
+
+function _wgCountUniqueEvents(users) {
+    const seen = new Set();
+    for (const u of users || []) {
+        for (const ev of u.events || []) {
+            seen.add(_wgEventKey(ev));
+        }
+    }
+    return seen.size;
+}
+
 function buildTeamAnalytics(finalUsers) {
     rebuildTeamLookups();
 
@@ -268,7 +289,7 @@ function buildTeamAnalytics(finalUsers) {
     }
     if (!order.includes(teamUnassignedId())) order.push(teamUnassignedId());
     for (const id of order) {
-        results[id] = { teamId: id, w: 0, l: 0, events: 0, members: new Set(), memberCount: 0 };
+        results[id] = { teamId: id, w: 0, l: 0, events: 0, eventKeys: new Set(), members: new Set(), memberCount: 0 };
     }
 
     // teamIdA → { teamIdB → { w, l } } — symmetric tracking with dedupe
@@ -293,7 +314,7 @@ function buildTeamAnalytics(finalUsers) {
 
     for (const u of filteredUsers) {
         for (const ev of u.events) {
-            const eventId = ev.id || ev.event?.id || ev._event_id || null;
+            const eventKey = _wgEventKey(ev);
             for (const r of ev.rounds || []) {
                 const meId   = u.bandaiId;
                 const oppId  = r.opponent_users?.[0]?.membership_number;
@@ -302,7 +323,7 @@ function buildTeamAnalytics(finalUsers) {
                 const myTeam   = teamIdForBandaiId(meId) || teamUnassignedId();
                 const oppTeam  = teamIdForBandaiId(oppId) || teamUnassignedId();
 
-                results[myTeam].events++;
+                results[myTeam].eventKeys.add(eventKey);
                 results[myTeam].members.add(meId);
                 if (myTeam === teamUnassignedId()) unassignedMembers.add(meId);
                 if (r.is_win) results[myTeam].w++; else results[myTeam].l++;
@@ -312,7 +333,7 @@ function buildTeamAnalytics(finalUsers) {
                 // the matrix is order-independent regardless of which side's
                 // mirrored cache runs first.
                 if (myTeam !== oppTeam) {
-                    const key = eventId ? pairKey(myTeam, oppTeam, eventId) : null;
+                    const key = pairKey(myTeam, oppTeam, eventKey);
                     if (key && seenPairs.has(key)) continue;
                     if (key) seenPairs.add(key);
                     const ab = h2hOf(myTeam, oppTeam);   // row=myTeam
@@ -324,10 +345,12 @@ function buildTeamAnalytics(finalUsers) {
     }
 
     for (const id of Object.keys(results)) {
+        results[id].events = results[id].eventKeys.size;
         results[id].members = results[id].members.size
             ? [...results[id].members]
             : [];
         results[id].memberCount = results[id].members.length;
+        delete results[id].eventKeys;
     }
 
     const trend = _wgBuildTrend(filteredUsers);
@@ -533,8 +556,8 @@ function _wgBuildTeamFilterChips(allEvents) {
 }
 
 function _wgUpdateTeamFilterSummary(allUsers, filteredUsers) {
-    const totalEvents = (allUsers || []).reduce((s, u) => s + (u.events || []).length, 0);
-    const filteredEvents = (filteredUsers || []).reduce((s, u) => s + (u.events || []).length, 0);
+    const totalEvents = _wgCountUniqueEvents(allUsers);
+    const filteredEvents = _wgCountUniqueEvents(filteredUsers);
     const totalPlayers = (allUsers || []).length;
     const filteredPlayers = (filteredUsers || []).length;
     const el = document.getElementById('teamRankFilterSummary');
@@ -578,12 +601,23 @@ function renderWorstGenerationMostActive(data, visibleTeams) {
         const color = row.team.color || '#3b82f6';
         const icon = row.team.icon || '🏴‍☠️';
         return `
-            <tr>
+            <tr data-team-id="${_esc(row.team.id)}"
+                style="cursor:pointer;"
+                onclick='openWorstGenTeam(${JSON.stringify(String(row.team.id))})'
+                onmouseenter='hoverWorstGenTeam(${JSON.stringify(String(row.team.id))})'
+                onmouseleave='unhoverWorstGenTeam(${JSON.stringify(String(row.team.id))})'
+                onkeydown='if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorstGenTeam(${JSON.stringify(String(row.team.id))}); }'
+                tabindex="0"
+                role="button"
+                aria-label="Open team ${_esc(row.team.name)}">
                 <td class="td-num">${i + 1}</td>
                 <td>
                     <div style="display:flex;align-items:center;gap:.5rem;">
                         <span style="width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:${color};color:#fff;font-size:.85rem;flex:none;">${icon}</span>
-                        <strong>${_esc(row.team.name)}</strong>
+                        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:.08rem;min-width:0;">
+                            <strong>${_esc(row.team.name)}</strong>
+                            <span style="font-size:.7rem;color:var(--muted);">View team details</span>
+                        </div>
                     </div>
                 </td>
                 <td class="td-num">${row.r.memberCount}</td>
@@ -615,13 +649,23 @@ function renderWorstGenerationEliteFour(data, visibleTeams) {
     card.style.display = '';
     const medals = ['🥇', '🥈', '🥉', '4️⃣'];
     grid.innerHTML = rows.map((row, i) => `
-        <div class="elite-card" data-pos="${i + 1}">
+        <div class="elite-card" data-pos="${i + 1}"
+            style="cursor:pointer;"
+            onclick='openWorstGenTeam(${JSON.stringify(String(row.team.id))})'
+            onmouseenter='hoverWorstGenTeam(${JSON.stringify(String(row.team.id))})'
+            onmouseleave='unhoverWorstGenTeam(${JSON.stringify(String(row.team.id))})'
+            onkeydown='if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorstGenTeam(${JSON.stringify(String(row.team.id))}); }'
+            tabindex="0"
+            role="button"
+            aria-label="Open team ${_esc(row.team.name)}"
+            title="Open ${_esc(row.team.name)}">
             <div class="elite-rank-badge">${medals[i]}</div>
             <div class="elite-avatar" style="background:${row.team.color || '#3b82f6'};color:#fff;">${row.team.icon || '🏴‍☠️'}</div>
             <div class="elite-name">${_esc(row.team.name)}</div>
             <div class="elite-wins">${row.pct.toFixed(1)}%</div>
             <div class="elite-wins-lbl">Win Rate</div>
             <div class="elite-sub">${row.r.w}W &middot; ${row.r.l}L &middot; ${row.r.events} event${row.r.events === 1 ? '' : 's'}</div>
+            <div style="margin-top:.55rem;font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">View details</div>
         </div>
     `).join('');
 }
@@ -1550,6 +1594,7 @@ async function _wgRenderTeamDetailModal(data) {
     const team = App.teamById?.[teamId] || { id: teamId, name: teamId, icon: '🏴‍☠️', color: '#3b82f6' };
     const stats = _wgTeamCardStats(teamId, data);
     const members = _wgTeamMembers(data, teamId);
+    const previewMembers = members.slice(0, 6);
     const history = _wgTeamEventHistory(data, teamId).slice(0, 6);
     const recent = history.length
         ? history.map(ev => {
@@ -1590,9 +1635,22 @@ async function _wgRenderTeamDetailModal(data) {
                 ${_wgStat(`${stats.r.l}`, 'Losses')}
                 ${_wgStat(`${stats.wr.toFixed(1)}%`, 'Win Rate')}
             </div>
-            <div style="margin-top:1rem;padding:1rem;border:1px solid var(--border);border-radius:12px;background:var(--bg);">
-                <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.55rem;">Quick notes</div>
-                <div style="font-size:.82rem;color:var(--text);line-height:1.6;">${_esc(team.name)} is currently tracked from cached rounds and the current team registry. Use the other tabs to inspect the roster, deck meta, and event history.</div>
+            <div style="margin-top:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;align-items:start;">
+                <div style="padding:1rem;border:1px solid var(--border);border-radius:12px;background:var(--bg);">
+                    <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.55rem;">Quick notes</div>
+                    <div style="font-size:.82rem;color:var(--text);line-height:1.6;">${_esc(team.name)} is currently tracked from cached rounds and the current team registry. Use the other tabs to inspect the roster, deck meta, and event history.</div>
+                </div>
+                <div style="padding:1rem;border:1px solid var(--border);border-radius:12px;background:var(--bg);">
+                    <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.55rem;">Core roster</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:.5rem;">
+                        ${previewMembers.length ? previewMembers.map(m => `
+                            <span style="display:inline-flex;flex-direction:column;gap:.1rem;padding:.45rem .65rem;border:1px solid var(--border);border-radius:999px;background:var(--card);min-width:0;max-width:100%;">
+                                <span style="font-size:.78rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(m.name)}</span>
+                                <span style="font-size:.68rem;color:var(--muted);">${m.events} event${m.events === 1 ? '' : 's'} · ${m.winRate.toFixed(1)}% WR</span>
+                            </span>`).join('') : '<div style="color:var(--muted);font-size:.82rem;">No members matched the current snapshot.</div>'}
+                    </div>
+                    <div style="margin-top:.75rem;font-size:.74rem;color:var(--muted);line-height:1.5;">Open the Players tab for the full roster table and the Deck Meta tab for leader/store breakdowns.</div>
+                </div>
             </div>`;
     }
 
