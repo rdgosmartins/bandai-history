@@ -312,7 +312,7 @@
             </div>
             <div class="card-body" id="overall-body" style="max-height: 9999px;">
                 <div class="stat-grid" id="overallStats"></div>
-                <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:1.1rem 0 0.4rem;">Game Stats &amp; ROI</div>
+                <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:1.1rem 0 0.4rem;">Game Stats</div>
                 <div class="stat-grid" id="gameStats"></div>
                 <div id="streakStats"></div>
                 <div id="bogeymanStats"></div>
@@ -454,36 +454,6 @@
                             <th onclick="sortTable('tourneyTable',7)">Players</th>
                         </tr></thead>
                         <tbody id="tourneyBody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- ROI per Tournament -->
-        <div class="card" id="roiCard" style="display:none">
-            <div class="card-header" onclick="toggleCard('roi')">
-                <h2><span class="section-icon">&#128176;</span> Tournament ROI</h2>
-                <span class="toggle-icon" id="roi-icon">&#9660;</span>
-            </div>
-            <div class="card-body" id="roi-body" style="max-height:9999px;">
-                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">
-                    Prize pool: winner takes <strong>40%</strong>, all X-1 players split the remaining <strong>60%</strong>.
-                    X-1 count estimated from rounds played.
-                </p>
-                <div class="table-wrap">
-                    <table id="roiTable">
-                        <thead><tr>
-                            <th onclick="sortTable('roiTable',0)">Date</th>
-                            <th onclick="sortTable('roiTable',1)">Store</th>
-                            <th onclick="sortTable('roiTable',2)">Result</th>
-                            <th onclick="sortTable('roiTable',3)">Players</th>
-                            <th onclick="sortTable('roiTable',4)">Entry Fee</th>
-                            <th onclick="sortTable('roiTable',5)">Pot</th>
-                            <th onclick="sortTable('roiTable',6)">Prize</th>
-                            <th onclick="sortTable('roiTable',7)">Net</th>
-                            <th onclick="sortTable('roiTable',8)">ROI%</th>
-                        </tr></thead>
-                        <tbody id="roiBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -2280,7 +2250,7 @@ function loadFromCache() {
         if (dirRes.ok) {
             const dir = await dirRes.json();
             App.profileDirectory = {};
-            for (const p of dir) if (p.bandaiName) App.profileDirectory[p.bandaiName.toLowerCase()] = p;
+            for (const p of dir) if (p.bandaiName) App.profileDirectory[p.bandaiName.toLowerCase().trim()] = p;
             rebuildTeamLookups();
             // If rankings tab is already visible, re-render so playerNameLink gets applied
             if (document.getElementById('rankingsTab')?.style.display !== 'none') applyRankingsFilter();

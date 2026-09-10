@@ -1,52 +1,5 @@
 // ── Shared stat helpers ─────────────────────────────────────────────────────
 
-// ── ROI helpers ─────────────────────────────────────────────────────────────
-// Prize structure: winner (x-0) gets 40% of pot; all x-1 players split 60%.
-// x-1 player count is estimated as the number of rounds played (standard Swiss approximation).
-function computeEventRoi(ev) {
-    if (!ev?.rounds || !ev._entry_fee || !ev._applicant_count) return null;
-    const fee       = ev._entry_fee;
-    const players   = ev._applicant_count;
-    const pot       = fee * players;
-    const rounds    = ev.rounds.length;
-    let evW = 0, evL = 0;
-    for (const r of ev.rounds) { if (r.is_win) evW++; else evL++; }
-
-    let prize = 0;
-    if (evW === 0 && evL === 0) {
-        // No rounds played — no prize
-    } else if (evL === 0) {
-        // Undefeated — winner takes 40%
-        prize = pot * 0.40;
-    } else if (evL === 1) {
-        // x-1 — splits 60% equally with other x-1 players (estimated as rounds played)
-        const x1count = Math.max(1, rounds);
-        prize = (pot * 0.60) / x1count;
-    }
-    // Otherwise no prize
-
-    const net = prize - fee;
-    const roi = (net / fee) * 100;
-    return { fee, players, pot, prize, net, roi, currency: ev._entry_fee_currency ?? '' };
-}
-
-function computeRoiSummary(eventData) {
-    let totalFee = 0, totalPrize = 0, count = 0;
-    let currency = null;
-    for (const ev of eventData) {
-        const r = computeEventRoi(ev);
-        if (!r) continue;
-        totalFee   += r.fee;
-        totalPrize += r.prize;
-        count++;
-        if (!currency && r.currency) currency = r.currency;
-    }
-    if (count === 0) return { totalRoi: null, netTotal: null, currency: null };
-    const netTotal  = totalPrize - totalFee;
-    const totalRoi  = (netTotal / totalFee) * 100;
-    return { totalRoi, netTotal, currency };
-}
-
 function computeGameStats(rounds) {
     let gameWins = 0, gameLosses = 0, twoZeroWins = 0, clutchWins = 0, chokes = 0, allTwoOne = 0;
     for (const r of (rounds || [])) {
@@ -142,23 +95,11 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
     const gamePct   = gameTotal > 0 ? (gs.gameWins / gameTotal * 100).toFixed(1) : null;
     const twoZeroR  = totalW > 0 ? (gs.twoZeroWins / totalW * 100).toFixed(1) : null;
 
-    // ROI summary across all events with fee data
-    const roiSummary = computeRoiSummary(eventData || []);
-    const roiColor   = roiSummary.totalRoi === null ? 'var(--muted)'
-        : roiSummary.totalRoi >= 0 ? 'var(--win)' : 'var(--loss)';
-    const currency   = roiSummary.currency ?? '';
-    const roiStr     = roiSummary.totalRoi !== null
-        ? (roiSummary.totalRoi >= 0 ? '+' : '') + roiSummary.totalRoi.toFixed(1) + '%' : '—';
-    const netStr     = roiSummary.netTotal !== null
-        ? (roiSummary.netTotal >= 0 ? '+' : '') + roiSummary.netTotal.toFixed(2) : '—';
-
     const gameStatsEl = document.getElementById('gameStats');
     if (gameStatsEl) {
         gameStatsEl.innerHTML = `
             <div class="stat-box"><div class="val pct-val">${gamePct !== null ? gamePct + '%' : '—'}</div><div class="lbl">Game Win %</div></div>
-            <div class="stat-box"><div class="val pct-val">${twoZeroR !== null ? twoZeroR + '%' : '—'}</div><div class="lbl">2-0 Rate</div></div>
-            <div class="stat-box"><div class="val" style="color:${roiColor}">${roiStr}</div><div class="lbl">Avg ROI</div></div>
-            <div class="stat-box"><div class="val" style="color:${roiColor};font-size:1.4rem;">${netStr}</div><div class="lbl">Net ${currency}</div></div>`;
+            <div class="stat-box"><div class="val pct-val">${twoZeroR !== null ? twoZeroR + '%' : '—'}</div><div class="lbl">2-0 Rate</div></div>`;
     }
 
     const streaks = computeStreaks(eventData);
@@ -374,7 +315,6 @@ function displayResults(userName, totalW, totalL, periodMap, playerMap, eventDat
     displayRegionals(eventData);
     displayCharts(totalW, totalL, periodMap, eventData);
     displayRecurringOpponents(eventData);
-    displayRoi(eventData);
     displayStoreBreakdown(eventData);
     displayStoreStreaks(eventData);
     displaySeasonality(eventData);
@@ -1507,44 +1447,3 @@ function displayDayOfWeek(eventData) {
     }).join('');
 }
 
-// ── ROI per Tournament ──────────────────────────────────────────────────────
-function displayRoi(eventData) {
-    const card = document.getElementById('roiCard');
-    const tbody = document.getElementById('roiBody');
-    if (!card || !tbody) return;
-
-    const evList = [...(eventData || [])].reverse();
-    const rows = [];
-    for (const ev of evList) {
-        const r = computeEventRoi(ev);
-        if (!r) continue;
-        let evW = 0, evL = 0;
-        for (const rnd of ev.rounds) { if (rnd.is_win) evW++; else evL++; }
-        rows.push({ ev, r, evW, evL });
-    }
-
-    if (rows.length === 0) { card.style.display = 'none'; return; }
-    card.style.display = 'block';
-
-    const fmt = (n, cur) => cur ? `${cur} ${n.toFixed(2)}` : n.toFixed(2);
-    tbody.innerHTML = '';
-    for (const { ev, r, evW, evL } of rows) {
-        const roiColor  = r.roi >= 0 ? 'var(--win)' : 'var(--loss)';
-        const netColor  = r.net >= 0 ? 'var(--win)' : 'var(--loss)';
-        const resultColor = evW > evL ? 'var(--win)' : evW < evL ? 'var(--loss)' : 'var(--muted)';
-        const roiPrefix = r.roi >= 0 ? '+' : '';
-        const netPrefix = r.net >= 0 ? '+' : '';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${fmtDate(ev._start_datetime)}</td>
-            <td>${ev._store_name ?? '—'}</td>
-            <td class="td-num" style="color:${resultColor};font-weight:600">${evW}-${evL}</td>
-            <td class="td-num">${r.players}</td>
-            <td class="td-num">${fmt(r.fee, r.currency)}</td>
-            <td class="td-num">${fmt(r.pot, r.currency)}</td>
-            <td class="td-num" style="color:${r.prize > 0 ? 'var(--win)' : 'var(--muted)'}">${r.prize > 0 ? fmt(r.prize, r.currency) : '—'}</td>
-            <td class="td-num" style="color:${netColor}">${netPrefix}${fmt(r.net, r.currency)}</td>
-            <td class="td-pct" style="color:${roiColor}">${roiPrefix}${r.roi.toFixed(1)}%</td>`;
-        tbody.appendChild(tr);
-    }
-}

@@ -13,6 +13,15 @@
 
 function teamUnassignedId() { return '__none__'; }
 
+function _wgNameKey(value) {
+    return String(value == null ? '' : value)
+        .normalize('NFKD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
 // Rebuild team lookups from the current team registry + profile directory.
 // Every directory entry carries teamId, so we map bandaiName_lower → teamId.
 function rebuildTeamLookups() {
@@ -21,7 +30,7 @@ function rebuildTeamLookups() {
     const byBandai = {};
     for (const entry of Object.values(App.profileDirectory || {})) {
         if (entry && entry.teamId && entry.bandaiName) {
-            byBandai[String(entry.bandaiName).toLowerCase()] = entry.teamId;
+            byBandai[_wgNameKey(entry.bandaiName)] = entry.teamId;
         }
     }
     App.teamByBandaiId = byBandai;
@@ -32,9 +41,16 @@ function rebuildTeamLookups() {
 // to resolve the id to a name, then the directory to resolve the name to a team.
 function teamIdForBandaiId(bandaiId) {
     if (bandaiId == null) return null;
-    const name = (App.usernameMap && App.usernameMap[bandaiId]) || null;
+    const name = _wgNameKey((App.usernameMap && App.usernameMap[bandaiId]) || '');
     if (!name) return null;
-    return (App.teamByBandaiId || {})[String(name).toLowerCase()] || null;
+    if ((App.teamByBandaiId || {})[name]) return (App.teamByBandaiId || {})[name];
+    for (const entry of Object.values(App.profileDirectory || {})) {
+        if (!entry || !entry.teamId) continue;
+        if (_wgNameKey(entry.bandaiName) === name || _wgNameKey(entry.displayName) === name) {
+            return entry.teamId;
+        }
+    }
+    return null;
 }
 
 function teamDisplay(teamId) {
@@ -61,15 +77,33 @@ async function loadTeams() {
 // Analytics — derived from cached rounds (mirrors rankings data flow)
 // ---------------------------------------------------------------------------
 
+function _wgKnownBandaiIds() {
+    const ids = new Set();
+    for (const bandaiId of Object.keys(App.usernameMap || {})) ids.add(String(bandaiId));
+    for (const u of App.usersWithToken || []) {
+        if (u && u.bandaiId != null) ids.add(String(u.bandaiId));
+    }
+    return [...ids];
+}
+
+function _wgBuildUsersFromCache() {
+    return _wgKnownBandaiIds().map(bandaiId => {
+        const name = App.usernameMap?.[bandaiId] || bandaiId;
+        return {
+            bandaiId,
+            name,
+            events: Object.values(loadCache(bandaiId) || {})
+                .filter(ev => ev?.rounds && ev.rounds.length > 0)
+        };
+    }).filter(u => u.events.length > 0);
+}
+
 function _wgResolveUsers(sourceUsers) {
+    const cacheUsers = _wgBuildUsersFromCache();
+    if (cacheUsers.length > 0) return cacheUsers;
+
     if (Array.isArray(sourceUsers)) return sourceUsers;
     if (sourceUsers && Array.isArray(sourceUsers.finalUsers)) return sourceUsers.finalUsers;
-
-    const allUsers = App.usersWithToken.map(u => ({
-        ...u,
-        events: Object.values(loadCache(u.bandaiId) || {})
-            .filter(ev => ev?.rounds && ev.rounds.length > 0)
-    })).filter(u => u.events.length > 0);
 
     if (typeof buildRankingsFilteredSnapshot === 'function') {
         try {
@@ -85,7 +119,7 @@ function _wgResolveUsers(sourceUsers) {
         }
     }
 
-    return allUsers;
+    return cacheUsers;
 }
 
 function _wgParseColor(color) {
@@ -581,6 +615,12 @@ async function renderWorstGeneration(finalUsers) {
     const tab = document.getElementById('worstGenTab');
     if (!tab) return;
 
+    await Promise.allSettled([
+        loadAllCachesFromServer({ force: true }),
+        loadTeams(),
+    ]);
+    rebuildTeamLookups();
+
     _wgEnsureBindings();
     destroyWorstGenerationCharts();
 
@@ -614,11 +654,15 @@ async function renderWorstGeneration(finalUsers) {
 
     const standingsNote = document.getElementById('worstGenStandingsNote');
     if (standingsNote) {
-        standingsNote.textContent = teamCount > 0
-            ? (filteredCount !== teamCount
+        if (teamCount > 0) {
+            standingsNote.textContent = filteredCount !== teamCount
                 ? 'Filtered snapshot of team standings, sorted by the selected metric.'
-                : 'Stacked wins and losses by team, sorted by the selected metric.')
-            : 'No teams have cached matches yet. Assign users to teams from the Admin panel.';
+                : 'Stacked wins and losses by team, sorted by the selected metric.';
+        } else if (data.filteredCount > 0) {
+            standingsNote.textContent = 'Cached matches were found, but none could be linked to a team yet. Check the admin team assignments and profile directory.';
+        } else {
+            standingsNote.textContent = 'No cached matches found yet. Sync at least one user to populate Worst Generation.';
+        }
     }
 
     const trendNote = document.getElementById('worstGenTrendNote');
