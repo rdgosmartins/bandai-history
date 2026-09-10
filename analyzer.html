@@ -1033,8 +1033,19 @@
                 <h2><span class="section-icon">&#127987;&#65039;</span> Worst Generation</h2>
             </div>
             <div class="card-body">
-                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Team standings and confrontations derived from cached match rounds. Assign players to teams from the Admin panel.</p>
-                <div id="worstGenSummary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;"></div>
+                <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;">Team standings, filters, and matchups derived from cached rounds. Assign players to teams from the Admin panel.</p>
+                <div id="worstGenSummary" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;"></div>
+
+                <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:1rem;">
+                    <div>
+                        <div id="teamRankFilterSummary" style="font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:.2rem;">Loading team filters…</div>
+                        <div style="font-size:.75rem;color:var(--muted);line-height:1.5;">Use the filters below to reshape the team rankings without leaving the Worst Generation view.</div>
+                    </div>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+                        <button class="btn btn-outline" type="button" onclick="clearWorstGenFilters()">Clear filters</button>
+                        <button class="btn btn-outline" type="button" onclick="clearWorstGenSelection()">Clear selection</button>
+                    </div>
+                </div>
 
                 <div class="filter-row" style="margin:0 0 1rem;align-items:flex-end;gap:0.75rem;">
                     <div class="filter-group" style="flex:1;min-width:220px;">
@@ -1064,8 +1075,78 @@
                     </div>
                 </div>
 
+                <div class="card" style="margin-bottom:1rem;">
+                    <div class="card-body">
+                        <div class="filter-row" style="margin:0;align-items:flex-start;gap:0.75rem;">
+                            <div class="filter-group" style="min-width:260px;flex:1;">
+                                <label>Date preset</label>
+                                <div id="teamRankDatePresetChips" style="display:flex;flex-wrap:wrap;gap:.4rem;">
+                                    <button class="chip active" type="button" data-preset="all" onclick="onWorstGenDatePreset(this)">All</button>
+                                    <button class="chip" type="button" data-preset="7d" onclick="onWorstGenDatePreset(this)">7d</button>
+                                    <button class="chip" type="button" data-preset="30d" onclick="onWorstGenDatePreset(this)">30d</button>
+                                    <button class="chip" type="button" data-preset="90d" onclick="onWorstGenDatePreset(this)">90d</button>
+                                    <button class="chip" type="button" data-preset="this-month" onclick="onWorstGenDatePreset(this)">This month</button>
+                                    <button class="chip" type="button" data-preset="last-month" onclick="onWorstGenDatePreset(this)">Last month</button>
+                                    <button class="chip" type="button" data-preset="this-year" onclick="onWorstGenDatePreset(this)">This year</button>
+                                    <button class="chip" type="button" data-preset="custom" onclick="onWorstGenDatePreset(this)">Custom</button>
+                                </div>
+                                <div id="teamRankCustomDateRow" style="display:none;gap:.5rem;flex-wrap:wrap;margin-top:.55rem;">
+                                    <input id="teamRankDateFrom" type="date" onchange="onWorstGenDateRangeChange()" style="padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);">
+                                    <input id="teamRankDateTo" type="date" onchange="onWorstGenDateRangeChange()" style="padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);">
+                                </div>
+                            </div>
+                            <div class="filter-group" style="min-width:260px;flex:1;">
+                                <label>Periods</label>
+                                <div id="teamRankPeriodChips" style="display:flex;flex-wrap:wrap;gap:.4rem;"></div>
+                            </div>
+                            <div class="filter-group" style="min-width:220px;flex:1;">
+                                <label>Years</label>
+                                <div id="teamRankYearChips" style="display:flex;flex-wrap:wrap;gap:.4rem;"></div>
+                            </div>
+                            <div class="filter-group" style="min-width:220px;flex:1;">
+                                <label for="teamRankStoreSelect">Store</label>
+                                <select id="teamRankStoreSelect" onchange="onWorstGenStoreChange()" style="width:100%;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);">
+                                    <option value="">— all stores —</option>
+                                </select>
+                            </div>
+                            <div class="filter-group" style="min-width:180px;">
+                                <label>&nbsp;</label>
+                                <button id="teamRankRegionalsOnlyBtn" class="btn btn-outline" type="button" onclick="toggleWorstGenRegionalsOnly()" style="width:100%;">Regionals only</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="worstGenHoverCard" class="card" style="margin-bottom:1rem;display:none;"></div>
                 <div id="worstGenComparePanel" class="card" style="margin-bottom:1.5rem;display:none;"></div>
+
+                <div class="charts-grid" style="margin-bottom:1.5rem;">
+                    <div class="chart-panel" id="teamMostActiveCard">
+                        <h3>Most Active Teams</h3>
+                        <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;line-height:1.5;">Teams with the highest volume in the current snapshot.</p>
+                        <div class="table-wrap">
+                            <table class="h2h-table" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">#</th>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;">Team</th>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">Players</th>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">Events</th>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">W</th>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">L</th>
+                                        <th style="padding:0.45rem 0.6rem;background:linear-gradient(135deg,var(--primary),#3d5472);color:white;font-family:'Cinzel',serif;font-size:0.7rem;text-align:center;">WR%</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="teamMostActiveBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="chart-panel" id="teamEliteFourCard">
+                        <h3>Top Teams</h3>
+                        <p style="font-size:0.78rem;color:var(--muted);margin:-0.25rem 0 0.75rem;line-height:1.5;">Highest win-rate teams in the filtered snapshot.</p>
+                        <div id="teamEliteFourGrid" class="elite-four-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;"></div>
+                    </div>
+                </div>
 
                 <div class="charts-grid" style="margin-bottom:1.5rem;">
                     <div class="chart-panel">

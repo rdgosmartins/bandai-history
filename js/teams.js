@@ -247,7 +247,9 @@ function _wgBuildTrend(matches, teamIds) {
 function buildTeamAnalytics(finalUsers) {
     rebuildTeamLookups();
 
-    const filteredUsers = _wgResolveUsers(finalUsers);
+    const filteredUsers = Array.isArray(finalUsers)
+        ? finalUsers
+        : _wgResolveUsers(finalUsers);
     const discoveredTeamIds = new Set();
     for (const u of filteredUsers) {
         const teamId = teamIdForBandaiId(u?.bandaiId);
@@ -359,6 +361,375 @@ function _wgVisibleTeams(data) {
         data.results[t.id] && data.results[t.id].memberCount > 0
     );
 }
+
+function _wgTeamDateRange() {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+
+    if (App.teamRankDatePreset === 'custom') {
+        const from = App.teamRankDateFrom || document.getElementById('teamRankDateFrom')?.value || null;
+        const to = App.teamRankDateTo || document.getElementById('teamRankDateTo')?.value || null;
+        return { from, to };
+    }
+
+    const startOf = (d, unit) => {
+        const r = new Date(d);
+        if (unit === 'month') { r.setDate(1); }
+        if (unit === 'year')  { r.setMonth(0); r.setDate(1); }
+        return r.toISOString().slice(0, 10);
+    };
+    const sub = (d, days) => { const r = new Date(d); r.setDate(r.getDate() - days); return r.toISOString().slice(0, 10); };
+
+    switch (App.teamRankDatePreset) {
+        case '7d':         return { from: sub(now, 7),   to: today };
+        case '30d':        return { from: sub(now, 30),  to: today };
+        case '90d':        return { from: sub(now, 90),  to: today };
+        case 'this-month': return { from: startOf(now, 'month'), to: today };
+        case 'last-month': {
+            const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const lme = new Date(now.getFullYear(), now.getMonth(), 0);
+            return { from: lm.toISOString().slice(0, 10), to: lme.toISOString().slice(0, 10) };
+        }
+        case 'this-year':  return { from: startOf(now, 'year'), to: today };
+        default:           return { from: null, to: null };
+    }
+}
+
+function _wgSelectedTeamPeriods() {
+    const chips = [...document.querySelectorAll('#teamRankPeriodChips .chip:not(.chip-all)')];
+    return {
+        active: new Set(chips.filter(c => c.classList.contains('active')).map(c => c.dataset.period)),
+        known: new Set(chips.map(c => c.dataset.period)),
+    };
+}
+
+function _wgSelectedTeamYears() {
+    if (Array.isArray(App.teamRankYears) && App.teamRankYears.length > 0) {
+        return new Set(App.teamRankYears);
+    }
+    const chips = [...document.querySelectorAll('#teamRankYearChips .chip')];
+    return new Set(chips.filter(c => c.classList.contains('active')).map(c => c.dataset.year));
+}
+
+function _wgApplyTeamFilter(events) {
+    const { active: activePeriods, known: knownPeriods } = _wgSelectedTeamPeriods();
+    const years = _wgSelectedTeamYears();
+    const { from, to } = _wgTeamDateRange();
+    return (events || []).filter(ev => {
+        if (!ev?.rounds) return false;
+        if (ev._start_datetime) {
+            const dateStr = ev._start_datetime.slice(0, 10);
+            if (EXCLUDED_DATES.includes(dateStr)) return false;
+            const year = dateStr.slice(0, 4);
+            if (years.size > 0 && !years.has(year)) return false;
+            if (knownPeriods.size > 0) {
+                const period = getPeriodForDate(ev._start_datetime);
+                if (knownPeriods.has(period) && !activePeriods.has(period)) return false;
+            }
+            if (from && dateStr < from) return false;
+            if (to && dateStr > to) return false;
+        }
+        if (App.teamRankStore && ev._store_name !== App.teamRankStore) return false;
+        if (App.teamRankRegionalsOnly) {
+            const dateStr = ev._start_datetime ? ev._start_datetime.slice(0, 10) : null;
+            if (!dateStr || !REGIONALS.some(reg => reg.date === dateStr)) return false;
+        }
+        return true;
+    });
+}
+
+function _wgBuildTeamFilterChips(allEvents) {
+    const periodContainer = document.getElementById('teamRankPeriodChips');
+    if (periodContainer && periodContainer.childElementCount === 0) {
+        const periodsWithData = new Set();
+        for (const ev of allEvents || []) {
+            if (!ev?._start_datetime) continue;
+            periodsWithData.add(getPeriodForDate(ev._start_datetime));
+        }
+
+        const allChip = document.createElement('button');
+        allChip.className = 'chip chip-all active';
+        allChip.textContent = 'All Events';
+        allChip.dataset.period = 'all';
+        allChip.onclick = () => {
+            const indiv = [...periodContainer.querySelectorAll('.chip:not(.chip-all)')];
+            const allOn = indiv.every(c => c.classList.contains('active'));
+            indiv.forEach(c => c.classList.toggle('active', !allOn));
+            allChip.classList.toggle('active', !allOn);
+            _wgRerender();
+        };
+        periodContainer.appendChild(allChip);
+
+        for (const p of SET_PERIODS) {
+            if (!periodsWithData.has(p.name)) continue;
+            const chip = document.createElement('button');
+            chip.className = 'chip active';
+            chip.textContent = p.name.split(' · ')[0];
+            chip.title = p.name;
+            chip.dataset.period = p.name;
+            chip.onclick = () => {
+                chip.classList.toggle('active');
+                const indiv = [...periodContainer.querySelectorAll('.chip:not(.chip-all)')];
+                allChip.classList.toggle('active', indiv.every(c => c.classList.contains('active')));
+                _wgRerender();
+            };
+            periodContainer.appendChild(chip);
+        }
+    }
+
+    const yearContainer = document.getElementById('teamRankYearChips');
+    if (yearContainer && yearContainer.childElementCount === 0) {
+        const years = [...new Set((allEvents || [])
+            .map(ev => ev?._start_datetime ? ev._start_datetime.slice(0, 4) : null)
+            .filter(Boolean))].sort();
+        const selectedYears = Array.isArray(App.teamRankYears) && App.teamRankYears.length > 0
+            ? new Set(App.teamRankYears)
+            : new Set(years);
+        if (!App.teamRankYears || App.teamRankYears.length === 0) {
+            App.teamRankYears = [...years];
+        }
+        for (const year of years) {
+            const chip = document.createElement('button');
+            chip.className = 'chip';
+            chip.textContent = year;
+            chip.dataset.year = year;
+            chip.classList.toggle('active', selectedYears.has(year));
+            chip.onclick = () => {
+                chip.classList.toggle('active');
+                App.teamRankYears = [...yearContainer.querySelectorAll('.chip.active')].map(c => c.dataset.year);
+                _wgRerender();
+            };
+            yearContainer.appendChild(chip);
+        }
+    }
+
+    const storeSelect = document.getElementById('teamRankStoreSelect');
+    if (storeSelect) {
+        const stores = new Set((allEvents || []).map(ev => ev._store_name).filter(Boolean));
+        const current = App.teamRankStore || '';
+        storeSelect.innerHTML = '<option value="">— all stores —</option>';
+        [...stores].sort((a, b) => a.localeCompare(b)).forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            storeSelect.appendChild(opt);
+        });
+        storeSelect.value = current && stores.has(current) ? current : '';
+        if (storeSelect.value !== current) App.teamRankStore = storeSelect.value || null;
+    }
+
+    const presetChips = document.querySelectorAll('#teamRankDatePresetChips .chip');
+    presetChips.forEach(c => c.classList.toggle('active', c.dataset.preset === (App.teamRankDatePreset || 'all')));
+    const customRow = document.getElementById('teamRankCustomDateRow');
+    if (customRow) customRow.style.display = App.teamRankDatePreset === 'custom' ? 'flex' : 'none';
+
+    const fromEl = document.getElementById('teamRankDateFrom');
+    if (fromEl && fromEl.value !== (App.teamRankDateFrom || '')) fromEl.value = App.teamRankDateFrom || '';
+    const toEl = document.getElementById('teamRankDateTo');
+    if (toEl && toEl.value !== (App.teamRankDateTo || '')) toEl.value = App.teamRankDateTo || '';
+
+    const regionalsBtn = document.getElementById('teamRankRegionalsOnlyBtn');
+    if (regionalsBtn) regionalsBtn.classList.toggle('active', !!App.teamRankRegionalsOnly);
+}
+
+function _wgUpdateTeamFilterSummary(allUsers, filteredUsers) {
+    const totalEvents = (allUsers || []).reduce((s, u) => s + (u.events || []).length, 0);
+    const filteredEvents = (filteredUsers || []).reduce((s, u) => s + (u.events || []).length, 0);
+    const totalPlayers = (allUsers || []).length;
+    const filteredPlayers = (filteredUsers || []).length;
+    const el = document.getElementById('teamRankFilterSummary');
+    if (!el) return;
+    el.textContent = filteredEvents < totalEvents || filteredPlayers < totalPlayers
+        ? `Showing ${filteredEvents} of ${totalEvents} events · ${filteredPlayers} of ${totalPlayers} players`
+        : `All ${totalEvents} events · ${totalPlayers} players`;
+}
+
+function _wgBuildTeamSnapshot(sourceUsers) {
+    const allUsers = _wgResolveUsers(sourceUsers);
+    const filteredUsers = allUsers.map(u => ({
+        ...u,
+        events: _wgApplyTeamFilter(u.events || [])
+    })).filter(u => u.events.length > 0);
+    const allEvents = allUsers.flatMap(u => u.events || []);
+    const filteredEvents = filteredUsers.flatMap(u => u.events || []);
+    return { allUsers, allEvents, filteredUsers, filteredEvents };
+}
+
+function renderWorstGenerationMostActive(data, visibleTeams) {
+    const card = document.getElementById('teamMostActiveCard');
+    const tbody = document.getElementById('teamMostActiveBody');
+    if (!card || !tbody) return;
+
+    const rows = (visibleTeams || []).map(t => {
+        const r = data.results[t.id] || { w: 0, l: 0, events: 0, memberCount: 0 };
+        const total = r.w + r.l;
+        return { team: t, r, total };
+    }).sort((a, b) => b.r.events - a.r.events || b.total - a.total || a.team.name.localeCompare(b.team.name, 'en')).slice(0, 10);
+
+    if (rows.length === 0) {
+        card.style.display = 'none';
+        tbody.innerHTML = '';
+        return;
+    }
+
+    card.style.display = '';
+    tbody.innerHTML = rows.map((row, i) => {
+        const pct = row.total ? (row.r.w / row.total * 100) : 0;
+        const color = row.team.color || '#3b82f6';
+        const icon = row.team.icon || '🏴‍☠️';
+        return `
+            <tr>
+                <td class="td-num">${i + 1}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:.5rem;">
+                        <span style="width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:${color};color:#fff;font-size:.85rem;flex:none;">${icon}</span>
+                        <strong>${_esc(row.team.name)}</strong>
+                    </div>
+                </td>
+                <td class="td-num">${row.r.memberCount}</td>
+                <td class="td-num" style="color:var(--accent);font-weight:700;">${row.r.events}</td>
+                <td class="td-num" style="color:var(--win)">${row.r.w}</td>
+                <td class="td-num" style="color:var(--loss)">${row.r.l}</td>
+                <td class="td-pct">${pct.toFixed(1)}%</td>
+            </tr>`;
+    }).join('');
+}
+
+function renderWorstGenerationEliteFour(data, visibleTeams) {
+    const card = document.getElementById('teamEliteFourCard');
+    const grid = document.getElementById('teamEliteFourGrid');
+    if (!card || !grid) return;
+
+    const rows = (visibleTeams || []).map(t => {
+        const r = data.results[t.id] || { w: 0, l: 0, events: 0, memberCount: 0 };
+        const total = r.w + r.l;
+        return { team: t, r, total, pct: total ? (r.w / total * 100) : 0 };
+    }).sort((a, b) => b.pct - a.pct || b.total - a.total || b.r.events - a.r.events).slice(0, 4);
+
+    if (rows.length === 0) {
+        card.style.display = 'none';
+        grid.innerHTML = '';
+        return;
+    }
+
+    card.style.display = '';
+    const medals = ['🥇', '🥈', '🥉', '4️⃣'];
+    grid.innerHTML = rows.map((row, i) => `
+        <div class="elite-card" data-pos="${i + 1}">
+            <div class="elite-rank-badge">${medals[i]}</div>
+            <div class="elite-avatar" style="background:${row.team.color || '#3b82f6'};color:#fff;">${row.team.icon || '🏴‍☠️'}</div>
+            <div class="elite-name">${_esc(row.team.name)}</div>
+            <div class="elite-wins">${row.pct.toFixed(1)}%</div>
+            <div class="elite-wins-lbl">Win Rate</div>
+            <div class="elite-sub">${row.r.w}W &middot; ${row.r.l}L &middot; ${row.r.events} event${row.r.events === 1 ? '' : 's'}</div>
+        </div>
+    `).join('');
+}
+
+function onWorstGenDatePreset(btn) {
+    App.teamRankDatePreset = btn.dataset.preset || 'all';
+    App.teamRankDateFrom = App.teamRankDatePreset === 'custom' ? (document.getElementById('teamRankDateFrom')?.value || App.teamRankDateFrom || null) : null;
+    App.teamRankDateTo = App.teamRankDatePreset === 'custom' ? (document.getElementById('teamRankDateTo')?.value || App.teamRankDateTo || null) : null;
+    _wgRerender();
+}
+
+function onWorstGenDateRangeChange() {
+    App.teamRankDatePreset = 'custom';
+    App.teamRankDateFrom = document.getElementById('teamRankDateFrom')?.value || null;
+    App.teamRankDateTo = document.getElementById('teamRankDateTo')?.value || null;
+    _wgRerender();
+}
+
+function onWorstGenYearChip(btn) {
+    btn.classList.toggle('active');
+    App.teamRankYears = [...document.querySelectorAll('#teamRankYearChips .chip.active')].map(c => c.dataset.year);
+    _wgRerender();
+}
+
+function onWorstGenPeriodChip(btn) {
+    const container = document.getElementById('teamRankPeriodChips');
+    if (!container) return;
+    if (btn.classList.contains('chip-all')) {
+        const indiv = [...container.querySelectorAll('.chip:not(.chip-all)')];
+        const allOn = indiv.every(c => c.classList.contains('active'));
+        indiv.forEach(c => c.classList.toggle('active', !allOn));
+        btn.classList.toggle('active', !allOn);
+    } else {
+        btn.classList.toggle('active');
+        const indiv = [...container.querySelectorAll('.chip:not(.chip-all)')];
+        const allChip = container.querySelector('.chip-all');
+        if (allChip) allChip.classList.toggle('active', indiv.every(c => c.classList.contains('active')));
+    }
+    _wgRerender();
+}
+
+function onWorstGenStoreChange() {
+    App.teamRankStore = document.getElementById('teamRankStoreSelect')?.value || null;
+    _wgRerender();
+}
+
+function clearWorstGenStoreFilter() {
+    App.teamRankStore = null;
+    const sel = document.getElementById('teamRankStoreSelect');
+    if (sel) sel.value = '';
+    _wgRerender();
+}
+
+function toggleWorstGenRegionalsOnly() {
+    App.teamRankRegionalsOnly = !App.teamRankRegionalsOnly;
+    const btn = document.getElementById('teamRankRegionalsOnlyBtn');
+    if (btn) btn.classList.toggle('active', !!App.teamRankRegionalsOnly);
+    _wgRerender();
+}
+
+function clearWorstGenFilters() {
+    App.teamRankYears = [];
+    App.teamRankStore = null;
+    App.teamRankDatePreset = 'all';
+    App.teamRankDateFrom = null;
+    App.teamRankDateTo = null;
+    App.teamRankRegionalsOnly = false;
+
+    const periodContainer = document.getElementById('teamRankPeriodChips');
+    if (periodContainer) {
+        [...periodContainer.querySelectorAll('.chip')].forEach(c => c.classList.add('active'));
+    }
+    const yearContainer = document.getElementById('teamRankYearChips');
+    if (yearContainer) {
+        [...yearContainer.querySelectorAll('.chip')].forEach(c => c.classList.add('active'));
+    }
+    const storeSel = document.getElementById('teamRankStoreSelect');
+    if (storeSel) storeSel.value = '';
+    const fromEl = document.getElementById('teamRankDateFrom');
+    if (fromEl) fromEl.value = '';
+    const toEl = document.getElementById('teamRankDateTo');
+    if (toEl) toEl.value = '';
+    _wgRerender();
+}
+
+function _wgSyncWorstGenFilterControls(allEvents) {
+    _wgBuildTeamFilterChips(allEvents);
+    _wgUpdateWorstGenFilterControls();
+}
+
+function _wgUpdateWorstGenFilterControls() {
+    const presetChips = document.querySelectorAll('#teamRankDatePresetChips .chip');
+    presetChips.forEach(c => c.classList.toggle('active', c.dataset.preset === (App.teamRankDatePreset || 'all')));
+    const customRow = document.getElementById('teamRankCustomDateRow');
+    if (customRow) customRow.style.display = App.teamRankDatePreset === 'custom' ? 'flex' : 'none';
+    const regionalsBtn = document.getElementById('teamRankRegionalsOnlyBtn');
+    if (regionalsBtn) regionalsBtn.classList.toggle('active', !!App.teamRankRegionalsOnly);
+    const fromEl = document.getElementById('teamRankDateFrom');
+    if (fromEl && fromEl.value !== (App.teamRankDateFrom || '')) fromEl.value = App.teamRankDateFrom || '';
+    const toEl = document.getElementById('teamRankDateTo');
+    if (toEl && toEl.value !== (App.teamRankDateTo || '')) toEl.value = App.teamRankDateTo || '';
+}
+
+function _wgRenderTeamRankingPanels(data, visibleTeams) {
+    renderWorstGenerationMostActive(data, visibleTeams);
+    renderWorstGenerationEliteFour(data, visibleTeams);
+}
+
 
 function renderWorstGenerationStandingsChart(data, sortedTeams) {
     const wrap = document.getElementById('worstGenStandingsWrap');
@@ -635,9 +1006,17 @@ async function renderWorstGeneration(finalUsers) {
     _wgEnsureBindings();
     destroyWorstGenerationCharts();
 
-    const data = buildTeamAnalytics(finalUsers);
+    const sourceUsers = Array.isArray(finalUsers)
+        ? finalUsers
+        : (Array.isArray(App.lastWorstGenerationUsers) ? App.lastWorstGenerationUsers : _wgResolveUsers(finalUsers));
+    App.lastWorstGenerationUsers = Array.isArray(sourceUsers) ? sourceUsers : App.lastWorstGenerationUsers;
+
+    const snapshot = _wgBuildTeamSnapshot(sourceUsers);
+    _wgSyncWorstGenFilterControls(snapshot.allEvents);
+    _wgUpdateTeamFilterSummary(snapshot.allUsers, snapshot.filteredUsers);
+
+    const data = buildTeamAnalytics(snapshot.filteredUsers);
     App.lastWorstGenerationData = data;
-    App.lastWorstGenerationUsers = Array.isArray(finalUsers) ? finalUsers : App.lastWorstGenerationUsers;
 
     if (!App.teamDashboardHydrated) {
         _wgHydrateFromUrl(data);
@@ -650,7 +1029,7 @@ async function renderWorstGeneration(finalUsers) {
     // Summary strip
     const teamCount = visibleTeams.length;
     const filteredCount = sortedTeams.length;
-    const totalPlayers = data.filteredCount || 0;
+    const totalPlayers = snapshot.filteredUsers.length;
     const totalMatches = Object.values(data.results).reduce((s, r) => s + r.w + r.l, 0);
 
     const summary = document.getElementById('worstGenSummary');
@@ -669,7 +1048,7 @@ async function renderWorstGeneration(finalUsers) {
             standingsNote.textContent = filteredCount !== teamCount
                 ? 'Filtered snapshot of team standings, sorted by the selected metric.'
                 : 'Stacked wins and losses by team, sorted by the selected metric.';
-        } else if (data.filteredCount > 0) {
+        } else if (snapshot.filteredUsers.length > 0) {
             standingsNote.textContent = 'Cached matches were found, but none could be linked to a team yet. Check the admin team assignments and profile directory.';
         } else {
             standingsNote.textContent = 'No cached matches found yet. Sync at least one user to populate Worst Generation.';
@@ -702,6 +1081,7 @@ async function renderWorstGeneration(finalUsers) {
     _wgRenderWorstGenControls(compareCandidates);
     _wgRenderHoverCard(data);
     _wgRenderComparePanel(data);
+    _wgRenderTeamRankingPanels(data, visibleTeams);
     renderWorstGenerationStandingsChart(data, sortedTeams.length ? sortedTeams : visibleTeams);
     renderWorstGenerationTrendChart(data);
     renderWorstGenerationH2HChart(data);

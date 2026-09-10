@@ -33,6 +33,12 @@ window.App = {
     teamCompareId: null,
     teamHoverId: null,
     teamDetailTab: 'general',
+    teamRankYears: [],
+    teamRankStore: null,
+    teamRankDatePreset: 'all',
+    teamRankDateFrom: null,
+    teamRankDateTo: null,
+    teamRankRegionalsOnly: false,
     teamDashboardBound: false,
     teamDashboardHydrated: false,
     teamDeckMetaCache: {},   // teamId → deck meta loaded from deckmap snapshots
