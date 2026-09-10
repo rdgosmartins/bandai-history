@@ -99,8 +99,21 @@
                 document.getElementById('inspectorBtn').style.display = '';
             }
             _resolveAuthUser(user);
-            // Register push notifications
-            if ('serviceWorker' in navigator && 'PushManager' in window) _initPush();
+            // Register push notifications once the helper script has loaded.
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                const initPush = () => {
+                    if (typeof window._initPush === 'function') {
+                        window._initPush();
+                        return true;
+                    }
+                    return false;
+                };
+                if (!initPush()) {
+                    setTimeout(initPush, 0);
+                    document.addEventListener('DOMContentLoaded', initPush, { once: true });
+                    window.addEventListener('load', initPush, { once: true });
+                }
+            }
             // Load inbox
             apiFetch(`/inbox`).then(r => r.ok ? r.json() : []).then(msgs => {
                 const unread = msgs.filter(m => !m.read).length;

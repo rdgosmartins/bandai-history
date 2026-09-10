@@ -1,29 +1,40 @@
 // ── Global Rankings ────────────────────────────────────────────────────────
 
 function switchTab(tab) {
-    document.getElementById('results').style.display          = tab === 'my-stats'    ? '' : 'none';
-    document.getElementById('rankingsTab').style.display      = tab === 'rankings'    ? '' : 'none';
-    document.getElementById('profileTab').style.display       = tab === 'profile'     ? '' : 'none';
-    document.getElementById('yokoTab').style.display          = tab === 'yoko'        ? '' : 'none';
-    document.getElementById('matchLogTab').style.display      = tab === 'match-log'   ? '' : 'none';
-    document.getElementById('tournamentsTab').style.display   = tab === 'tournaments' ? '' : 'none';
-    document.getElementById('resultsTab').style.display       = tab === 'results'     ? '' : 'none';
-    document.getElementById('circuitoTab').style.display      = tab === 'circuito'    ? '' : 'none';
-    const _agTab = document.getElementById('agentTab'); if (_agTab) _agTab.style.display = tab === 'agent' ? '' : 'none';
-    const _dmTab = document.getElementById('deckMapTab'); if (_dmTab) _dmTab.style.display = tab === 'deckmap' ? '' : 'none';
-    const _mmTab = document.getElementById('matchmakerTab'); if (_mmTab) _mmTab.style.display = tab === 'matchmaker' ? '' : 'none';
-    const _wgTab = document.getElementById('worstGenTab'); if (_wgTab) _wgTab.style.display = tab === 'worst-generation' ? '' : 'none';
-    document.getElementById('tabMyStats').classList.toggle('active',      tab === 'my-stats');
-    document.getElementById('tabRankings').classList.toggle('active',     tab === 'rankings');
-    document.getElementById('tabProfile').classList.toggle('active',      tab === 'profile');
-    document.getElementById('tabYoko').classList.toggle('active',         tab === 'yoko');
-    document.getElementById('tabMatchLog').classList.toggle('active',     tab === 'match-log');
-    document.getElementById('tabTournaments').classList.toggle('active',  tab === 'tournaments');
-    document.getElementById('tabResults').classList.toggle('active',      tab === 'results');
-    document.getElementById('tabCircuito').classList.toggle('active',     tab === 'circuito');
-    document.getElementById('tabAgent')?.classList.toggle('active',       tab === 'agent');
-    document.getElementById('tabDeckMap')?.classList.toggle('active',     tab === 'deckmap');
-    document.getElementById('tabMatchmaker')?.classList.toggle('active', tab === 'matchmaker');
+    const show = (id, visible) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = visible ? '' : 'none';
+    };
+    const active = (id, on) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('active', !!on);
+    };
+
+    show('results', tab === 'my-stats');
+    show('rankingsTab', tab === 'rankings');
+    show('profileTab', tab === 'profile');
+    show('yokoTab', tab === 'yoko');
+    show('matchLogTab', tab === 'match-log');
+    show('tournamentsTab', tab === 'tournaments');
+    show('resultsTab', tab === 'results');
+    show('circuitoTab', tab === 'circuito');
+    show('agentTab', tab === 'agent');
+    show('deckMapTab', tab === 'deckmap');
+    show('matchmakerTab', tab === 'matchmaker');
+    show('worstGenTab', tab === 'worst-generation');
+
+    active('tabMyStats', tab === 'my-stats');
+    active('tabRankings', tab === 'rankings');
+    active('tabProfile', tab === 'profile');
+    active('tabYoko', tab === 'yoko');
+    active('tabMatchLog', tab === 'match-log');
+    active('tabTournaments', tab === 'tournaments');
+    active('tabResults', tab === 'results');
+    active('tabCircuito', tab === 'circuito');
+    active('tabAgent', tab === 'agent');
+    active('tabDeckMap', tab === 'deckmap');
+    active('tabMatchmaker', tab === 'matchmaker');
+
     if (tab === 'rankings')    buildGlobalRankings();
     if (tab === 'profile')     { buildProfileSelect(); loadPlayerProfile(); }
     if (tab === 'yoko')        { renderYokoBadges(); }
