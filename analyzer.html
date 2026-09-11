@@ -1224,6 +1224,24 @@
 
             <div style="padding:1.25rem;">
                 <div data-team-detail-pane="general" id="teamDetailGeneralBody"></div>
+                <div data-team-detail-pane="general" id="teamDetailChartsPane" style="margin-top:1rem;">
+                    <div class="charts-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
+                        <div class="chart-panel" id="teamDetailRosterChartPanel">
+                            <h3 style="margin:0;font-size:0.82rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.06em;">Roster results</h3>
+                            <p style="font-size:0.75rem;color:var(--muted);margin:0.2rem 0 0.75rem;">Wins and losses per member, limited to the most active players.</p>
+                            <div class="chart-canvas-wrap short">
+                                <canvas id="teamDetailRosterChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-panel" id="teamDetailTrendChartPanel">
+                            <h3 style="margin:0;font-size:0.82rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.06em;">Event momentum</h3>
+                            <p style="font-size:0.75rem;color:var(--muted);margin:0.2rem 0 0.75rem;">Per-event and cumulative win rate across the latest team events.</p>
+                            <div class="chart-canvas-wrap short">
+                                <canvas id="teamDetailTrendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div data-team-detail-pane="players" id="teamDetailPlayersPane" style="display:none;">
                     <h3 style="margin:0 0 1rem 0;font-size:0.9rem;text-transform:uppercase;color:var(--muted);">Roster</h3>
                     <div style="overflow-x:auto;">

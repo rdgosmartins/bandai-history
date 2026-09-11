@@ -4,8 +4,7 @@ This is a simple script to compile all your results from the Bandai TCG Plus app
 
 ## Disclaimer
 
-Even though this script makes only one request per second and uses good practices, this is an *unauthorized* used of Bandai's API. Use it at your own risk, I'm not responsible if you get your bandai account banned.
-
+Even though this script makes only one request per second and uses good practices, it is an *unauthorized* used of Bandai's API. Use it at your own risk, I'm not responsible if you get your bandai account banned.
 
 ## How to use
 
@@ -20,13 +19,11 @@ pip install -r requirements.txt
 3. Duplicate the `.env.example` file and name it `.env`. Add your bearer token from the app. (You can check it in your `network` tab while using the app in your browser)
    <img width="2559" height="1270" alt="image" src="https://github.com/user-attachments/assets/57e352f0-7725-4333-bc7a-fc4482b9c954" />
 
-
 5. Run the script
 
 ```
 python3 bandai_history.py
 ```
-
 
 ### Options
 
@@ -53,9 +50,34 @@ BAZ:ZZZZZZZZ
 
 - You can add a line with 'EVENTS_DIR_PATH' to save your events in a different folder (if you're running this script for a friend, for example)
 
+## Project map
+
+### Live app
+- `*.html` — main entry pages (`index.html`, `analyzer.html`, `admin.html`, `login.html`, `profile.html`, `pending.html`).
+- `js/` — browser logic and dashboard behavior.
+- `css/` — shared styles.
+- `icons/` — app icons and logo assets used at runtime.
+- `Resources/player-picture/` — player photos used by rankings/profile views.
+- `manifest.json` and `sw.js` — PWA manifest and service worker.
+- `cards.json` — local card database consumed by the app.
+
+### Backend / runtime
+- `worker.js` and `cloudflare/` — Cloudflare Worker code and related config/history.
+- `bandai_history.py`, `api_requests.py`, `tournament_data.py` — Python scripts used to fetch, process, and export tournament data.
+- `requirements.txt` — Python dependencies for the scripts above.
+
+### Local / generated only
+- `events/` and `events_*/` — cached tournament payloads.
+- `.wrangler/` — Wrangler local state and build cache.
+- `__pycache__/` and `*.pyc` — Python bytecode caches.
+- `results.xlsx` and `bandai_results.xlsx` — export outputs.
+- `bandai_username_map.txt` — personal name map for local use.
+- `.upload-state.json` — local upload helper snapshot used to detect changes.
+- The upload staging folder is created outside the repo by default (in your temp directory) so it stays out of the project tree.
+
+
 ## Notes, Known Issues, TODOS:
 
 - This script does not compute events with 0 rounds. This may cause a discrepancy in the total number of events and the sum of the results
 
 - This script does not consider each game on your app individually
-

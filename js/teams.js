@@ -1474,6 +1474,151 @@ function _wgSetDetailTab(tab) {
     });
 }
 
+function destroyWorstGenerationDetailCharts() {
+    destroyChart('wgTeamRoster');
+    destroyChart('wgTeamTrend');
+}
+
+function _wgRenderTeamDetailCharts(members, history) {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#048A81';
+    const win = getComputedStyle(document.documentElement).getPropertyValue('--win').trim() || '#28a745';
+    const loss = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim() || '#dc3545';
+    const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#2E4057';
+    const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#6c757d';
+
+    const rosterPanel = document.getElementById('teamDetailRosterChartPanel');
+    const rosterCanvas = document.getElementById('teamDetailRosterChart');
+    const trendPanel = document.getElementById('teamDetailTrendChartPanel');
+    const trendCanvas = document.getElementById('teamDetailTrendChart');
+
+    destroyWorstGenerationDetailCharts();
+
+    const rosterMembers = (members || [])
+        .filter(m => (m.w + m.l) > 0 || m.events > 0)
+        .slice(0, 8);
+    if (rosterPanel) {
+        rosterPanel.style.display = rosterMembers.length ? '' : 'none';
+    }
+    if (rosterCanvas && rosterMembers.length) {
+        const labels = rosterMembers.map(m => (m.name || '—').length > 18 ? `${m.name.slice(0, 18)}…` : (m.name || '—'));
+        const wins = rosterMembers.map(m => m.w || 0);
+        const losses = rosterMembers.map(m => m.l || 0);
+        App.charts.wgTeamRoster = new Chart(rosterCanvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Wins', data: wins, backgroundColor: win + 'cc', borderRadius: 4 },
+                    { label: 'Losses', data: losses, backgroundColor: loss + 'cc', borderRadius: 4 },
+                ],
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true, beginAtZero: true, ticks: { precision: 0, color: muted, font: { size: 10 } }, grid: { color: '#eee' } },
+                    y: { stacked: true, ticks: { color: muted, font: { size: 10 } }, grid: { display: false } },
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: muted, font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            footer: items => {
+                                const idx = items[0].dataIndex;
+                                const total = wins[idx] + losses[idx];
+                                const pct = total ? (wins[idx] / total * 100).toFixed(1) : '0.0';
+                                return [`Matches: ${total}`, `Win rate: ${pct}%`];
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    const recentEvents = [...(history || [])]
+        .filter(ev => ev && (ev.w + ev.l) > 0)
+        .slice(0, 8)
+        .reverse();
+    if (trendPanel) {
+        trendPanel.style.display = recentEvents.length ? '' : 'none';
+    }
+    if (trendCanvas && recentEvents.length) {
+        const labels = recentEvents.map(ev => {
+            if (!ev.date) return ev.name || 'Event';
+            const d = new Date(ev.date);
+            return Number.isNaN(d.getTime()) ? (ev.name || 'Event') : d.toLocaleDateString('pt-BR');
+        });
+        const eventRates = [];
+        const cumulativeRates = [];
+        let cumW = 0;
+        let cumL = 0;
+        for (const ev of recentEvents) {
+            const total = ev.w + ev.l;
+            eventRates.push(total ? parseFloat((ev.w / total * 100).toFixed(1)) : 0);
+            cumW += ev.w;
+            cumL += ev.l;
+            const cumTotal = cumW + cumL;
+            cumulativeRates.push(cumTotal ? parseFloat((cumW / cumTotal * 100).toFixed(1)) : 0);
+        }
+        App.charts.wgTeamTrend = new Chart(trendCanvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Event WR %',
+                        data: eventRates,
+                        borderColor: accent,
+                        backgroundColor: accent + '22',
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        borderWidth: 2,
+                    },
+                    {
+                        label: 'Cumulative WR %',
+                        data: cumulativeRates,
+                        borderColor: primary,
+                        backgroundColor: 'transparent',
+                        fill: false,
+                        tension: 0.35,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        borderWidth: 2,
+                        borderDash: [5, 3],
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+                    y: { min: 0, max: 100, ticks: { color: muted, font: { size: 10 }, callback: v => `${v}%` }, grid: { color: '#eee' } },
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: muted, font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            title: items => `Event: ${items[0].label}`,
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`,
+                            footer: items => {
+                                const idx = items[0].dataIndex;
+                                const ev = recentEvents[idx];
+                                const total = ev.w + ev.l;
+                                return [`Record: ${ev.w}W / ${ev.l}L`, `Matches: ${total}`];
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+}
+
 function _wgRenderHoverCard(data) {
     const card = document.getElementById('worstGenHoverCard');
     if (!card) return;
@@ -1620,6 +1765,9 @@ async function _wgRenderTeamDetailModal(data) {
 
     const deckMeta = await _wgTeamDeckMeta(data, teamId);
     if (App.teamSelectedId !== teamId) return;
+
+    destroyWorstGenerationDetailCharts();
+    _wgRenderTeamDetailCharts(members, history);
 
     document.getElementById('teamDetailIcon').textContent = team.icon || '🏴‍☠️';
     document.getElementById('teamDetailName').textContent = team.name || teamId;
