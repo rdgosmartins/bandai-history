@@ -331,7 +331,7 @@ function adminTab(name) {
     });
     const loaders = {
         pendentes:   () => loadUsers(),
-        usuarios:    () => { loadUsers(); loadMap(); },
+        usuarios:    () => { loadUsers(); loadMap(); loadTeams(); },
         teams:       () => loadTeams(),
         torneios:    () => loadAdminTournaments(),
         circuitos:   () => loadAdminCircuits(),
@@ -468,18 +468,36 @@ async function deleteUser(id, name) {
     const res = await adminFetch(`/admin/users/${id}`, { method:'DELETE', credentials:'include' });
     if (res.ok) loadUsers(); else alert('Erro ao excluir.');
 }
-function openEditUserModal(id, name, email, teamId) {
+async function openEditUserModal(id, name, email, teamId) {
     document.getElementById('editUserId').value  = id;
     document.getElementById('editUserName').value = name;
     document.getElementById('editUserEmail').value = email;
     const teamSel = document.getElementById('editUserTeam');
-    // Populate team options from the in-memory registry (loaded by loadTeams)
-    const teams = typeof _adminTeams !== 'undefined' ? _adminTeams : [];
-    teamSel.innerHTML = '<option value="">— Sem time —</option>' + teams.map(t =>
-        `<option value="${t.id}">${(t.icon||'')} ${t.name}</option>`
-    ).join('');
-    teamSel.value = teamId || '';
+    // Preenche o <select> a partir de _adminTeams. Se o time atual do usuário não
+    // estiver na lista (ainda carregando ou falha), mantém uma opção para ele, assim
+    // salvar o usuário nunca remove o time sem querer.
+    const fillTeams = () => {
+        const teams = _adminTeams || [];
+        let html = '<option value="">— Sem time —</option>' + teams.map(t =>
+            `<option value="${esc(t.id)}">${esc(t.icon||'')} ${esc(t.name)}</option>`
+        ).join('');
+        if (teamId && !teams.some(t => t.id === teamId)) {
+            html += `<option value="${esc(teamId)}">(time atual)</option>`;
+        }
+        teamSel.innerHTML = html;
+        teamSel.value = teamId || '';
+    };
+    fillTeams();
     document.getElementById('editUserModal').classList.add('open');
+    // A lista de times só era carregada ao abrir a aba "Times". Carrega aqui se ainda
+    // não veio, e atualiza o <select> quando chegar.
+    if (!_adminTeams.length) {
+        teamSel.disabled = true;
+        await loadTeams();
+        // só repreenche se o modal ainda é do mesmo usuário
+        if (document.getElementById('editUserId').value === id) fillTeams();
+        teamSel.disabled = false;
+    }
 }
 function closeEditUserModal() {
     document.getElementById('editUserModal').classList.remove('open');

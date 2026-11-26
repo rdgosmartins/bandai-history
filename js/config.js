@@ -82,6 +82,8 @@ function parsePasted() {
 }
 
 function onUserChange() {
+    // O cache local é carregado de forma assíncrona (IndexedDB): espera ficar pronto.
+    if (!CacheStore.isReady) { CacheStore.ready.then(onUserChange); return; }
     const idx = document.getElementById('userSelect').value;
     document.getElementById('fetchBtn').disabled = (idx === '');
     if (idx === '') {
@@ -97,35 +99,22 @@ function onUserChange() {
 }
 
 // Puxa o cache de eventos de TODOS os bandaiIds já sincronizados por qualquer
-// pessoa do time (endpoint /cache-all) e mescla no localStorage deste navegador.
+// pessoa do time (endpoint /cache-all) e mescla no cache local deste navegador.
 // Isso é o que faz o Global Rankings (e qualquer outra tela que use loadCache())
 // mostrar dados de todo mundo, mesmo em um dispositivo que nunca rodou "Sync All" —
 // antes disso, cada navegador só via os players que ELE MESMO tinha sincronizado.
 let _allCachePromise = null;
-let _cacheStorageWarning = false;
-const _memoryCaches = {};
-const CACHE_STORAGE_WARNING_TEXT = 'Local storage is full; new cache writes stay in memory until you free space.';
+const CACHE_STORAGE_WARNING_TEXT = 'Browser storage is full; new cache writes stay in memory until you free space.';
 
+// O armazenamento em si (IndexedDB + espelho em memória) fica em js/cache-store.js.
 function _persistCacheSnapshot(bandaiId, cache, source) {
     const normalized = normalizeCacheMap(cache);
-    try {
-        localStorage.setItem(cacheKey(bandaiId), JSON.stringify(normalized));
-        delete _memoryCaches[bandaiId];
-        if (Object.keys(_memoryCaches).length === 0) _cacheStorageWarning = false;
-    } catch (e) {
-        _cacheStorageWarning = true;
-        _memoryCaches[bandaiId] = normalized;
-        console.warn(`[Cache] ${source} localStorage write failed — keeping cache in memory:`, e);
-    }
+    CacheStore.set(bandaiId, normalized);
     return normalized;
 }
 
-function _loadMemoryCache(bandaiId) {
-    return normalizeCacheMap(_memoryCaches[bandaiId] || {});
-}
-
 function _cacheWarningHtml() {
-    return _cacheStorageWarning
+    return CacheStore.hasUnpersisted()
         ? ` <span class="cache-warning">${CACHE_STORAGE_WARNING_TEXT}</span>`
         : '';
 }
@@ -134,6 +123,7 @@ async function loadAllCachesFromServer({ force = false } = {}) {
     if (_allCachePromise && !force) return _allCachePromise;
     _allCachePromise = (async () => {
         try {
+            await CacheStore.ready;   // espelho local carregado antes de mesclar com o servidor
             const r = await apiFetch(`/cache-all`);
             if (!r.ok) return;
             const all = await r.json(); // { bandaiId: { eventId: eventData, ... }, ... }
@@ -239,29 +229,13 @@ function mergeEventRecords(localEntry, serverEntry) {
     return merged;
 }
 
-// ── Cache (localStorage, keyed per Bandai ID) ──────────────────────────────
+// ── Cache (IndexedDB via CacheStore, keyed per Bandai ID) ──────────────────────────────
 
 function cacheKey(bandaiId) { return CACHE_PREFIX + bandaiId; }
 
 function loadCache(bandaiId) {
-    const memoryCache = _loadMemoryCache(bandaiId);
-    try {
-        const raw = localStorage.getItem(cacheKey(bandaiId));
-        const localCache = raw ? JSON.parse(raw) : {};
-        const normalizedLocal = normalizeCacheMap(localCache);
-        const normalizedMemory = normalizeCacheMap(memoryCache);
-
-        if (Object.keys(normalizedMemory).length === 0) return normalizedLocal;
-        if (Object.keys(normalizedLocal).length === 0) return normalizedMemory;
-
-        const merged = {};
-        for (const eventId of new Set([...Object.keys(normalizedLocal), ...Object.keys(normalizedMemory)])) {
-            merged[eventId] = mergeEventRecords(normalizedLocal[eventId], normalizedMemory[eventId]);
-        }
-        return merged;
-    } catch {
-        return memoryCache;
-    }
+    if (!CacheStore.isReady) console.warn('[Cache] loadCache() antes do CacheStore ficar pronto — devolvendo só o que está em memória.');
+    return normalizeCacheMap(CacheStore.get(bandaiId));
 }
 
 function saveCache(bandaiId, cache) {
@@ -275,9 +249,10 @@ function saveCache(bandaiId, cache) {
     }).catch(() => {});
 }
 
-// Pulls KV cache for a bandaiId and merges into localStorage.
+// Pulls KV cache for a bandaiId and merges into the local cache (CacheStore).
 // Local entries win in case of conflict (most recently fetched device wins).
 async function pullServerCache(bandaiId) {
+    await CacheStore.ready;
     const ac = new AbortController();
     const t  = setTimeout(() => ac.abort(), 10_000);
     try {
@@ -304,9 +279,7 @@ async function pullServerCache(bandaiId) {
 }
 
 function clearCacheForUser(bandaiId) {
-    localStorage.removeItem(cacheKey(bandaiId));
-    delete _memoryCaches[bandaiId];
-    if (Object.keys(_memoryCaches).length === 0) _cacheStorageWarning = false;
+    CacheStore.remove(bandaiId);
 }
 
 function updateCacheBar(bandaiId) {
@@ -337,3 +310,11 @@ function confirmClearCache() {
 
 // Called by "Sync new events only" — just runs fetchAndAnalyze (cache is automatic)
 function refreshCache() { fetchAndAnalyze(); }
+
+// Quando uma gravação em segundo plano falha (ou volta a funcionar), atualiza o aviso da barra.
+CacheStore.onStatusChange = () => {
+    const idx = document.getElementById('userSelect')?.value;
+    if (idx === undefined || idx === '') return;
+    const u = App.usersWithToken?.[parseInt(idx)];
+    if (u) updateCacheBar(u.bandaiId);
+};
