@@ -23,8 +23,10 @@ const SET_STORY_NAMES = {
     'OP13': 'OP-13 · Carrying On His Will', 'OP14': "OP-14 · The Azure Sea's Seven",
     'OP15': "OP-15 · Adventure on KAMI's Island",
     'OP16': 'OP-16 · The Time of Battle',
+    'OP17': "OP-17 · The World's Strongest Warriors", 'OP18': 'OP-18 · The Dominance of God',
     'EB01': 'EB-01 · Memorial Collection', 'EB02': 'EB-02 · Anime 25th Collection',
     'EB03': 'EB-03 · One Piece Heroines Edition', 'EB04': 'EB-04 · Egghead Crisis',
+    'EB05': 'EB-05 · One Piece Heroines Edition vol.2',
     'ST':   'ST · Starter Decks',
 };
 

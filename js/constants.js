@@ -23,6 +23,8 @@ const SET_PERIODS = [
     { name: "OP-15 · Adventure on KAMI's Island",      date: new Date("2026-04-03") },
     { name: "OP-16 · The Time of Battle",             date: new Date("2026-06-12") },
     { name: "OP-17 · The World's Strongest Warriors",  date: new Date("2026-08-28") },
+    { name: "EB-05 · One Piece Heroines Edition vol.2", date: new Date("2026-10-30") },
+    { name: "OP-18 · The Dominance of God",             date: new Date("2026-11-20") },
     // ↑ Quando um novo set for lançado, basta adicionar UMA linha aqui
     // com nome e data. Os filtros de líder, o Log Pose e o seletor de deck do
     // perfil são derivados automaticamente de /cards.json e não exigem mais
